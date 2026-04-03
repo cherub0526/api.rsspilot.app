@@ -6,5 +6,5 @@ namespace App\Http\Controllers;
 
 abstract class AbstractController
 {
-    public const RESPONSE_OK = 'OK.';
+    public const string RESPONSE_OK = 'OK.';
 }

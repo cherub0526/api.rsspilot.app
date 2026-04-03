@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1;
 
 use App\Exceptions\InvalidRequestException;
+use App\Http\Controllers\AbstractController;
 use App\Models\Oauth;
 use App\Validators\OauthValidator;
 use Hypervel\Http\Request;

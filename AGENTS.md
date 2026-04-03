@@ -22,12 +22,17 @@ for YouTube content, with Paddle subscription management.
 This project runs in a **Docker Compose** environment. All commands must be executed inside the Docker container.
 
 **Command prefix pattern:**
+
 ```bash
 docker compose exec hypervel {your-command}
 ```
 
 **Examples:**
+
 ```bash
+# Run PHP version commands
+docker compose exec hypervel php -v
+
 # Run PHP artisan commands
 docker compose exec hypervel php artisan migrate
 
@@ -39,6 +44,7 @@ docker compose exec hypervel vendor/bin/phpunit
 ```
 
 **Container management:**
+
 ```bash
 # Start containers
 docker compose up -d
@@ -300,7 +306,8 @@ All routes in `routes/v1.php`:
 
 ### OpenAPI Documentation Structure
 
-The API documentation uses OpenAPI 3.x specification with PHP 8 Attributes. All OpenAPI definitions are in `app/OpenApi/`:
+The API documentation uses OpenAPI 3.x specification with PHP 8 Attributes. All OpenAPI definitions are in
+`app/OpenApi/`:
 
 **Directory Structure:**
 

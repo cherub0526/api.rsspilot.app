@@ -1,0 +1,549 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "CatchUp API",
+        "version": "0.1.0"
+    },
+    "servers": [
+        {
+            "url": "http://127.0.0.1:9501",
+            "description": "Local server"
+        },
+        {
+            "url": "https://catchupai.on-forge.com",
+            "description": "Production server"
+        }
+    ],
+    "paths": {
+        "/api/v1/media": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "List user media",
+                "operationId": "8323ee267ab5b68cb79698120d010372",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/type"
+                    },
+                    {
+                        "$ref": "#/components/parameters/range"
+                    },
+                    {
+                        "$ref": "#/components/parameters/limit"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/Media"
+                                            }
+                                        },
+                                        "links": {
+                                            "properties": {
+                                                "first": {
+                                                    "type": "string",
+                                                    "example": "http://localhost/api/v1/media?page=1"
+                                                },
+                                                "last": {
+                                                    "type": "string",
+                                                    "example": "http://localhost/api/v1/media?page=5"
+                                                },
+                                                "prev": {
+                                                    "type": "string",
+                                                    "example": null,
+                                                    "nullable": true
+                                                },
+                                                "next": {
+                                                    "type": "string",
+                                                    "example": "http://localhost/api/v1/media?page=2",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "meta": {
+                                            "properties": {
+                                                "current_page": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "per_page": {
+                                                    "type": "integer",
+                                                    "example": 12
+                                                },
+                                                "total": {
+                                                    "type": "integer",
+                                                    "example": 50
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "errors": {
+                                            "type": "object",
+                                            "example": {
+                                                "type": [
+                                                    "The type field is required."
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/media/{mediaId}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get media details",
+                "operationId": "20711b321232fa92171b6d19a7f6307b",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Media"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Media not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "errors": {
+                                            "type": "object",
+                                            "example": {
+                                                "media": [
+                                                    "Media not found."
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/rss": {
+            "get": {
+                "tags": [
+                    "RSS"
+                ],
+                "summary": "List RSS feed subscriptions",
+                "operationId": "0d7b129ba90eb69783226b35043f51e6",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Type of RSS feed",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "youtube"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "Number of items per page (1-10)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 10,
+                            "minimum": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "properties": {
+                                            "id": {
+                                                "type": "string",
+                                                "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                            },
+                                            "type": {
+                                                "type": "string",
+                                                "example": "youtube"
+                                            },
+                                            "url": {
+                                                "type": "string",
+                                                "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
+                                            },
+                                            "title": {
+                                                "type": "string",
+                                                "example": "Channel Name"
+                                            },
+                                            "created_at": {
+                                                "type": "string",
+                                                "format": "date-time",
+                                                "example": "2024-01-01 12:00:00"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "errors": {
+                                            "type": "object",
+                                            "example": {
+                                                "type": [
+                                                    "The type field is required."
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rss": {
+            "post": {
+                "tags": [
+                    "RSS"
+                ],
+                "summary": "Subscribe to RSS feed",
+                "operationId": "82292641aed78e6eccbc42e2ac3ad3df",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "type",
+                                    "url"
+                                ],
+                                "properties": {
+                                    "type": {
+                                        "description": "Type of RSS feed",
+                                        "type": "string",
+                                        "enum": [
+                                            "youtube"
+                                        ],
+                                        "example": "youtube"
+                                    },
+                                    "url": {
+                                        "description": "YouTube channel URL or RSS feed URL",
+                                        "type": "string",
+                                        "format": "url",
+                                        "example": "https://www.youtube.com/@channelname"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "RSS feed subscribed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "example": "youtube"
+                                        },
+                                        "url": {
+                                            "type": "string",
+                                            "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
+                                        },
+                                        "title": {
+                                            "type": "string",
+                                            "example": "Channel Name"
+                                        },
+                                        "created_at": {
+                                            "type": "string",
+                                            "format": "date-time",
+                                            "example": "2024-01-01 12:00:00"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request parameters or invalid RSS feed URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "errors": {
+                                            "type": "object",
+                                            "example": {
+                                                "url": [
+                                                    "The provided URL is not a valid RSS feed."
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/rss/{rssId}": {
+            "delete": {
+                "tags": [
+                    "RSS"
+                ],
+                "summary": "Unsubscribe from RSS feed",
+                "operationId": "078a1c1673901309a9fad8d8c8c6124a",
+                "parameters": [
+                    {
+                        "name": "rssId",
+                        "in": "path",
+                        "description": "RSS feed ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "01JCXYZ123456789ABCDEFGHIJ"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully unsubscribed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "ok"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "RSS feed not found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Resource not found"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Media": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://www.youtube.com/embed/dQw4w9WgXcQ"
+                    },
+                    "type": {
+                        "type": "string",
+                        "example": "youtube"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "Video Title"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Video description"
+                    },
+                    "thumbnail": {
+                        "type": "string",
+                        "example": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+                    },
+                    "published_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-01-01 12:00:00"
+                    },
+                    "short_summary": {
+                        "type": "string",
+                        "example": "A short summary of the video content."
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "parameters": {
+            "mediaId": {
+                "name": "mediaId",
+                "in": "path",
+                "description": "Media ID (ULID)",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "limit": {
+                "name": "limit",
+                "in": "query",
+                "description": "Number of items per page (1-10, default 12)",
+                "required": false,
+                "schema": {
+                    "type": "integer",
+                    "maximum": 10,
+                    "minimum": 1
+                }
+            },
+            "range": {
+                "name": "range",
+                "in": "query",
+                "description": "Date range filter",
+                "required": false,
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "today",
+                        "week",
+                        "month",
+                        "year"
+                    ]
+                }
+            },
+            "type": {
+                "name": "type",
+                "in": "query",
+                "description": "Type of media",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "enum": [
+                        "youtube",
+                        "spotify"
+                    ]
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Media",
+            "description": "Media"
+        },
+        {
+            "name": "RSS",
+            "description": "RSS"
+        }
+    ]
+}

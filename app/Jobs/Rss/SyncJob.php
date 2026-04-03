@@ -10,6 +10,7 @@ use App\Models\Media;
 use Hypervel\Queue\Queueable;
 use App\Services\SubscriptionService;
 use Hypervel\Queue\Contracts\ShouldQueue;
+use App\Jobs\Media\YoutubeCaptionJob;
 
 class SyncJob implements ShouldQueue
 {
@@ -109,7 +110,9 @@ class SyncJob implements ShouldQueue
             $medias->push($media);
         }
 
-        $this->rss->users()->chunkById(100, function ($users) use ($medias, $ids) {
+        $dispatchedMediaIds = [];
+
+        $this->rss->users()->chunkById(100, function ($users) use ($medias, $ids, &$dispatchedMediaIds) {
             $betweenDays = [
                 now()->subDays(30)->startOfDay(),
                 now()->endOfDay(),
@@ -138,6 +141,15 @@ class SyncJob implements ShouldQueue
                     $syncData[$media->id] = ['rss_id' => $this->rss->id];
                 });
                 $user->media()->syncWithoutDetaching($syncData);
+
+                foreach ($userMedias as $media) {
+                    if (in_array($media->id, $dispatchedMediaIds)) {
+                        continue;
+                    }
+
+                    YoutubeCaptionJob::dispatch($media);
+                    $dispatchedMediaIds[] = $media->id;
+                }
             }
         });
     }
