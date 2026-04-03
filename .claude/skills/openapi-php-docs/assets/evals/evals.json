@@ -1,0 +1,83 @@
+[
+  {
+    "id": "trigger-01",
+    "prompt": "幫 ForgotPasswordController 的 store() 寫 OpenAPI 文件",
+    "expected_trigger": true,
+    "category": "trigger",
+    "notes": "Core use case — document a controller action (zh)"
+  },
+  {
+    "id": "trigger-02",
+    "prompt": "add OpenAPI docs to the MediaController index method",
+    "expected_trigger": true,
+    "category": "trigger",
+    "notes": "Core use case — document a controller action (en)"
+  },
+  {
+    "id": "trigger-03",
+    "prompt": "把這個 response: 400 提取到獨立的 OpenAPI 元件",
+    "expected_trigger": true,
+    "category": "trigger",
+    "notes": "Extract inline definition to component"
+  },
+  {
+    "id": "trigger-04",
+    "prompt": "建立一個可重用的 401 Unauthorized response 元件",
+    "expected_trigger": true,
+    "category": "trigger",
+    "notes": "Create new response component"
+  },
+  {
+    "id": "trigger-05",
+    "prompt": "針對這個 API endpoint 撰寫文件",
+    "expected_trigger": true,
+    "category": "trigger",
+    "notes": "Mixed language trigger"
+  },
+  {
+    "id": "no-trigger-01",
+    "prompt": "這個 API 應該回傳 200 還是 201？",
+    "expected_trigger": false,
+    "category": "negative",
+    "notes": "REST design decision — not this skill's job"
+  },
+  {
+    "id": "no-trigger-02",
+    "prompt": "幫我設計用戶訂閱的 API 架構",
+    "expected_trigger": false,
+    "category": "negative",
+    "notes": "API design — not documentation writing"
+  },
+  {
+    "id": "no-trigger-03",
+    "prompt": "edit public/openapi.json to add a new path",
+    "expected_trigger": false,
+    "category": "negative",
+    "notes": "Direct openapi.json editing is forbidden"
+  },
+  {
+    "id": "functional-01",
+    "prompt": "幫 MediaController::index() 寫 OpenAPI 文件，包含 Query\\Type、Query\\Range、Query\\Limit 參數",
+    "expected_trigger": true,
+    "category": "functional",
+    "expectations": [
+      "Uses ref: Query\\Type::class, ref: Query\\Range::class, ref: Query\\Limit::class",
+      "Includes security: [['bearerAuth' => []]]",
+      "Uses ref: Http400::class for 400 response",
+      "Has OAT\\Get attribute with correct path /api/v1/media"
+    ]
+  },
+  {
+    "id": "functional-02",
+    "prompt": "建立一個可重用的 Http401 response 元件，放到 app/OpenApi/Responses/",
+    "expected_trigger": true,
+    "category": "functional",
+    "expectations": [
+      "File: app/OpenApi/Responses/Http401.php",
+      "Class name: Http401 (matches filename — PSR-4)",
+      "Namespace: App\\OpenApi\\Responses",
+      "Has declare(strict_types=1)",
+      "Has OAT\\Response(response: 401, description: 'Unauthenticated')"
+    ]
+  }
+]

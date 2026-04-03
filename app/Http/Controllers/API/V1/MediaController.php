@@ -8,8 +8,9 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Parameters\Query;
-use App\OpenApi\Schemas\Paginators;
+use App\OpenApi\Responses\Http400;
 use App\Validators\MediaValidator;
+use App\OpenApi\Schemas\Paginators;
 use App\Http\Resources\MediaResource;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
@@ -52,19 +53,7 @@ class MediaController extends AbstractController
                     ]
                 )
             ),
-            new OAT\Response(
-                response: 400,
-                description: 'Invalid request parameters',
-                content: new OAT\JsonContent(
-                    properties: [
-                        new OAT\Property(
-                            property: 'errors',
-                            type: 'object',
-                            example: ['type' => ['The type field is required.']]
-                        ),
-                    ]
-                )
-            ),
+            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
@@ -117,19 +106,7 @@ class MediaController extends AbstractController
                 description: 'Successful operation',
                 content: new OAT\JsonContent(ref: MediaResource::class)
             ),
-            new OAT\Response(
-                response: 400,
-                description: 'Media not found',
-                content: new OAT\JsonContent(
-                    properties: [
-                        new OAT\Property(
-                            property: 'errors',
-                            type: 'object',
-                            example: ['media' => ['Media not found.']]
-                        ),
-                    ]
-                )
-            ),
+            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]

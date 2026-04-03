@@ -6,8 +6,10 @@ namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Models\User;
 use Hypervel\Http\Request;
+use OpenApi\Attributes as OAT;
 use App\Mail\ResetPasswordMail;
 use Hypervel\Support\Facades\URL;
+use App\OpenApi\Responses\Http400;
 use Hypervel\Support\Facades\Hash;
 use Hypervel\Support\Facades\Mail;
 use Psr\Http\Message\ResponseInterface;
@@ -20,6 +22,42 @@ class ForgotPasswordController extends AbstractController
     /**
      * @throws InvalidRequestException
      */
+    #[OAT\Post(
+        path: '/api/v1/auth/forgot-password',
+        summary: 'Send password reset email',
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['account'],
+                properties: [
+                    new OAT\Property(
+                        property: 'account',
+                        type: 'string',
+                        maxLength: 255,
+                        minLength: 6,
+                        example: 'user@example.com'
+                    ),
+                ]
+            )
+        ),
+        tags: ['Auth'],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Reset email sent',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(
+                            property: 'message',
+                            type: 'string',
+                            example: 'We have emailed your password reset link.'
+                        ),
+                    ]
+                )
+            ),
+            new OAT\Response(ref: Http400::class, response: 400),
+        ]
+    )]
     public function store(Request $request): ResponseInterface
     {
         $params = $request->only(['account']);
