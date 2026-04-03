@@ -47,44 +47,10 @@
                                             }
                                         },
                                         "links": {
-                                            "properties": {
-                                                "first": {
-                                                    "type": "string",
-                                                    "example": "http://localhost/api/v1/media?page=1"
-                                                },
-                                                "last": {
-                                                    "type": "string",
-                                                    "example": "http://localhost/api/v1/media?page=5"
-                                                },
-                                                "prev": {
-                                                    "type": "string",
-                                                    "example": null,
-                                                    "nullable": true
-                                                },
-                                                "next": {
-                                                    "type": "string",
-                                                    "example": "http://localhost/api/v1/media?page=2",
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object"
+                                            "$ref": "#/components/schemas/PaginatorLinks"
                                         },
                                         "meta": {
-                                            "properties": {
-                                                "current_page": {
-                                                    "type": "integer",
-                                                    "example": 1
-                                                },
-                                                "per_page": {
-                                                    "type": "integer",
-                                                    "example": 12
-                                                },
-                                                "total": {
-                                                    "type": "integer",
-                                                    "example": 50
-                                                }
-                                            },
-                                            "type": "object"
+                                            "$ref": "#/components/schemas/PaginatorMeta"
                                         }
                                     },
                                     "type": "object"
@@ -479,6 +445,46 @@
                     "short_summary": {
                         "type": "string",
                         "example": "A short summary of the video content."
+                    }
+                },
+                "type": "object"
+            },
+            "PaginatorLinks": {
+                "properties": {
+                    "first": {
+                        "type": "string",
+                        "example": "http://localhost/api/v1/media?page=1"
+                    },
+                    "last": {
+                        "type": "string",
+                        "example": "http://localhost/api/v1/media?page=5"
+                    },
+                    "prev": {
+                        "type": "string",
+                        "example": null,
+                        "nullable": true
+                    },
+                    "next": {
+                        "type": "string",
+                        "example": "http://localhost/api/v1/media?page=2",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "PaginatorMeta": {
+                "properties": {
+                    "current_page": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "per_page": {
+                        "type": "integer",
+                        "example": 12
+                    },
+                    "total": {
+                        "type": "integer",
+                        "example": 50
                     }
                 },
                 "type": "object"

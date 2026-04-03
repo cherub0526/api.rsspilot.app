@@ -8,6 +8,7 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Parameters\Query;
+use App\OpenApi\Schemas\Paginators;
 use App\Validators\MediaValidator;
 use App\Http\Resources\MediaResource;
 use App\Exceptions\InvalidRequestException;
@@ -42,35 +43,11 @@ class MediaController extends AbstractController
                         ),
                         new OAT\Property(
                             property: 'links',
-                            properties: [
-                                new OAT\Property(
-                                    property: 'first',
-                                    type: 'string',
-                                    example: 'http://localhost/api/v1/media?page=1'
-                                ),
-                                new OAT\Property(
-                                    property: 'last',
-                                    type: 'string',
-                                    example: 'http://localhost/api/v1/media?page=5'
-                                ),
-                                new OAT\Property(property: 'prev', type: 'string', example: null, nullable: true),
-                                new OAT\Property(
-                                    property: 'next',
-                                    type: 'string',
-                                    example: 'http://localhost/api/v1/media?page=2',
-                                    nullable: true
-                                ),
-                            ],
-                            type: 'object'
+                            ref: Paginators\Links::class
                         ),
                         new OAT\Property(
                             property: 'meta',
-                            properties: [
-                                new OAT\Property(property: 'current_page', type: 'integer', example: 1),
-                                new OAT\Property(property: 'per_page', type: 'integer', example: 12),
-                                new OAT\Property(property: 'total', type: 'integer', example: 50),
-                            ],
-                            type: 'object'
+                            ref: Paginators\Meta::class
                         ),
                     ]
                 )
