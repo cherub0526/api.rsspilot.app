@@ -10,6 +10,9 @@ use App\Models\Price;
 use Hypervel\Http\Request;
 use App\Models\Subscription;
 use App\Services\PaddleClient;
+use OpenApi\Attributes as OAT;
+use App\OpenApi\Responses\Http400;
+use App\OpenApi\Responses\Ok;
 use Paddle\SDK\Exceptions\ApiError;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;
@@ -19,11 +22,28 @@ use App\Validators\SubscriptionValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use Paddle\SDK\Entities\Shared\TransactionStatus;
+use App\OpenApi\Schemas\PlanResource as PlanSchema;
 use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 use Paddle\SDK\Notifications\Entities\Payout\PayoutStatus;
+use App\OpenApi\Parameters\Path\SubscriptionId as SubscriptionIdParam;
 
 class SubscriptionsController extends AbstractController
 {
+    #[OAT\Get(
+        path: '/v1/subscriptions',
+        operationId: 'api.v1.subscriptions.index',
+        summary: "Get user's current subscription plan",
+        security: [['bearerAuth' => []]],
+        tags: ['Subscriptions'],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Current subscription plan',
+                content: new OAT\JsonContent(ref: PlanSchema::class)
+            ),
+            new OAT\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function index(Request $request, SubscriptionService $subscriptionService): PlanResource
     {
         $subscription = $subscriptionService->getUserSubscription($request->user()->id);
@@ -43,6 +63,91 @@ class SubscriptionsController extends AbstractController
     /**
      * @throws InvalidRequestException
      */
+    #[OAT\Post(
+        path: '/v1/subscriptions',
+        operationId: 'api.v1.subscriptions.store',
+        summary: 'Initiate a Paddle checkout for a subscription',
+        security: [['bearerAuth' => []]],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['planId', 'priceId'],
+                properties: [
+                    new OAT\Property(
+                        property: 'planId',
+                        description: 'Plan ID (ULID)',
+                        type: 'string',
+                        example: '01JCXYZ123456789ABCDEFGHIJ'
+                    ),
+                    new OAT\Property(
+                        property: 'priceId',
+                        description: 'Price ID (ULID)',
+                        type: 'string',
+                        example: '01JCXYZ123456789ABCDEFGHIJ'
+                    ),
+                ]
+            )
+        ),
+        tags: ['Subscriptions'],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Paddle checkout initialization payload',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(
+                            property: 'paddle',
+                            properties: [
+                                new OAT\Property(property: 'client_token', type: 'string', example: 'live_...'),
+                                new OAT\Property(property: 'environment', type: 'string', enum: [
+                                    'sandbox',
+                                    'production',
+                                ], example: 'production'),
+                            ],
+                            type: 'object'
+                        ),
+                        new OAT\Property(
+                            property: 'items',
+                            type: 'array',
+                            items: new OAT\Items(type: 'string', example: 'pri_01abc...')
+                        ),
+                        new OAT\Property(
+                            property: 'customer',
+                            properties: [
+                                new OAT\Property(property: 'name', type: 'string', example: 'John Doe'),
+                                new OAT\Property(
+                                    property: 'email',
+                                    type: 'string',
+                                    format: 'email',
+                                    example: 'john@example.com'
+                                ),
+                                new OAT\Property(
+                                    property: 'id',
+                                    description: 'Paddle customer ID (present if user has an existing Paddle account)',
+                                    type: 'string',
+                                    example: 'ctm_01abc...'
+                                ),
+                            ],
+                            type: 'object'
+                        ),
+                        new OAT\Property(
+                            property: 'customData',
+                            properties: [
+                                new OAT\Property(
+                                    property: 'subscriptionId',
+                                    type: 'string',
+                                    example: '01JCXYZ123456789ABCDEFGHIJ'
+                                ),
+                            ],
+                            type: 'object'
+                        ),
+                    ]
+                )
+            ),
+            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function store(Request $request): ResponseInterface
     {
         $params = $request->only(['planId', 'priceId']);
@@ -102,6 +207,35 @@ class SubscriptionsController extends AbstractController
     /**
      * @throws InvalidRequestException
      */
+    #[OAT\Put(
+        path: '/v1/subscriptions/{subscriptionId}',
+        operationId: 'api.v1.subscriptions.update',
+        summary: 'Confirm subscription after successful Paddle payment',
+        security: [['bearerAuth' => []]],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['transaction_id'],
+                properties: [
+                    new OAT\Property(
+                        property: 'transaction_id',
+                        description: 'Paddle transaction ID',
+                        type: 'string',
+                        example: 'txn_01abc...'
+                    ),
+                ]
+            )
+        ),
+        tags: ['Subscriptions'],
+        parameters: [
+            new OAT\Parameter(ref: SubscriptionIdParam::class),
+        ],
+        responses: [
+            new OAT\Response(ref: Ok::class, response: 200),
+            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function update(Request $request, string $subscriptionId)
     {
         if (!$subscription = $request->user()->subscriptions()->find($subscriptionId)) {
@@ -146,6 +280,21 @@ class SubscriptionsController extends AbstractController
     /**
      * 取消訂閱.
      */
+    #[OAT\Delete(
+        path: '/v1/subscriptions/{subscriptionId}',
+        operationId: 'api.v1.subscriptions.destroy',
+        summary: 'Cancel subscription',
+        security: [['bearerAuth' => []]],
+        tags: ['Subscriptions'],
+        parameters: [
+            new OAT\Parameter(ref: SubscriptionIdParam::class),
+        ],
+        responses: [
+            new OAT\Response(ref: Ok::class, response: 200),
+            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(response: 404, description: 'Subscription not found'),
+        ]
+    )]
     public function destroy(Request $request, SubscriptionService $subscriptionService)
     {
         if (!$subscription = $subscriptionService->getUserSubscription($request->user()->id)) {
@@ -158,6 +307,66 @@ class SubscriptionsController extends AbstractController
         return response()->make(self::RESPONSE_OK);
     }
 
+    #[OAT\Get(
+        path: '/v1/subscriptions/usage',
+        operationId: 'api.v1.subscriptions.usage',
+        summary: 'Get subscription usage statistics for the past 30 days',
+        security: [['bearerAuth' => []]],
+        tags: ['Subscriptions'],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Usage statistics',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(
+                            property: 'data',
+                            properties: [
+                                new OAT\Property(
+                                    property: 'plan',
+                                    properties: [
+                                        new OAT\Property(
+                                            property: 'channels',
+                                            description: 'Channel limit for the plan',
+                                            type: 'integer',
+                                            example: 10
+                                        ),
+                                        new OAT\Property(
+                                            property: 'media',
+                                            description: 'Video limit for the plan',
+                                            type: 'integer',
+                                            example: 100
+                                        ),
+                                    ],
+                                    type: 'object'
+                                ),
+                                new OAT\Property(
+                                    property: 'usage',
+                                    properties: [
+                                        new OAT\Property(
+                                            property: 'channels',
+                                            description: 'Number of subscribed RSS channels',
+                                            type: 'integer',
+                                            example: 3
+                                        ),
+                                        new OAT\Property(
+                                            property: 'media',
+                                            description: 'Number of videos added in the past 30 days',
+                                            type: 'integer',
+                                            example: 42
+                                        ),
+                                    ],
+                                    type: 'object'
+                                ),
+                            ],
+                            type: 'object'
+                        ),
+                    ]
+                )
+            ),
+            new OAT\Response(response: 401, description: 'Unauthenticated'),
+        ]
+    )]
     public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface
     {
         $between = [

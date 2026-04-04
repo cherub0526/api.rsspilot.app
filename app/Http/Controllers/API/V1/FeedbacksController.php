@@ -7,6 +7,9 @@ namespace App\Http\Controllers\API\V1;
 use App\Models\Image;
 use App\Models\Feedback;
 use Hypervel\Http\Request;
+use OpenApi\Attributes as OAT;
+use App\OpenApi\Responses\HttpOk;
+use App\OpenApi\Responses\Http400;
 use App\Validators\ImageValidator;
 use App\Validators\FeedbackValidator;
 use Hypervel\Support\Facades\Storage;
@@ -18,6 +21,42 @@ class FeedbacksController extends AbstractController
     /**
      * @throws InvalidRequestException
      */
+    #[OAT\Post(
+        path: '/v1/feedbacks',
+        operationId: 'api.v1.feedbacks.store',
+        summary: 'Submit user feedback',
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\MediaType(
+                mediaType: 'multipart/form-data',
+                schema: new OAT\Schema(
+                    required: ['content'],
+                    properties: [
+                        new OAT\Property(
+                            property: 'content',
+                            description: 'Feedback message content',
+                            type: 'string',
+                            example: 'The transcription quality could be improved.'
+                        ),
+                        new OAT\Property(
+                            property: 'images[]',
+                            type: 'array',
+                            items: new OAT\Items(
+                                description: 'Image file (jpeg, png, jpg, gif, svg; max 2 MB)',
+                                type: 'string',
+                                format: 'binary'
+                            )
+                        ),
+                    ]
+                )
+            )
+        ),
+        tags: ['Feedbacks'],
+        responses: [
+            new OAT\Response(ref: HttpOk::class, response: 200),
+            new OAT\Response(ref: Http400::class, response: 400),
+        ]
+    )]
     public function store(Request $request)
     {
         $params = $request->only(['content']);

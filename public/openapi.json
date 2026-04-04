@@ -15,13 +15,13 @@
         }
     ],
     "paths": {
-        "/api/v1/auth/forgot-password": {
+        "/v1/auth/forgot-password": {
             "post": {
                 "tags": [
                     "Auth"
                 ],
                 "summary": "Send password reset email",
-                "operationId": "07fd4a7026f9d0f545781bb5d51a150a",
+                "operationId": "api.v1.auth.forgot-password.store",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -66,13 +66,201 @@
                 }
             }
         },
-        "/api/v1/media/{mediaId}/captions": {
+        "/v1/auth": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login and obtain access token",
+                "operationId": "api.v1.auth.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "account",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "account": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "minLength": 6,
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "minLength": 8,
+                                        "example": "secret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/auth/register": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Register a new user",
+                "operationId": "api.v1.auth.register",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "account",
+                                    "email",
+                                    "password",
+                                    "password_confirmation"
+                                ],
+                                "properties": {
+                                    "account": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "minLength": 6,
+                                        "example": "johndoe"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "maxLength": 255,
+                                        "example": "johndoe@example.com"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "minLength": 8,
+                                        "example": "secret123"
+                                    },
+                                    "password_confirmation": {
+                                        "type": "string",
+                                        "minLength": 8,
+                                        "example": "secret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "User registered and access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/feedbacks": {
+            "post": {
+                "tags": [
+                    "Feedbacks"
+                ],
+                "summary": "Submit user feedback",
+                "operationId": "api.v1.feedbacks.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "content"
+                                ],
+                                "properties": {
+                                    "content": {
+                                        "description": "Feedback message content",
+                                        "type": "string",
+                                        "example": "The transcription quality could be improved."
+                                    },
+                                    "images[]": {
+                                        "type": "array",
+                                        "items": {
+                                            "description": "Image file (jpeg, png, jpg, gif, svg; max 2 MB)",
+                                            "type": "string",
+                                            "format": "binary"
+                                        }
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/media/{mediaId}/captions": {
             "get": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "List captions for a media",
-                "operationId": "9409490572c31e03e833016c4ac0ff52",
+                "operationId": "api.v1.media.captions.index",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -121,13 +309,13 @@
                 ]
             }
         },
-        "/api/v1/media/{mediaId}/captions/{captionId}": {
+        "/v1/media/{mediaId}/captions/{captionId}": {
             "get": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "Get caption details",
-                "operationId": "8081bfa2aad11bed5ab3bc5166700497",
+                "operationId": "api.v1.media.captions.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -161,13 +349,13 @@
                 ]
             }
         },
-        "/api/v1/media/{mediaId}/chat": {
+        "/v1/media/{mediaId}/chat": {
             "post": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "Chat with video content",
-                "operationId": "ee42306c9208f2c0eb2a6b9a9fe07a03",
+                "operationId": "api.v1.media.chat.store",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -241,13 +429,13 @@
                 }
             }
         },
-        "/api/v1/media/{mediaId}/custom-prompt": {
+        "/v1/media/{mediaId}/custom-prompt": {
             "post": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "Run a custom prompt against a media caption",
-                "operationId": "24a59e0125f7513ecdb40d977c0e3dd8",
+                "operationId": "api.v1.media.custom-prompt.store",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -300,13 +488,13 @@
                 ]
             }
         },
-        "/api/v1/media": {
+        "/v1/media": {
             "get": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "List user media",
-                "operationId": "8323ee267ab5b68cb79698120d010372",
+                "operationId": "api.v1.media.index",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/type"
@@ -357,13 +545,13 @@
                 ]
             }
         },
-        "/api/v1/media/{mediaId}": {
+        "/v1/media/{mediaId}": {
             "get": {
                 "tags": [
                     "Media"
                 ],
                 "summary": "Get media details",
-                "operationId": "20711b321232fa92171b6d19a7f6307b",
+                "operationId": "api.v1.media.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -400,7 +588,7 @@
                     "RSS"
                 ],
                 "summary": "List RSS feed subscriptions",
-                "operationId": "0d7b129ba90eb69783226b35043f51e6",
+                "operationId": "api.v1.rss.index",
                 "parameters": [
                     {
                         "name": "type",
@@ -434,54 +622,14 @@
                                 "schema": {
                                     "type": "array",
                                     "items": {
-                                        "properties": {
-                                            "id": {
-                                                "type": "string",
-                                                "example": "01JCXYZ123456789ABCDEFGHIJ"
-                                            },
-                                            "type": {
-                                                "type": "string",
-                                                "example": "youtube"
-                                            },
-                                            "url": {
-                                                "type": "string",
-                                                "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
-                                            },
-                                            "title": {
-                                                "type": "string",
-                                                "example": "Channel Name"
-                                            },
-                                            "created_at": {
-                                                "type": "string",
-                                                "format": "date-time",
-                                                "example": "2024-01-01 12:00:00"
-                                            }
-                                        },
-                                        "type": "object"
+                                        "$ref": "#/components/schemas/RSSResource"
                                     }
                                 }
                             }
                         }
                     },
                     "400": {
-                        "description": "Invalid request parameters",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "errors": {
-                                            "type": "object",
-                                            "example": {
-                                                "type": [
-                                                    "The type field is required."
-                                                ]
-                                            }
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
+                        "$ref": "#/components/responses/400"
                     },
                     "401": {
                         "description": "Unauthenticated"
@@ -492,15 +640,13 @@
                         "bearerAuth": []
                     }
                 ]
-            }
-        },
-        "/api/v1/rss": {
+            },
             "post": {
                 "tags": [
                     "RSS"
                 ],
                 "summary": "Subscribe to RSS feed",
-                "operationId": "82292641aed78e6eccbc42e2ac3ad3df",
+                "operationId": "api.v1.rss.store",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -537,47 +683,57 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "id": {
-                                            "type": "string",
-                                            "example": "01JCXYZ123456789ABCDEFGHIJ"
-                                        },
-                                        "type": {
-                                            "type": "string",
-                                            "example": "youtube"
-                                        },
-                                        "url": {
-                                            "type": "string",
-                                            "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
-                                        },
-                                        "title": {
-                                            "type": "string",
-                                            "example": "Channel Name"
-                                        },
-                                        "created_at": {
-                                            "type": "string",
-                                            "format": "date-time",
-                                            "example": "2024-01-01 12:00:00"
-                                        }
-                                    },
-                                    "type": "object"
+                                    "$ref": "#/components/schemas/RSSResource"
                                 }
                             }
                         }
                     },
                     "400": {
-                        "description": "Invalid request parameters or invalid RSS feed URL",
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/rss/{rssId}": {
+            "delete": {
+                "tags": [
+                    "RSS"
+                ],
+                "summary": "Unsubscribe from RSS feed",
+                "operationId": "api.v1.rss.destroy",
+                "parameters": [
+                    {
+                        "name": "rssId",
+                        "in": "path",
+                        "description": "RSS feed ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "01JCXYZ123456789ABCDEFGHIJ"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "404": {
+                        "description": "RSS feed not found",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "errors": {
-                                            "type": "object",
-                                            "example": {
-                                                "url": [
-                                                    "The provided URL is not a valid RSS feed."
-                                                ]
-                                            }
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Resource not found"
                                         }
                                     },
                                     "type": "object"
@@ -596,35 +752,177 @@
                 ]
             }
         },
-        "/api/v1/rss/{rssId}": {
-            "delete": {
+        "/v1/settings": {
+            "put": {
                 "tags": [
-                    "RSS"
+                    "Settings"
                 ],
-                "summary": "Unsubscribe from RSS feed",
-                "operationId": "078a1c1673901309a9fad8d8c8c6124a",
-                "parameters": [
-                    {
-                        "name": "rssId",
-                        "in": "path",
-                        "description": "RSS feed ID",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "example": "01JCXYZ123456789ABCDEFGHIJ"
+                "summary": "Update user AI settings",
+                "operationId": "api.v1.settings.update",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "ai"
+                                ],
+                                "properties": {
+                                    "ai": {
+                                        "required": [
+                                            "language"
+                                        ],
+                                        "properties": {
+                                            "language": {
+                                                "description": "ISO 639-1 language code for AI output",
+                                                "type": "string",
+                                                "example": "en"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
                         }
                     }
-                ],
+                },
                 "responses": {
                     "200": {
-                        "description": "Successfully unsubscribed",
+                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions": {
+            "get": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get user's current subscription plan",
+                "operationId": "api.v1.subscriptions.index",
+                "responses": {
+                    "200": {
+                        "description": "Current subscription plan",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PlanResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Initiate a Paddle checkout for a subscription",
+                "operationId": "api.v1.subscriptions.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "planId",
+                                    "priceId"
+                                ],
+                                "properties": {
+                                    "planId": {
+                                        "description": "Plan ID (ULID)",
+                                        "type": "string",
+                                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                    },
+                                    "priceId": {
+                                        "description": "Price ID (ULID)",
+                                        "type": "string",
+                                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Paddle checkout initialization payload",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "ok"
+                                        "paddle": {
+                                            "properties": {
+                                                "client_token": {
+                                                    "type": "string",
+                                                    "example": "live_..."
+                                                },
+                                                "environment": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "sandbox",
+                                                        "production"
+                                                    ],
+                                                    "example": "production"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string",
+                                                "example": "pri_01abc..."
+                                            }
+                                        },
+                                        "customer": {
+                                            "properties": {
+                                                "name": {
+                                                    "type": "string",
+                                                    "example": "John Doe"
+                                                },
+                                                "email": {
+                                                    "type": "string",
+                                                    "format": "email",
+                                                    "example": "john@example.com"
+                                                },
+                                                "id": {
+                                                    "description": "Paddle customer ID (present if user has an existing Paddle account)",
+                                                    "type": "string",
+                                                    "example": "ctm_01abc..."
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "customData": {
+                                            "properties": {
+                                                "subscriptionId": {
+                                                    "type": "string",
+                                                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                                }
+                                            },
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"
@@ -632,15 +930,147 @@
                             }
                         }
                     },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/{subscriptionId}": {
+            "put": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Confirm subscription after successful Paddle payment",
+                "operationId": "api.v1.subscriptions.update",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/subscriptionId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "transaction_id"
+                                ],
+                                "properties": {
+                                    "transaction_id": {
+                                        "description": "Paddle transaction ID",
+                                        "type": "string",
+                                        "example": "txn_01abc..."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Cancel subscription",
+                "description": "取消訂閱.",
+                "operationId": "api.v1.subscriptions.destroy",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/subscriptionId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    },
                     "404": {
-                        "description": "RSS feed not found",
+                        "description": "Subscription not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/usage": {
+            "get": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get subscription usage statistics for the past 30 days",
+                "operationId": "api.v1.subscriptions.usage",
+                "responses": {
+                    "200": {
+                        "description": "Usage statistics",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Resource not found"
+                                        "data": {
+                                            "properties": {
+                                                "plan": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "description": "Channel limit for the plan",
+                                                            "type": "integer",
+                                                            "example": 10
+                                                        },
+                                                        "media": {
+                                                            "description": "Video limit for the plan",
+                                                            "type": "integer",
+                                                            "example": 100
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "usage": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "description": "Number of subscribed RSS channels",
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        },
+                                                        "media": {
+                                                            "description": "Number of videos added in the past 30 days",
+                                                            "type": "integer",
+                                                            "example": 42
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"
@@ -931,6 +1361,22 @@
                         }
                     }
                 }
+            },
+            "200": {
+                "description": "Successful operation",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "example": "OK."
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
             }
         },
         "parameters": {
@@ -948,6 +1394,16 @@
                 "name": "mediaId",
                 "in": "path",
                 "description": "Media ID (ULID)",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "subscriptionId": {
+                "name": "subscriptionId",
+                "in": "path",
+                "description": "Subscription ID (ULID)",
                 "required": true,
                 "schema": {
                     "type": "string",
@@ -1001,12 +1457,24 @@
             "description": "Auth"
         },
         {
+            "name": "Feedbacks",
+            "description": "Feedbacks"
+        },
+        {
             "name": "Media",
             "description": "Media"
         },
         {
             "name": "RSS",
             "description": "RSS"
+        },
+        {
+            "name": "Settings",
+            "description": "Settings"
+        },
+        {
+            "name": "Subscriptions",
+            "description": "Subscriptions"
         }
     ]
 }
