@@ -22,7 +22,8 @@ class ChatController
      * @throws InvalidRequestException
      */
     #[OAT\Post(
-        path: '/api/v1/media/{mediaId}/chat',
+        path: '/v1/media/{mediaId}/chat',
+        operationId: 'api.v1.media.chat.store',
         summary: 'Chat with video content',
         requestBody: new OAT\RequestBody(
             required: true,

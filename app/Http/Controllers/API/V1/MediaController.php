@@ -11,10 +11,10 @@ use App\OpenApi\Parameters\Query;
 use App\OpenApi\Responses\Http400;
 use App\Validators\MediaValidator;
 use App\OpenApi\Schemas\Paginators;
-use App\OpenApi\Schemas\MediaResource as MediaSchema;
 use App\Http\Resources\MediaResource;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
+use App\OpenApi\Schemas\MediaResource as MediaSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class MediaController extends AbstractController
@@ -23,7 +23,8 @@ class MediaController extends AbstractController
      * @throws InvalidRequestException
      */
     #[OAT\Get(
-        path: '/api/v1/media',
+        path: '/v1/media',
+        operationId: 'api.v1.media.index',
         summary: 'List user media',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
@@ -94,7 +95,8 @@ class MediaController extends AbstractController
      * @throws InvalidRequestException
      */
     #[OAT\Get(
-        path: '/api/v1/media/{mediaId}',
+        path: '/v1/media/{mediaId}',
+        operationId: 'api.v1.media.show',
         summary: 'Get media details',
         security: [['bearerAuth' => []]],
         tags: ['Media'],

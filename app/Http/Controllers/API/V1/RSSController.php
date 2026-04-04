@@ -23,6 +23,7 @@ class RSSController extends AbstractController
      */
     #[OAT\Get(
         path: '/v1/rss',
+        operationId: 'api.v1.rss.index',
         summary: 'List RSS feed subscriptions',
         security: [['bearerAuth' => []]],
         tags: ['RSS'],
@@ -112,10 +113,10 @@ class RSSController extends AbstractController
      * @throws InvalidRequestException
      */
     #[OAT\Post(
-        path: '/api/v1/rss',
+        path: '/v1/rss',
+        operationId: 'api.v1.rss.store',
         summary: 'Subscribe to RSS feed',
         security: [['bearerAuth' => []]],
-        tags: ['RSS'],
         requestBody: new OAT\RequestBody(
             required: true,
             content: new OAT\JsonContent(
@@ -123,21 +124,22 @@ class RSSController extends AbstractController
                 properties: [
                     new OAT\Property(
                         property: 'type',
+                        description: 'Type of RSS feed',
                         type: 'string',
                         enum: ['youtube'],
-                        description: 'Type of RSS feed',
                         example: 'youtube'
                     ),
                     new OAT\Property(
                         property: 'url',
+                        description: 'YouTube channel URL or RSS feed URL',
                         type: 'string',
                         format: 'url',
-                        description: 'YouTube channel URL or RSS feed URL',
                         example: 'https://www.youtube.com/@channelname'
                     ),
                 ]
             )
         ),
+        tags: ['RSS'],
         responses: [
             new OAT\Response(
                 response: 200,
@@ -220,16 +222,17 @@ class RSSController extends AbstractController
      * @throws NotFoundHttpException
      */
     #[OAT\Delete(
-        path: '/api/v1/rss/{rssId}',
+        path: '/v1/rss/{rssId}',
+        operationId: 'api.v1.rss.destroy',
         summary: 'Unsubscribe from RSS feed',
         security: [['bearerAuth' => []]],
         tags: ['RSS'],
         parameters: [
             new OAT\Parameter(
                 name: 'rssId',
+                description: 'RSS feed ID',
                 in: 'path',
                 required: true,
-                description: 'RSS feed ID',
                 schema: new OAT\Schema(
                     type: 'string',
                     example: '01JCXYZ123456789ABCDEFGHIJ'

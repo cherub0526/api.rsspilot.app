@@ -241,6 +241,65 @@
                 }
             }
         },
+        "/api/v1/media/{mediaId}/custom-prompt": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Run a custom prompt against a media caption",
+                "operationId": "24a59e0125f7513ecdb40d977c0e3dd8",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "prompt"
+                                ],
+                                "properties": {
+                                    "prompt": {
+                                        "type": "string",
+                                        "example": "影片中出現了哪些食物？"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Custom prompt result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "text": {
+                                            "type": "string",
+                                            "example": "影片中出現了拉麵、壽司和天婦羅。"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/api/v1/media": {
             "get": {
                 "tags": [

@@ -148,7 +148,8 @@ Input:
 Output:
 ```php
 #[OAT\Post(
-    path: '/api/v1/auth/forgot-password',
+    path: '/v1/auth/forgot-password',
+    operationId: 'api.v1.auth.forgot-password.store',
     summary: 'Send password reset email',
     tags: ['Auth'],
     requestBody: new OAT\RequestBody(

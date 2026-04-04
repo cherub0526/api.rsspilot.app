@@ -19,7 +19,8 @@ class CaptionsController
      * @throws InvalidRequestException
      */
     #[OAT\Get(
-        path: '/api/v1/media/{mediaId}/captions',
+        path: '/v1/media/{mediaId}/captions',
+        operationId: 'api.v1.media.captions.index',
         summary: 'List captions for a media',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
@@ -68,7 +69,8 @@ class CaptionsController
      * @throws InvalidRequestException
      */
     #[OAT\Get(
-        path: '/api/v1/media/{mediaId}/captions/{captionId}',
+        path: '/v1/media/{mediaId}/captions/{captionId}',
+        operationId: 'api.v1.media.captions.show',
         summary: 'Get caption details',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
