@@ -10,8 +10,9 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Services\YoutubeService;
 use App\Validators\RSSValidator;
-use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
+use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\HttpOk;
 use App\Http\Resources\RSSResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
@@ -63,7 +64,7 @@ class RSSController extends AbstractController
                 )
             ),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function index(Request $request)
@@ -121,7 +122,7 @@ class RSSController extends AbstractController
                 content: new OAT\JsonContent(ref: RSSSchema::class)
             ),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function store(Request $request): RSSResource
@@ -195,7 +196,7 @@ class RSSController extends AbstractController
                     ]
                 )
             ),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function destroy(Request $request, string $rssId): ResponseInterface

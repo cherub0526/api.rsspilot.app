@@ -7,7 +7,8 @@ namespace App\Http\Controllers\API\V1;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
-use App\OpenApi\Responses\Ok;
+use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\HttpOk;
 use App\Validators\SettingValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
@@ -47,7 +48,7 @@ class SettingsController extends AbstractController
         responses: [
             new OAT\Response(ref: Ok::class, response: 200),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function update(Request $request)

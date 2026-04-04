@@ -178,6 +178,10 @@ Output:
             )
         ),
         new OAT\Response(ref: Http400::class, response: 400),
+        new OAT\Response(ref: Http401::class, response: 401),
+        new OAT\Response(ref: Http403::class, response: 403),
+        new OAT\Response(ref: Http404::class, response: 404),
+        new OAT\Response(ref: Http422::class, response: 422)
     ]
 )]
 ```

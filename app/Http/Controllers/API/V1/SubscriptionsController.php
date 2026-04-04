@@ -12,7 +12,8 @@ use App\Models\Subscription;
 use App\Services\PaddleClient;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
-use App\OpenApi\Responses\Ok;
+use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\HttpOk;
 use Paddle\SDK\Exceptions\ApiError;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;
@@ -41,7 +42,7 @@ class SubscriptionsController extends AbstractController
                 description: 'Current subscription plan',
                 content: new OAT\JsonContent(ref: PlanSchema::class)
             ),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function index(Request $request, SubscriptionService $subscriptionService): PlanResource
@@ -145,7 +146,7 @@ class SubscriptionsController extends AbstractController
                 )
             ),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function store(Request $request): ResponseInterface
@@ -233,7 +234,7 @@ class SubscriptionsController extends AbstractController
         responses: [
             new OAT\Response(ref: Ok::class, response: 200),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function update(Request $request, string $subscriptionId)
@@ -291,7 +292,7 @@ class SubscriptionsController extends AbstractController
         ],
         responses: [
             new OAT\Response(ref: Ok::class, response: 200),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
             new OAT\Response(response: 404, description: 'Subscription not found'),
         ]
     )]
@@ -364,7 +365,7 @@ class SubscriptionsController extends AbstractController
                     ]
                 )
             ),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface

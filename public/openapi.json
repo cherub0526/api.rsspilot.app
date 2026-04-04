@@ -299,7 +299,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -339,7 +339,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -535,7 +535,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -572,7 +572,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -632,7 +632,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -692,7 +692,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -742,7 +742,7 @@
                         }
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -789,13 +789,13 @@
                 },
                 "responses": {
                     "200": {
-                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                        "$ref": "App\\Http\\Controllers\\API\\V1\\Ok"
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -824,7 +824,7 @@
                         }
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -934,7 +934,7 @@
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -978,13 +978,13 @@
                 },
                 "responses": {
                     "200": {
-                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                        "$ref": "App\\Http\\Controllers\\API\\V1\\Ok"
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -1007,10 +1007,10 @@
                 ],
                 "responses": {
                     "200": {
-                        "$ref": "App\\OpenApi\\Responses\\Ok"
+                        "$ref": "App\\Http\\Controllers\\API\\V1\\Ok"
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     },
                     "404": {
                         "description": "Subscription not found"
@@ -1079,7 +1079,7 @@
                         }
                     },
                     "401": {
-                        "description": "Unauthenticated"
+                        "$ref": "#/components/responses/401"
                     }
                 },
                 "security": [
@@ -1355,6 +1355,38 @@
                                             "The field is required."
                                         ]
                                     }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            },
+            "401": {
+                "description": "Unauthenticated",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "example": "Unauthenticated."
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            },
+            "403": {
+                "description": "Forbidden",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "example": "This action is unauthorized."
                                 }
                             },
                             "type": "object"

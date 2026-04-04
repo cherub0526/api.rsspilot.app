@@ -9,6 +9,7 @@ use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Parameters\Query;
 use App\OpenApi\Responses\Http400;
+use App\OpenApi\Responses\Http401;
 use App\Validators\MediaValidator;
 use App\OpenApi\Schemas\Paginators;
 use App\Http\Resources\MediaResource;
@@ -56,7 +57,7 @@ class MediaController extends AbstractController
                 )
             ),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function index(Request $request): AnonymousResourceCollection
@@ -110,7 +111,7 @@ class MediaController extends AbstractController
                 content: new OAT\JsonContent(ref: MediaSchema::class)
             ),
             new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(response: 401, description: 'Unauthenticated'),
+            new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
     public function show(Request $request, string $mediaId): MediaResource
