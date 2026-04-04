@@ -488,6 +488,73 @@
                 ]
             }
         },
+        "/v1/media/{mediaId}/summaries": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get the summary for a media item",
+                "operationId": "api.v1.media.summaries.index",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Summary resource or empty array if no summary exists",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/parameters/mediaId"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                }
+            }
+        },
+        "/v1/media/{mediaId}/summaries/{summaryId}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get a specific summary by ID",
+                "operationId": "api.v1.media.summaries.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/summaryId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Summary resource",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SummaryResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                }
+            }
+        },
         "/v1/media": {
             "get": {
                 "tags": [
@@ -1088,6 +1155,447 @@
                     }
                 ]
             }
+        },
+        "/v1/users": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Get current authenticated user profile",
+                "operationId": "api.v1.users.index",
+                "responses": {
+                    "200": {
+                        "description": "User profile",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update current authenticated user profile",
+                "operationId": "api.v1.users.update",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name",
+                                    "email"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "John Doe"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Update current authenticated user profile (partial)",
+                "operationId": "api.v1.users.store",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "example": "John Doe"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "john@example.com"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated user profile",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/webhook/groq/{mediaId}": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Groq transcription webhook callback",
+                "operationId": "api.v1.webhook.groq.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status",
+                                    "data"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "success",
+                                            "error"
+                                        ],
+                                        "example": "success"
+                                    },
+                                    "data": {
+                                        "description": "Transcription payload. When status=success: language, duration, text, words, segments are required. When status=error: error is required.",
+                                        "properties": {
+                                            "language": {
+                                                "type": "string",
+                                                "example": "English"
+                                            },
+                                            "duration": {
+                                                "type": "number",
+                                                "format": "float",
+                                                "example": 123.45
+                                            },
+                                            "text": {
+                                                "type": "string",
+                                                "example": "Hello world."
+                                            },
+                                            "words": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "segments": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "error": {
+                                                "type": "string",
+                                                "example": "Transcription failed due to audio quality."
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
+        },
+        "/v1/webhook/paddle": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Paddle transaction webhook callback",
+                "operationId": "api.v1.webhook.paddle.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "event_id",
+                                    "event_type",
+                                    "occurred_at",
+                                    "notification_id",
+                                    "data"
+                                ],
+                                "properties": {
+                                    "event_id": {
+                                        "type": "string",
+                                        "example": "evt_01h8bzakzx3nhsf0rr6jh6vj6g"
+                                    },
+                                    "event_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "transaction.completed"
+                                        ],
+                                        "example": "transaction.completed"
+                                    },
+                                    "occurred_at": {
+                                        "type": "string",
+                                        "format": "date-time",
+                                        "example": "2024-01-01T00:00:00Z"
+                                    },
+                                    "notification_id": {
+                                        "type": "string",
+                                        "example": "ntf_01h8bzakzx3nhsf0rr6jh6vj6g"
+                                    },
+                                    "data": {
+                                        "required": [
+                                            "id"
+                                        ],
+                                        "properties": {
+                                            "id": {
+                                                "type": "string",
+                                                "example": "txn_01h8bzakzx3nhsf0rr6jh6vj6g"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/webhook/summaries/{mediaId}": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive AI summary webhook callback",
+                "operationId": "api.v1.webhook.summaries.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "locale",
+                                    "text"
+                                ],
+                                "properties": {
+                                    "locale": {
+                                        "type": "string",
+                                        "example": "en"
+                                    },
+                                    "text": {
+                                        "required": [
+                                            "short_summary",
+                                            "long_summary"
+                                        ],
+                                        "properties": {
+                                            "short_summary": {
+                                                "type": "string",
+                                                "example": "A brief summary of the video."
+                                            },
+                                            "long_summary": {
+                                                "required": [
+                                                    "content",
+                                                    "key_points",
+                                                    "keywords"
+                                                ],
+                                                "properties": {
+                                                    "content": {
+                                                        "type": "string",
+                                                        "example": "A detailed summary of the video content."
+                                                    },
+                                                    "key_points": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        },
+                                                        "example": [
+                                                            "Point one",
+                                                            "Point two"
+                                                        ]
+                                                    },
+                                                    "keywords": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        },
+                                                        "example": [
+                                                            "keyword1",
+                                                            "keyword2"
+                                                        ]
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
+        },
+        "/v1/webhook/youtube-mp3-downloader/{mediaId}": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive YouTube MP3 downloader webhook callback",
+                "operationId": "api.v1.webhook.youtube-mp3-downloader.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "status",
+                                    "data"
+                                ],
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "enum": [
+                                            "success",
+                                            "error"
+                                        ],
+                                        "example": "success"
+                                    },
+                                    "data": {
+                                        "required": [
+                                            "status",
+                                            "link"
+                                        ],
+                                        "properties": {
+                                            "status": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "ok",
+                                                    "processing",
+                                                    "fail"
+                                                ],
+                                                "example": "ok"
+                                            },
+                                            "link": {
+                                                "type": "string",
+                                                "format": "uri",
+                                                "example": "https://example.com/audio.mp3"
+                                            }
+                                        },
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -1394,6 +1902,22 @@
                     }
                 }
             },
+            "404": {
+                "description": "Resource not found",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "example": "Not found."
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            },
             "200": {
                 "description": "Successful operation",
                 "content": {
@@ -1436,6 +1960,16 @@
                 "name": "subscriptionId",
                 "in": "path",
                 "description": "Subscription ID (ULID)",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "summaryId": {
+                "name": "summaryId",
+                "in": "path",
+                "description": "Summary ID (ULID)",
                 "required": true,
                 "schema": {
                     "type": "string",
@@ -1507,6 +2041,14 @@
         {
             "name": "Subscriptions",
             "description": "Subscriptions"
+        },
+        {
+            "name": "Users",
+            "description": "Users"
+        },
+        {
+            "name": "Webhook",
+            "description": "Webhook"
         }
     ]
 }
