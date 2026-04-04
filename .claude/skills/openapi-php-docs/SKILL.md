@@ -11,6 +11,15 @@ This skill governs how OpenAPI documentation is written and maintained in this p
 
 This skill does not cover REST API design decisions, route naming, or editing `public/openapi.json` by hand.
 
+## Resource Schema Convention
+
+When a controller action returns a `*Resource` object (e.g. `CaptionResource`, `MediaResource`), the OpenAPI schema for that resource **must** live in `app/OpenApi/Schemas/` in a file named exactly after the Resource class.
+
+- File: `app/OpenApi/Schemas/CaptionResource.php`, class: `CaptionResource`, schema name: `'CaptionResource'`
+- Do **not** put `#[OAT\Schema]` on the `app/Http/Resources/*Resource.php` class itself
+- In controllers, import the schema class with an alias to avoid conflict with the HTTP Resource: `use App\OpenApi\Schemas\CaptionResource as CaptionSchema;` then use `ref: CaptionSchema::class`
+- Schema classes in the same `App\OpenApi\Schemas\` namespace can reference each other by short name (e.g. `ref: PaddleResource::class`) without an explicit `use` statement
+
 ## Single responsibility
 
 - Primary job: Produce correct, reusable OpenAPI Attribute code that integrates with the existing `app/OpenApi/` component library
@@ -76,8 +85,9 @@ Step 0: Orient
 
 Step 1: Check existing components
 - Action: Scan `app/OpenApi/` (see `references/project-structure.md`) for components to `ref:` instead of writing inline.
-- Input: param names, response codes needed
+- Input: param names, response codes needed, return type of the controller action
 - Output: list of `ref:` candidates vs. fields that need inline definitions
+- If the action returns a `*Resource`: check whether `app/OpenApi/Schemas/{ResourceName}.php` exists; if not, create it in Step 3
 - Validation: referenced class exists; namespace resolves via PSR-4
 
 Step 2: Write or update the OAT attribute
@@ -166,7 +176,7 @@ Output:
                 ]
             )
         ),
-        new OAT\Response(ref: Http400::class),
+        new OAT\Response(ref: Http400::class, response: 400),
     ]
 )]
 ```

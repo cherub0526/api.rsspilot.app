@@ -66,6 +66,181 @@
                 }
             }
         },
+        "/api/v1/media/{mediaId}/captions": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "List captions for a media",
+                "operationId": "9409490572c31e03e833016c4ac0ff52",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                                    },
+                                                    "locale": {
+                                                        "type": "string",
+                                                        "example": "en"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/media/{mediaId}/captions/{captionId}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get caption details",
+                "operationId": "8081bfa2aad11bed5ab3bc5166700497",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/captionId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CaptionResource"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/media/{mediaId}/chat": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Chat with video content",
+                "operationId": "ee42306c9208f2c0eb2a6b9a9fe07a03",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "messages"
+                                ],
+                                "properties": {
+                                    "messages": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "role",
+                                                "content"
+                                            ],
+                                            "properties": {
+                                                "role": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "user",
+                                                        "assistant",
+                                                        "system"
+                                                    ],
+                                                    "example": "user"
+                                                },
+                                                "content": {
+                                                    "type": "string",
+                                                    "example": "What is this video about?"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "minItems": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Assistant reply",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "role": {
+                                            "type": "string",
+                                            "example": "assistant"
+                                        },
+                                        "content": {
+                                            "type": "string",
+                                            "example": "This video covers..."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
         "/api/v1/media": {
             "get": {
                 "tags": [
@@ -94,7 +269,7 @@
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/components/schemas/Media"
+                                                "$ref": "#/components/schemas/MediaResource"
                                             }
                                         },
                                         "links": {
@@ -141,7 +316,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/Media"
+                                    "$ref": "#/components/schemas/MediaResource"
                                 }
                             }
                         }
@@ -428,7 +603,42 @@
     },
     "components": {
         "schemas": {
-            "Media": {
+            "CaptionResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "locale": {
+                        "type": "string",
+                        "example": "en"
+                    },
+                    "segments": {
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "start": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 0
+                                },
+                                "end": {
+                                    "type": "number",
+                                    "format": "float",
+                                    "example": 3.5
+                                },
+                                "text": {
+                                    "type": "string",
+                                    "example": "Hello, world."
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                },
+                "type": "object"
+            },
+            "MediaResource": {
                 "properties": {
                     "id": {
                         "type": "string",
@@ -462,6 +672,15 @@
                     "short_summary": {
                         "type": "string",
                         "example": "A short summary of the video content."
+                    }
+                },
+                "type": "object"
+            },
+            "PaddleResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "pro_01abc123"
                     }
                 },
                 "type": "object"
@@ -505,6 +724,132 @@
                     }
                 },
                 "type": "object"
+            },
+            "PlanResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "Pro Plan"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Full access to all features"
+                    },
+                    "channel_limit": {
+                        "type": "integer",
+                        "example": 10
+                    },
+                    "video_limit": {
+                        "type": "integer",
+                        "example": 100
+                    },
+                    "chat_limit": {
+                        "type": "integer",
+                        "example": 500
+                    },
+                    "prices": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceResource"
+                        }
+                    },
+                    "paddle": {
+                        "$ref": "#/components/schemas/PaddleResource"
+                    }
+                },
+                "type": "object"
+            },
+            "PriceResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "example": "month"
+                    },
+                    "price": {
+                        "type": "number",
+                        "format": "float",
+                        "example": 9.99
+                    },
+                    "paddle": {
+                        "$ref": "#/components/schemas/PaddleResource"
+                    }
+                },
+                "type": "object"
+            },
+            "RSSResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "type": {
+                        "type": "string",
+                        "example": "youtube"
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "Channel Title"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-01-01 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "SummaryResource": {
+                "properties": {
+                    "locale": {
+                        "type": "string",
+                        "example": "en"
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "ready"
+                    },
+                    "text": {
+                        "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "UserResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "John Doe"
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "example": "john@example.com"
+                    },
+                    "account": {
+                        "type": "string",
+                        "example": "johndoe"
+                    },
+                    "setting": {
+                        "type": "object"
+                    }
+                },
+                "type": "object"
             }
         },
         "responses": {
@@ -530,6 +875,16 @@
             }
         },
         "parameters": {
+            "captionId": {
+                "name": "captionId",
+                "in": "path",
+                "description": "Caption ID (ULID)",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
             "mediaId": {
                 "name": "mediaId",
                 "in": "path",

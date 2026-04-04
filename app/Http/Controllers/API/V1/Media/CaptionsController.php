@@ -49,7 +49,7 @@ class CaptionsController
                     ]
                 )
             ),
-            new OAT\Response(ref: Http400::class),
+            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
@@ -82,7 +82,7 @@ class CaptionsController
                 description: 'Successful operation',
                 content: new OAT\JsonContent(ref: CaptionSchema::class)
             ),
-            new OAT\Response(ref: Http400::class),
+            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
