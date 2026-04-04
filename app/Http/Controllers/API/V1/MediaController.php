@@ -11,6 +11,7 @@ use App\OpenApi\Parameters\Query;
 use App\OpenApi\Responses\Http400;
 use App\Validators\MediaValidator;
 use App\OpenApi\Schemas\Paginators;
+use App\OpenApi\Schemas\MediaResource as MediaSchema;
 use App\Http\Resources\MediaResource;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
@@ -40,7 +41,7 @@ class MediaController extends AbstractController
                         new OAT\Property(
                             property: 'data',
                             type: 'array',
-                            items: new OAT\Items(ref: MediaResource::class)
+                            items: new OAT\Items(ref: MediaSchema::class)
                         ),
                         new OAT\Property(
                             property: 'links',
@@ -104,7 +105,7 @@ class MediaController extends AbstractController
             new OAT\Response(
                 response: 200,
                 description: 'Successful operation',
-                content: new OAT\JsonContent(ref: MediaResource::class)
+                content: new OAT\JsonContent(ref: MediaSchema::class)
             ),
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(response: 401, description: 'Unauthenticated'),
