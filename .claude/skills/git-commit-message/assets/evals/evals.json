@@ -1,0 +1,108 @@
+{
+  "skill": "git-commit-message",
+  "version": "1.1.0",
+  "description": "Trigger and functional evals for git-commit-message skill.",
+  "trigger_evals": {
+    "should_trigger": [
+      {"id": "t-zh-1", "query": "幫這次改動寫 commit", "reason": "明確要求寫 commit"},
+      {"id": "t-zh-2", "query": "請為這次的改動串寫 git commit", "reason": "書面化中文觸發"},
+      {"id": "t-zh-3", "query": "把這些改動分成多個 commit", "reason": "多 commit 切分"},
+      {"id": "t-zh-4", "query": "幫我 commit", "reason": "口語觸發"},
+      {"id": "t-zh-5", "query": "產生 commit 訊息", "reason": "訊息撰寫觸發"},
+      {"id": "t-zh-6", "query": "revert 剛剛那個 commit", "reason": "revert 情境"},
+      {"id": "t-mix-1", "query": "寫個 commit message 給這些 diff", "reason": "中英混用"},
+      {"id": "t-en-1", "query": "write a commit message for these changes", "reason": "英文觸發"},
+      {"id": "t-en-2", "query": "split these changes into commits", "reason": "英文多 commit 切分"}
+    ],
+    "should_not_trigger": [
+      {"id": "n-branch-1", "query": "這個分支要叫什麼名字？", "reason": "branch naming，不在 scope"},
+      {"id": "n-pr-1", "query": "幫我寫 PR 標題", "reason": "PR 描述，非 commit"},
+      {"id": "n-rebase-1", "query": "我要 squash 這三個 commit", "reason": "history rewrite，屬 git 操作"},
+      {"id": "n-push-1", "query": "幫我 push 到 main", "reason": "推送遠端，非訊息撰寫"},
+      {"id": "n-strategy-1", "query": "這種情況該切成幾個 commit？", "reason": "策略性問題，handoff 回 user"},
+      {"id": "n-conflict-1", "query": "解 merge conflict", "reason": "conflict 解決，非訊息"},
+      {"id": "n-log-1", "query": "列出最近 10 個 commit", "reason": "查詢 git log，非寫訊息"}
+    ]
+  },
+  "functional_evals": [
+    {
+      "id": "f-fix-basic",
+      "name": "單一 bug fix，格式正確",
+      "given": "已 stage：修正 CourseController 的分頁錯誤；user 提供 issue #1234",
+      "when": "請求『幫這次改動寫 commit』",
+      "then": [
+        "type = fix",
+        "subject ≤ 50 欄寬、結尾無句號",
+        "body 結構化（問題/原因/調整項目）",
+        "footer 含 issue #1234",
+        "末段含 Co-Authored-By",
+        "validate_commit_message.py 退出碼 0"
+      ]
+    },
+    {
+      "id": "f-feat-no-issue",
+      "name": "新功能無 issue 編號",
+      "given": "已 stage：新增使用者密碼重設 endpoint",
+      "when": "請求『幫我寫 commit』",
+      "then": [
+        "type = feat",
+        "不強加假的 issue 編號",
+        "body 描述需求與調整項目",
+        "validate_commit_message.py 退出碼 0"
+      ]
+    },
+    {
+      "id": "f-mixed-split",
+      "name": "跨 type 變動 → 切多 commit",
+      "given": "stage 裡同時有：composer.lock、新 Service、CLAUDE.md 更新",
+      "when": "請求『幫這些改動 commit』",
+      "then": [
+        "建議拆成 chore(deps) / feat / docs 三則",
+        "每則先給 git add <path> 清單",
+        "順序：chore(deps) → feat → docs"
+      ]
+    },
+    {
+      "id": "f-breaking",
+      "name": "含 BREAKING CHANGE",
+      "given": "變動：移除舊 auth header 支援，改用新 token",
+      "when": "請求 commit 並告知是 breaking",
+      "then": [
+        "footer 獨立段落 BREAKING CHANGE:",
+        "明寫影響、原因、遷移方式",
+        "type 可為 feat 或 refactor（依行為變化）"
+      ]
+    },
+    {
+      "id": "f-revert",
+      "name": "revert 既有 commit",
+      "given": "user 要 revert 1e6c61b，原 subject 為『feat(openapi): 安裝 swagger-php 並建立文件產生機制』",
+      "when": "請求『revert 這個 commit』",
+      "then": [
+        "header 格式：revert: feat(openapi): ... (回覆版本：1e6c61b)",
+        "body 說明 revert 原因",
+        "validate_commit_message.py 退出碼 0"
+      ]
+    },
+    {
+      "id": "f-sensitive-block",
+      "name": "staging 區偵測到敏感檔案",
+      "given": "git diff --staged 含 .env",
+      "when": "請求 commit",
+      "then": [
+        "不執行 git commit",
+        "回報敏感檔案偵測結果並請 user 確認"
+      ]
+    },
+    {
+      "id": "f-no-changes",
+      "name": "沒有變動時",
+      "given": "git status 顯示 working tree clean",
+      "when": "請求 commit",
+      "then": [
+        "回報無需 commit",
+        "不產生任何 commit 指令"
+      ]
+    }
+  ]
+}
