@@ -18,7 +18,7 @@ class ForgotPasswordValidator extends BaseValidator
             'expires.required'   => __('validators.auth.expires.required'),
             'expires.integer'    => __('validators.auth.expires.integer'),
             'id.required'        => __('validators.auth.id.required'),
-            'id.integer'         => __('validators.auth.id.integer'),
+            'id.string'          => __('validators.auth.id.string'),
             'token.required'     => __('validators.auth.token.required'),
             'token.string'       => __('validators.auth.token.string'),
             'signature.required' => __('validators.auth.signature.required'),
@@ -39,7 +39,7 @@ class ForgotPasswordValidator extends BaseValidator
     {
         $this->rules = [
             'expires'   => 'required|integer',
-            'id'        => 'required|integer',
+            'id'        => 'required|string',
             'token'     => 'required|string',
             'signature' => 'required|string',
             'password'  => 'required|min:8|confirmed',
