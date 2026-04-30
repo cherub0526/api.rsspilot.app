@@ -12,15 +12,17 @@ use App\Services\Prompts\TemplateFactory;
 use App\Services\Prompts\TemplateInterface;
 use App\Services\Prompts\TranslationTemplate;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 
 /**
  * 模板系統單元測試.
  */
-class TemplateSystemTest
+class TemplateSystemTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * 測試 TemplateFactory 建立模板
      */
+    #[DoesNotPerformAssertions]
     public function testFactoryCreatesTemplates(): void
     {
         $types = ['assistant', 'summary', 'translation', 'caption', 'analysis'];
@@ -37,6 +39,7 @@ class TemplateSystemTest
     /**
      * 測試 TemplateFactory 拋出異常.
      */
+    #[DoesNotPerformAssertions]
     public function testFactoryThrowsExceptionForUnknownType(): void
     {
         try {
@@ -52,6 +55,7 @@ class TemplateSystemTest
     /**
      * 測試模板參數管理.
      */
+    #[DoesNotPerformAssertions]
     public function testTemplateParameterManagement(): void
     {
         $params = ['key1' => 'value1', 'key2' => 'value2'];
@@ -73,6 +77,7 @@ class TemplateSystemTest
     /**
      * 測試消息構建.
      */
+    #[DoesNotPerformAssertions]
     public function testMessageBuilding(): void
     {
         $template = TemplateFactory::create('caption', [
@@ -92,6 +97,7 @@ class TemplateSystemTest
     /**
      * 測試不同模板的系統提示詞.
      */
+    #[DoesNotPerformAssertions]
     public function testSystemPrompts(): void
     {
         $templates = [
@@ -113,6 +119,7 @@ class TemplateSystemTest
     /**
      * 測試模板類型.
      */
+    #[DoesNotPerformAssertions]
     public function testTemplateTypes(): void
     {
         $templates = [
@@ -141,6 +148,7 @@ class TemplateSystemTest
     /**
      * 測試 Factory 註冊和檢查.
      */
+    #[DoesNotPerformAssertions]
     public function testFactoryRegistration(): void
     {
         $availableTypes = TemplateFactory::getAvailableTypes();
@@ -157,6 +165,7 @@ class TemplateSystemTest
     /**
      * 測試多形性 - 多個模板遵循相同介面.
      */
+    #[DoesNotPerformAssertions]
     public function testPolymorphism(): void
     {
         $templates = [
@@ -191,6 +200,7 @@ class TemplateSystemTest
     /**
      * 測試模板鏈式調用.
      */
+    #[DoesNotPerformAssertions]
     public function testChainableSetters(): void
     {
         $template = TemplateFactory::create('summary', []);

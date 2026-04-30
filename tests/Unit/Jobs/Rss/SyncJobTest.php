@@ -15,6 +15,7 @@ use App\Models\Subscription;
 use App\Services\SubscriptionService;
 use Hypervel\Foundation\Testing\TestCase;
 use Hypervel\Foundation\Testing\RefreshDatabase;
+use Hypervel\Support\Facades\Queue;
 
 /**
  * @internal
@@ -41,6 +42,8 @@ class SyncJobTest extends TestCase
             mkdir($dir, 0755, true);
         }
         file_put_contents($this->fakeRssPath, $this->getFakeRssXml());
+
+        Queue::fake();
 
         $this->plan = Plan::withoutEvents(function () {
             return Plan::factory()->create(['video_limit' => 5]);
@@ -111,9 +114,9 @@ class SyncJobTest extends TestCase
         ]);
 
         // Mock SubscriptionService
-        $this->mock(SubscriptionService::class, function (MockInterface $mock) use ($subscription, $plan) {
+        $this->mock(SubscriptionService::class, function (MockInterface $mock) use ($subscription) {
             $mock->shouldReceive('getUserSubscription')->andReturn($subscription);
-            $mock->shouldReceive('getUserSubscriptionPlan')->andReturn($plan);
+            $mock->shouldReceive('getUserSubscriptionPlan')->andReturn($this->plan);
         });
 
         // 2. Act
@@ -168,9 +171,9 @@ class SyncJobTest extends TestCase
             $user->media()->attach($media->id);
         });
 
-        $this->mock(SubscriptionService::class, function (MockInterface $mock) use ($subscription, $plan) {
+        $this->mock(SubscriptionService::class, function (MockInterface $mock) use ($subscription) {
             $mock->shouldReceive('getUserSubscription')->andReturn($subscription);
-            $mock->shouldReceive('getUserSubscriptionPlan')->andReturn($plan);
+            $mock->shouldReceive('getUserSubscriptionPlan')->andReturn($this->plan);
         });
 
         // 2. Act

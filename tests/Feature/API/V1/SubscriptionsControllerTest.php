@@ -36,7 +36,11 @@ class SubscriptionsControllerTest extends TestCase
         parent::setUp();
 
         $this->freePlan = Plan::withoutEvents(function () {
-            return Plan::factory()->create(['title' => 'Free']);
+            return Plan::factory()->create([
+                'title'         => 'Free',
+                'channel_limit' => 1,
+                'video_limit'   => 5,
+            ]);
         });
 
         Paddle::factory()->create([

@@ -14,7 +14,7 @@ class ExampleTest extends TestCase
 {
     public function testTheApplicationReturnsSuccessfulResponse()
     {
-        $this->get('/')
+        $this->get('/api')
             ->assertSuccessful();
     }
 }

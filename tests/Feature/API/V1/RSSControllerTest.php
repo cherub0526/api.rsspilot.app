@@ -8,6 +8,9 @@ use App\Models\Rss;
 use Tests\TestCase;
 use App\Models\User;
 use App\Jobs\Rss\SyncJob;
+use Mockery\MockInterface;
+use App\Services\YoutubeService;
+use Hypervel\Support\Facades\Http;
 use Hypervel\Support\Facades\Queue;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -81,8 +84,18 @@ class RSSControllerTest extends TestCase
 
         Queue::fake();
 
+        $this->mock(YoutubeService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCAuUUnT6oDeKwE6v1NGQxug');
+        });
+
+        Http::fake([
+            'www.youtube.com/feeds/videos.xml*' => Http::response(
+                '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Google Developers</title><id>yt:channel:UCAuUUnT6oDeKwE6v1NGQxug</id></feed>',
+                200
+            ),
+        ]);
+
         // Valid YouTube Channel ID
-        // Note: This relies on an external call to youtube.com.
         $params['url'] = 'UCAuUUnT6oDeKwE6v1NGQxug'; // Google Developers channel ID
         $response = $this->json('POST', $uri, $params);
 
@@ -111,13 +124,13 @@ class RSSControllerTest extends TestCase
         $uri = route('api.v1.rss.destroy', ['rssId' => $rss->id]);
 
         // Unauthenticated
-        $this->json('DELETE', $uri)->dump()->assertStatus(401);
+        $this->json('DELETE', $uri)->assertStatus(401);
 
         $user = $this->fakeLogin();
         $user->rss()->attach([$rss->id]);
 
         // Delete own RSS feed
-        $this->json('DELETE', $uri)->dump()->assertStatus(200);
+        $this->json('DELETE', $uri)->assertStatus(200);
 
         $this->assertDatabaseMissing('userables', [
             'user_id' => $user->id,
