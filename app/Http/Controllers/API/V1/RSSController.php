@@ -9,6 +9,8 @@ use App\Jobs\Rss\SyncJob;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Services\YoutubeService;
+use Hypervel\Support\Facades\Http;
+use Hypervel\HttpClient\ConnectionException;
 use App\Validators\RSSValidator;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
@@ -137,11 +139,21 @@ class RSSController extends AbstractController
         }
 
         if ($params['type'] === Rss::TYPE_YOUTUBE) {
-            $channelId = (new YoutubeService())->getChannelIdFromUrl($params['url']);
+            $channelId = app(YoutubeService::class)->getChannelIdFromUrl($params['url']);
             $params['url'] = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
         }
 
-        $xml = @simplexml_load_file($params['url']);
+        try {
+            $response = Http::get($params['url']);
+        } catch (ConnectionException) {
+            throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+        }
+
+        if (!$response->successful()) {
+            throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+        }
+
+        $xml = simplexml_load_string($response->body());
         if ($xml === false) {
             throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
         }
