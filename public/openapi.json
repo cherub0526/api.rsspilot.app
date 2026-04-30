@@ -66,6 +66,84 @@
                 }
             }
         },
+        "/v1/auth/google": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login or register via Google OAuth token",
+                "operationId": "api.v1.auth.google.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "access_token",
+                                    "avatar_url",
+                                    "email",
+                                    "name"
+                                ],
+                                "properties": {
+                                    "access_token": {
+                                        "type": "string",
+                                        "example": "ya29.a0AfH6SMBx..."
+                                    },
+                                    "avatar_url": {
+                                        "type": "string",
+                                        "format": "uri",
+                                        "example": "https://lh3.googleusercontent.com/a/photo.jpg"
+                                    },
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "user@gmail.com"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "example": "John Doe"
+                                    },
+                                    "provider_id": {
+                                        "type": "string",
+                                        "example": "112345678901234567890"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
         "/v1/auth": {
             "post": {
                 "tags": [
@@ -649,6 +727,51 @@
                 ]
             }
         },
+        "/v1/auth/oauth/callback": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Handle OAuth provider callback and bind social account",
+                "operationId": "api.v1.auth.oauth.callback",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "provider",
+                                    "code"
+                                ],
+                                "properties": {
+                                    "provider": {
+                                        "type": "string",
+                                        "enum": [
+                                            "facebook",
+                                            "google"
+                                        ],
+                                        "example": "google"
+                                    },
+                                    "code": {
+                                        "type": "string",
+                                        "example": "4/0AfJohXl..."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OAuth account bound successfully"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
         "/v1/rss": {
             "get": {
                 "tags": [
@@ -870,6 +993,33 @@
                         "bearerAuth": []
                     }
                 ]
+            }
+        },
+        "/v1/plans": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "List available subscription plans",
+                "operationId": "api.v1.plans.index",
+                "responses": {
+                    "200": {
+                        "description": "List of active subscription plans",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlanResource"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
             }
         },
         "/v1/subscriptions": {
@@ -1525,6 +1675,55 @@
                 }
             }
         },
+        "/v1/webhook/youtube": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Receive YouTube video and audio detail webhook payload",
+                "operationId": "api.v1.webhook.youtube.store",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "video_detail": {
+                                        "type": "object",
+                                        "example": null
+                                    },
+                                    "audio_detail": {
+                                        "type": "object",
+                                        "example": null
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Payload echoed back",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "video_detail": {
+                                            "type": "object"
+                                        },
+                                        "audio_detail": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/webhook/youtube-mp3-downloader/{mediaId}": {
             "post": {
                 "tags": [
@@ -2039,6 +2238,10 @@
             "description": "Settings"
         },
         {
+            "name": "Plans",
+            "description": "Plans"
+        },
+        {
             "name": "Subscriptions",
             "description": "Subscriptions"
         },
@@ -2049,6 +2252,10 @@
         {
             "name": "Webhook",
             "description": "Webhook"
+        },
+        {
+            "name": "Webhooks",
+            "description": "Webhooks"
         }
     ]
 }

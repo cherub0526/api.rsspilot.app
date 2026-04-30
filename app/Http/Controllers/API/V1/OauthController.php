@@ -7,15 +7,37 @@ namespace App\Http\Controllers\API\V1;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\Models\Oauth;
+use App\OpenApi\Responses\Http400;
 use App\Validators\OauthValidator;
 use Hypervel\Http\Request;
 use Hypervel\Socialite\Facades\Socialite;
+use OpenApi\Attributes as OAT;
 
 class OauthController extends AbstractController
 {
     /**
      * @throws InvalidRequestException
      */
+    #[OAT\Post(
+        path: '/v1/auth/oauth/callback',
+        operationId: 'api.v1.auth.oauth.callback',
+        summary: 'Handle OAuth provider callback and bind social account',
+        tags: ['Auth'],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['provider', 'code'],
+                properties: [
+                    new OAT\Property(property: 'provider', type: 'string', enum: ['facebook', 'google'], example: 'google'),
+                    new OAT\Property(property: 'code', type: 'string', example: '4/0AfJohXl...'),
+                ]
+            )
+        ),
+        responses: [
+            new OAT\Response(response: 200, description: 'OAuth account bound successfully'),
+            new OAT\Response(ref: Http400::class, response: 400),
+        ]
+    )]
     public function callback(Request $request)
     {
         $params = $request->only(['provider', 'code']);
