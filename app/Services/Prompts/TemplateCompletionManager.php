@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services\Prompts;
 
-use App\Utils\OpenAI\Completion;
+use App\Utils\AI\Completion;
 
 /**
  * 模板完成管理器
- * 負責將模板與 OpenAI Completion 服務整合.
+ * 負責將模板與 AI Completion 服務整合.
  */
 class TemplateCompletionManager
 {
     /**
-     * @var Completion OpenAI 完成服務
+     * @var Completion AI 完成服務
      */
     private Completion $completion;
 
@@ -74,9 +74,12 @@ class TemplateCompletionManager
      */
     public function complete(
         string $userContent,
-        string $model = 'gpt-4.1-mini',
+        string $model = '',
         array $additionalParams = []
     ): array {
+        if ($model === '') {
+            $model = config('ai.default_model');
+        }
         // 建立消息陣列
         $messages = $this->template->buildMessages($userContent, $additionalParams);
 
@@ -101,7 +104,7 @@ class TemplateCompletionManager
      */
     public function completeAndGetContent(
         string $userContent,
-        string $model = 'gpt-3.5-turbo',
+        string $model = '',
         array $additionalParams = []
     ): string {
         $response = $this->complete($userContent, $model, $additionalParams);

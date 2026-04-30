@@ -62,8 +62,7 @@ class TemplateUsageExample
     public static function example2(): void
     {
         // 初始化 Completion 服務
-        $apiKey = env('OPENAI_API_KEY');
-        $completion = new \App\Utils\OpenAI\Completion($apiKey);
+        $completion = \App\Utils\AI\Completion::make();
 
         // 建立字幕生成模板
         $template = TemplateFactory::create('caption', [
@@ -90,7 +89,7 @@ class TemplateUsageExample
      */
     public static function example3(): void
     {
-        $completion = new \App\Utils\OpenAI\Completion(env('OPENAI_API_KEY'));
+        $completion = \App\Utils\AI\Completion::make();
 
         // 建立初始模板
         $template = TemplateFactory::create('summary', [

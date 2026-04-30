@@ -8,7 +8,7 @@ use Throwable;
 use App\Models\Media;
 use App\Models\Summary;
 use Hypervel\Queue\Queueable;
-use App\Utils\OpenAI\Completion;
+use App\Utils\AI\Completion;
 use App\Services\Prompts\TemplateFactory;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use App\Services\Prompts\TemplateCompletionManager;
@@ -54,13 +54,11 @@ class SummaryJob implements ShouldQueue
         try {
             $language = 'English';
 
-            $completion = new Completion(env('OPENAI_API_KEY'));
-
             $template = TemplateFactory::create('summary', [
                 'language' => $language,
             ]);
 
-            $manager = new TemplateCompletionManager($completion, $template);
+            $manager = new TemplateCompletionManager(Completion::make(), $template);
             $response = $manager->complete($caption->text);
 
             $summary->update([

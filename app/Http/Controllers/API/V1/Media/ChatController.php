@@ -7,7 +7,7 @@ namespace App\Http\Controllers\API\V1\Media;
 use Hypervel\Http\Request;
 use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
-use App\Utils\OpenAI\Completion;
+use App\Utils\AI\Completion;
 use App\Validators\ChatValidator;
 use App\OpenApi\Responses\Http400;
 use Psr\Http\Message\ResponseInterface;
@@ -87,8 +87,6 @@ class ChatController
             throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
         }
 
-        $completion = new Completion(env('OPENAI_API_KEY'));
-
         $userMessage = collect($params['messages'])->last()['content'] ?? '';
 
         $template = TemplateFactory::create('assistant', [
@@ -96,8 +94,8 @@ class ChatController
             'messages'         => array_pop($params['messages']),
             'respond_language' => ISO6391::getNameByCode($request->user()->setting()->first()->data['ai']['language']),
         ]);
-        $openai = new TemplateCompletionManager($completion, $template);
-        $response = $openai->complete($userMessage, 'gpt-4.1-mini');
+        $openai = new TemplateCompletionManager(Completion::make(), $template);
+        $response = $openai->complete($userMessage);
 
         return response()->json([
             'role'    => 'assistant',

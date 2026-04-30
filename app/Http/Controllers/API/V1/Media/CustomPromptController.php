@@ -8,7 +8,7 @@ use Hypervel\Http\Request;
 use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
-use App\Utils\OpenAI\Completion;
+use App\Utils\AI\Completion;
 use App\OpenApi\Responses\Http400;
 use App\Services\Prompts\TemplateFactory;
 use App\Validators\CustomPromptValidator;
@@ -74,16 +74,14 @@ class CustomPromptController
             throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
         }
 
-        $completion = new Completion(env('OPENAI_API_KEY'));
-
         $template = TemplateFactory::create('customPrompt', [
             'system_prompt'    => $params['prompt'],
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
             'respond_language' => ISO6391::getNameByCode($request->user()->setting()->first()->data['ai']['language']),
         ]);
 
-        $openai = new TemplateCompletionManager($completion, $template);
-        $response = $openai->complete('', 'gpt-4.1-mini');
+        $openai = new TemplateCompletionManager(Completion::make(), $template);
+        $response = $openai->complete('');
 
         return response()->json([
             'text' => json_decode($response['choices'][0]['message']['content'], true)[''],
