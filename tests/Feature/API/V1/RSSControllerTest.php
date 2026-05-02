@@ -84,7 +84,9 @@ class RSSControllerTest extends TestCase
 
         Queue::fake();
 
+        // --- Channel URL ---
         $this->mock(YoutubeService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('getPlaylistIdFromUrl')->andReturn(null);
             $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCAuUUnT6oDeKwE6v1NGQxug');
         });
 
@@ -95,26 +97,66 @@ class RSSControllerTest extends TestCase
             ),
         ]);
 
-        // Valid YouTube Channel ID
-        $params['url'] = 'UCAuUUnT6oDeKwE6v1NGQxug'; // Google Developers channel ID
+        $params['url'] = 'https://www.youtube.com/@googledevelopers';
         $response = $this->json('POST', $uri, $params);
 
         $response->assertStatus(201)
-            ->assertJsonStructure(['id', 'type', 'url', 'title']);
+            ->assertJsonStructure(['id', 'type', 'list_id', 'url', 'title'])
+            ->assertJsonPath('url', 'https://www.youtube.com/channel/UCAuUUnT6oDeKwE6v1NGQxug');
 
         Queue::assertPushedOn('rss.sync', SyncJob::class);
 
         $createdRssId = $response->json('id');
 
         $this->assertDatabaseHas('rss', [
-            'id'   => $createdRssId,
-            'type' => Rss::TYPE_YOUTUBE,
-            'url'  => 'https://www.youtube.com/feeds/videos.xml?channel_id=UCAuUUnT6oDeKwE6v1NGQxug',
+            'id'      => $createdRssId,
+            'type'    => Rss::TYPE_YOUTUBE,
+            'list_id' => 'UCAuUUnT6oDeKwE6v1NGQxug',
+            'url'     => 'https://www.youtube.com/feeds/videos.xml?channel_id=UCAuUUnT6oDeKwE6v1NGQxug',
         ]);
 
         $this->assertDatabaseHas('userables', [
             'user_id' => $user->id,
             'rss_id'  => $createdRssId,
+        ]);
+
+        // --- Playlist URL ---
+        Queue::fake();
+
+        $playlistId = 'PLu96Vzt7fGU7IC5vsXXKgUWwASv5FTWMx';
+
+        $this->mock(YoutubeService::class, function (MockInterface $mock) use ($playlistId) {
+            $mock->shouldReceive('getPlaylistIdFromUrl')->andReturn($playlistId);
+            $mock->shouldReceive('getPlaylistDetails')->with($playlistId)->andReturn([
+                'title'         => 'Test Playlist',
+                'channel_id'    => 'UCxxxxxx',
+                'channel_title' => 'Test Channel',
+            ]);
+        });
+
+        $params['url'] = 'https://www.youtube.com/playlist?list=' . $playlistId;
+        $response = $this->json('POST', $uri, $params);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure(['id', 'type', 'list_id', 'url', 'title'])
+            ->assertJsonPath('list_id', $playlistId)
+            ->assertJsonPath('title', 'Test Playlist')
+            ->assertJsonPath('url', 'https://www.youtube.com/playlist?list=' . $playlistId);
+
+        Queue::assertPushedOn('rss.sync', SyncJob::class);
+
+        $playlistRssId = $response->json('id');
+
+        $this->assertDatabaseHas('rss', [
+            'id'      => $playlistRssId,
+            'type'    => Rss::TYPE_YOUTUBE,
+            'list_id' => $playlistId,
+            'url'     => 'https://www.youtube.com/feeds/videos.xml?playlist_id=' . $playlistId,
+        ]);
+
+        $this->assertDatabaseHas('userables', [
+            'user_id' => $user->id,
+            'rss_id'  => $playlistRssId,
         ]);
     }
 

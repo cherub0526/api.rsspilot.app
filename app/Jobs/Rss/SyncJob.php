@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use App\Models\Rss;
 use App\Models\Media;
 use Hypervel\Queue\Queueable;
+use App\Services\YoutubeService;
 use App\Services\SubscriptionService;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use App\Jobs\Media\YoutubeCaptionJob;
@@ -18,9 +19,6 @@ class SyncJob implements ShouldQueue
 
     protected Rss $rss;
 
-    /**
-     * Create a new job instance.
-     */
     public function __construct(Rss $rss)
     {
         $this->rss = $rss;
@@ -28,10 +26,21 @@ class SyncJob implements ShouldQueue
         $this->queue = 'rss.sync';
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(): void
+    {
+        if ($this->isPlaylist()) {
+            $this->syncFromPlaylistApi();
+        } else {
+            $this->syncFromRss();
+        }
+    }
+
+    private function isPlaylist(): bool
+    {
+        return str_contains($this->rss->url, 'playlist_id=');
+    }
+
+    private function syncFromRss(): void
     {
         $xml = simplexml_load_file($this->rss->url);
 
@@ -83,6 +92,22 @@ class SyncJob implements ShouldQueue
             $insertData[] = $data;
         }
 
+        $this->processMediaItems($insertData);
+    }
+
+    private function syncFromPlaylistApi(): void
+    {
+        $insertData = app(YoutubeService::class)->getPlaylistItems($this->rss->list_id);
+
+        if (empty($insertData)) {
+            return;
+        }
+
+        $this->processMediaItems($insertData);
+    }
+
+    private function processMediaItems(array $insertData): void
+    {
         $ids = array_column($insertData, 'id');
 
         $medias = Media::whereIn('resource_id', $ids)->select(['id', 'resource_id'])->get();

@@ -138,6 +138,127 @@ class YoutubeService
         }
     }
 
+    /**
+     * Extract playlist ID from a YouTube playlist URL.
+     * e.g. https://www.youtube.com/playlist?list=PLxxxxxxx
+     */
+    public function getPlaylistIdFromUrl(string $url): ?string
+    {
+        $parsedUrl = parse_url($url);
+        if (!isset($parsedUrl['query'])) {
+            return null;
+        }
+
+        parse_str($parsedUrl['query'], $queryParams);
+        $listId = $queryParams['list'] ?? null;
+
+        return ($listId && strlen($listId) > 2) ? $listId : null;
+    }
+
+    /**
+     * Fetch playlist metadata: title, channel_id, channel_title.
+     *
+     * @return null|array{title: string, channel_id: string, channel_title: string}
+     */
+    public function getPlaylistDetails(string $playlistId): ?array
+    {
+        try {
+            $response = $this->youtube->playlists->listPlaylists('snippet', [
+                'id' => $playlistId,
+            ]);
+
+            $items = $response->getItems();
+            if (empty($items)) {
+                return null;
+            }
+
+            $snippet = $items[0]->getSnippet();
+
+            return [
+                'title'         => $snippet->getTitle() ?? '',
+                'channel_id'    => $snippet->getChannelId() ?? '',
+                'channel_title' => $snippet->getChannelTitle() ?? '',
+            ];
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch all items in a playlist via YouTube Data API (handles pagination).
+     * Returns data shaped to match the RSS-parsed format expected by SyncJob.
+     */
+    public function getPlaylistItems(string $playlistId): array
+    {
+        $items     = [];
+        $pageToken = null;
+
+        do {
+            try {
+                $params = [
+                    'playlistId' => $playlistId,
+                    'maxResults' => 50,
+                ];
+                if ($pageToken) {
+                    $params['pageToken'] = $pageToken;
+                }
+
+                $response = $this->youtube->playlistItems->listPlaylistItems('snippet', $params);
+
+                foreach ($response->getItems() as $item) {
+                    $snippet    = $item->getSnippet();
+                    $resourceId = $snippet->getResourceId();
+
+                    if ($resourceId->getKind() !== 'youtube#video') {
+                        continue;
+                    }
+
+                    $videoId      = $resourceId->getVideoId();
+                    $channelId    = $snippet->getVideoOwnerChannelId() ?? $snippet->getChannelId() ?? '';
+                    $channelTitle = $snippet->getVideoOwnerChannelTitle() ?? $snippet->getChannelTitle() ?? '';
+                    $description  = $snippet->getDescription() ?? '';
+                    $publishedAt  = $snippet->getPublishedAt() ?? '';
+
+                    $thumbnails = $snippet->getThumbnails();
+                    $thumbnail  = $thumbnails?->getHigh()?->getUrl()
+                        ?? $thumbnails?->getMedium()?->getUrl()
+                        ?? $thumbnails?->getDefault()?->getUrl()
+                        ?? '';
+
+                    $items[] = [
+                        'id'           => 'yt:video:' . $videoId,
+                        'yt:videoId'   => $videoId,
+                        'yt:channelId' => $channelId,
+                        'title'        => $snippet->getTitle() ?? '',
+                        'description'  => $description,
+                        'link'         => 'https://www.youtube.com/watch?v=' . $videoId,
+                        'author'       => [
+                            'name' => $channelTitle,
+                            'uri'  => 'https://www.youtube.com/channel/' . $channelId,
+                        ],
+                        'published' => $publishedAt,
+                        'updated'   => $publishedAt,
+                        'media'     => [
+                            'description' => $description,
+                            'thumbnail'   => ['url' => $thumbnail],
+                            'content'     => ['url' => ''],
+                            'community'   => [
+                                'statistics' => ['views' => '0'],
+                                'starRating' => ['average' => '0', 'max' => '5', 'min' => '1', 'count' => '0'],
+                            ],
+                        ],
+                    ];
+                }
+
+                $pageToken = $response->getNextPageToken();
+            } catch (Exception $e) {
+                break;
+            }
+        } while ($pageToken);
+
+        return $items;
+    }
+
     protected function getChannelIdByHandle(string $handle): ?string
     {
         try {

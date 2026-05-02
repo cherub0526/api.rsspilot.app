@@ -1990,6 +1990,11 @@
                         "type": "string",
                         "example": "youtube"
                     },
+                    "list_id": {
+                        "type": "string",
+                        "example": "PLu96Vzt7fGU7IC5vsXXKgUWwASv5FTWMx",
+                        "nullable": true
+                    },
                     "url": {
                         "type": "string",
                         "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"

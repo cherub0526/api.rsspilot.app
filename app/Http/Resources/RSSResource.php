@@ -10,6 +10,21 @@ class RSSResource extends JsonResource
 {
     public ?string $wrap = null;
 
+    private function resolveYoutubeUrl(): string
+    {
+        $listId = $this->resource->list_id;
+
+        if (!$listId) {
+            return strval($this->resource->url);
+        }
+
+        if (str_contains($this->resource->url, 'playlist_id=')) {
+            return 'https://www.youtube.com/playlist?list=' . $listId;
+        }
+
+        return 'https://www.youtube.com/channel/' . $listId;
+    }
+
     /**
      * Transform the resource into an array.
      */
@@ -18,7 +33,8 @@ class RSSResource extends JsonResource
         return [
             'id'         => strval($this->resource->id),
             'type'       => strval($this->resource->type),
-            'url'        => strval($this->resource->url),
+            'list_id'    => $this->resource->list_id ? strval($this->resource->list_id) : null,
+            'url'        => $this->resolveYoutubeUrl(),
             'title'      => strval($this->resource->title),
             'created_at' => strval($this->resource->created_at),
         ];

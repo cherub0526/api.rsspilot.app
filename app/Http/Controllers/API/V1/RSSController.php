@@ -138,31 +138,56 @@ class RSSController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
+        $rssUrl    = $params['url'];
+        $listId    = null;
+        $title     = null;
+        $isPlaylist = false;
+
         if ($params['type'] === Rss::TYPE_YOUTUBE) {
-            $channelId = app(YoutubeService::class)->getChannelIdFromUrl($params['url']);
-            $params['url'] = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
+            $youtubeService = app(YoutubeService::class);
+            $playlistId = $youtubeService->getPlaylistIdFromUrl($params['url']);
+
+            if ($playlistId) {
+                $isPlaylist = true;
+                $playlistDetails = $youtubeService->getPlaylistDetails($playlistId);
+                if (!$playlistDetails) {
+                    throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+                }
+                $rssUrl = 'https://www.youtube.com/feeds/videos.xml?playlist_id=' . $playlistId;
+                $listId = $playlistId;
+                $title  = $playlistDetails['title'];
+            } else {
+                $channelId = $youtubeService->getChannelIdFromUrl($params['url']);
+                $rssUrl    = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
+                $listId    = $channelId;
+            }
         }
 
-        try {
-            $response = Http::get($params['url']);
-        } catch (ConnectionException) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+        if (!$isPlaylist) {
+            try {
+                $response = Http::get($rssUrl);
+            } catch (ConnectionException) {
+                throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+            }
+
+            if (!$response->successful()) {
+                throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+            }
+
+            $xml = simplexml_load_string($response->body());
+            if ($xml === false) {
+                throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
+            }
+
+            $title = (string) ($xml->title ?? 'No Title');
         }
 
-        if (!$response->successful()) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
-        }
-
-        $xml = simplexml_load_string($response->body());
-        if ($xml === false) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.rss.invalid_url')]]);
-        }
-
-        if (!$rss = Rss::query()->where('url', $params['url'])->first()) {
+        if (!$rss = Rss::query()->where('url', $rssUrl)->first()) {
             $rss = Rss::create([
                 'type'    => $params['type'],
-                'title'   => (string) ($xml->title ?? 'No Title'),
-                'url'     => $params['url'],
+                'list_id' => $listId,
+                'title'   => $title ?? 'No Title',
+                'url'     => $rssUrl,
                 'comment' => '',
             ]);
         }

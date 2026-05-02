@@ -30,6 +30,7 @@ class Rss extends Model
      */
     protected array $fillable = [
         'type',
+        'list_id',
         'title',
         'url',
         'comment',
