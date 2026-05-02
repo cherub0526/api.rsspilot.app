@@ -62,10 +62,13 @@ class SettingsController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $setting = $request->user()->setting()->first();
+        $setting = $request->user()->setting()->firstOrCreate(
+            ['user_id' => $request->user()->id],
+            ['data' => []]
+        );
 
         $setting->update([
-            'data' => array_merge($setting->data, $params),
+            'data' => array_merge($setting->data ?? [], $params),
         ]);
 
         return response()->make(self::RESPONSE_OK);
