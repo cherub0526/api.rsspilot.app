@@ -8,7 +8,7 @@ use Hyperf\Database\Model\Relations\BelongsTo;
 
 class CustomPrompt extends Model
 {
-    protected ?string $table = 'custom_settings';
+    protected ?string $table = 'custom_prompts';
 
     /**
      * The attributes that are mass assignable.

@@ -15,6 +15,7 @@ class Setting extends Model
     protected array $fillable = [
         'user_id',
         'data',
+        'version',
     ];
 
     /**
@@ -22,6 +23,7 @@ class Setting extends Model
      */
     protected array $casts = [
         'data' => 'array',
+        'version' => 'integer',
     ];
 
     public function user(): BelongsTo
