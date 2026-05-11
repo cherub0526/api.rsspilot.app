@@ -8,7 +8,7 @@ use OpenApi\Attributes as OAT;
 
 #[OAT\Info(
     version: '0.1.0',
-    title: 'CatchUp API'
+    title: 'API Server'
 )]
 class Info
 {
