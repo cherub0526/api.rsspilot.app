@@ -42,22 +42,32 @@ class Summary extends Model
      */
     protected array $fillable = [
         'media_id',
+        'config_id',
         'locale',
         'text',
         'status',
+        'ai_model',
+        'prompt_type',
     ];
 
     /**
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'media_id' => 'integer',
-        'locale'   => 'string',
-        'text'     => 'array',
+        'media_id'    => 'integer',
+        'locale'      => 'string',
+        'text'        => 'array',
+        'ai_model'    => 'string',
+        'prompt_type' => 'string',
     ];
 
     public function media(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'media_id', 'id');
+    }
+
+    public function config(): BelongsTo
+    {
+        return $this->belongsTo(SummaryConfig::class, 'config_id', 'id');
     }
 }
