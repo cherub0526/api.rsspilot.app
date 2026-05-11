@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
@@ -55,6 +56,22 @@ class User extends Authenticatable
             'user_id',
             'rss_id'
         )->wherePivot('media_id', null)->withTimestamps();
+    }
+
+    public function sources(): UlidBelongsToMany
+    {
+        $instance = $this->newRelatedInstance(Source::class);
+
+        return (new UlidBelongsToMany(
+            $instance->newQuery(),
+            $this,
+            'user_sources',
+            'user_id',
+            'source_id',
+            $this->getKeyName(),
+            $instance->getKeyName(),
+            'sources'
+        ))->withTimestamps();
     }
 
     public function media()
