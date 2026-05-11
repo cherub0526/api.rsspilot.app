@@ -84,6 +84,11 @@ class User extends Authenticatable
         return $this->hasMany(ChatSession::class, 'user_id', 'id');
     }
 
+    public function summaryConfigs(): HasMany
+    {
+        return $this->hasMany(SummaryConfig::class, 'user_id', 'id');
+    }
+
     public function media()
     {
         return $this->belongsToMany(
