@@ -29,7 +29,7 @@ class UserSourceTest extends TestCase
         $this->assertCount(1, $user->sources);
     }
 
-    public function testUniqueConstraintPreventsduplicates(): void
+    public function testUniqueConstraintPreventsDuplicates(): void
     {
         $user   = User::factory()->create();
         $source = Source::factory()->create();
