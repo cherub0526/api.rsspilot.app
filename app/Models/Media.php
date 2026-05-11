@@ -7,6 +7,7 @@ namespace App\Models;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasOne;
 use Hyperf\Database\Model\Relations\HasMany;
+use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
@@ -71,9 +72,11 @@ class Media extends Model
     protected array $fillable = [
         'type',
         'resource_id',
+        'source_id',
         'title',
         'description',
         'duration',
+        'language',
         'thumbnail',
         'published_at',
         'status',
@@ -86,9 +89,16 @@ class Media extends Model
      */
     protected array $casts = [
         'duration'     => 'integer',
+        'source_id'    => 'string',
+        'language'     => 'string',
         'video_detail' => 'array',
         'audio_detail' => 'array',
     ];
+
+    public function source(): BelongsTo
+    {
+        return $this->belongsTo(Source::class, 'source_id', 'id');
+    }
 
     public function users(): BelongsToMany
     {
