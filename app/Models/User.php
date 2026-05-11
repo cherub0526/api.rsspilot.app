@@ -79,6 +79,11 @@ class User extends Authenticatable
         return $this->hasMany(WatchHistory::class, 'user_id', 'id');
     }
 
+    public function chatSessions(): HasMany
+    {
+        return $this->hasMany(ChatSession::class, 'user_id', 'id');
+    }
+
     public function media()
     {
         return $this->belongsToMany(
