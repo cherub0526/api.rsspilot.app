@@ -74,6 +74,11 @@ class User extends Authenticatable
         ))->withTimestamps();
     }
 
+    public function watchHistory(): HasMany
+    {
+        return $this->hasMany(WatchHistory::class, 'user_id', 'id');
+    }
+
     public function media()
     {
         return $this->belongsToMany(

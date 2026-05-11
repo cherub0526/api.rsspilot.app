@@ -100,6 +100,11 @@ class Media extends Model
         return $this->belongsTo(Source::class, 'source_id', 'id');
     }
 
+    public function watchHistories(): HasMany
+    {
+        return $this->hasMany(WatchHistory::class, 'media_id', 'id');
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'userables', 'media_id', 'user_id')->withTimestamps();
