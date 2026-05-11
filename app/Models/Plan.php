@@ -23,6 +23,11 @@ class Plan extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    public const bool DOWNLOAD_ENABLED_DEFAULT       = false;
+    public const bool AGENT_ENABLED_DEFAULT          = false;
+    public const bool ADVANCED_MODEL_ENABLED_DEFAULT = false;
+    public const bool CUSTOM_SUMMARY_ENABLED_DEFAULT = false;
+
     public static array $statusMaps = [
         self::STATUS_ACTIVE   => 'Active',
         self::STATUS_INACTIVE => 'Inactive',
@@ -41,6 +46,10 @@ class Plan extends Model
         'channel_limit',
         'video_limit',
         'chat_limit',
+        'download_enabled',
+        'agent_enabled',
+        'advanced_model_enabled',
+        'custom_summary_enabled',
         'sort',
         'status',
     ];
@@ -49,7 +58,11 @@ class Plan extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'sort' => 'integer',
+        'sort'                     => 'integer',
+        'download_enabled'         => 'boolean',
+        'agent_enabled'            => 'boolean',
+        'advanced_model_enabled'   => 'boolean',
+        'custom_summary_enabled'   => 'boolean',
     ];
 
     public function scopeActive($query)
