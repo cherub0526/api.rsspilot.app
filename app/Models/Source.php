@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasMany;
+use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
@@ -60,7 +61,7 @@ class Source extends Model
         return $this->hasMany(Media::class, 'source_id', 'id');
     }
 
-    public function summaryConfigs()
+    public function summaryConfigs(): BelongsToMany
     {
         return $this->belongsToMany(SummaryConfig::class, 'summary_config_sources', 'source_id', 'config_id');
     }
