@@ -13,12 +13,12 @@ class PlanFeatureFlagsTest extends TestCase
 
     public function testPlanHasFeatureFlagColumns(): void
     {
-        $plan = Plan::factory()->create([
+        $plan = Plan::withoutEvents(fn () => Plan::factory()->create([
             'download_enabled'       => true,
             'agent_enabled'          => false,
             'advanced_model_enabled' => true,
             'custom_summary_enabled' => false,
-        ]);
+        ]));
 
         $this->assertDatabaseHas('plans', [
             'id'                     => $plan->id,
@@ -31,7 +31,7 @@ class PlanFeatureFlagsTest extends TestCase
 
     public function testFeatureFlagsDefaultToFalse(): void
     {
-        $plan = Plan::factory()->create();
+        $plan = Plan::withoutEvents(fn () => Plan::factory()->create());
 
         $fresh = Plan::find($plan->id);
         $this->assertFalse($fresh->download_enabled);

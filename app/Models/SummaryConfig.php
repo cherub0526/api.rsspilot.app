@@ -6,8 +6,8 @@ namespace App\Models;
 
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\BelongsTo;
-use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
+use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class SummaryConfig extends Model
@@ -16,11 +16,11 @@ class SummaryConfig extends Model
     use SoftDeletes;
     use HasFactory;
 
-    public const string PROMPT_TYPE_DEFAULT  = 'default';
-    public const string PROMPT_TYPE_NOTES    = 'notes';
+    public const string PROMPT_TYPE_DEFAULT = 'default';
+    public const string PROMPT_TYPE_NOTES = 'notes';
     public const string PROMPT_TYPE_BUSINESS = 'business';
-    public const string PROMPT_TYPE_TLDR     = 'tldr';
-    public const string PROMPT_TYPE_CUSTOM   = 'custom';
+    public const string PROMPT_TYPE_TLDR = 'tldr';
+    public const string PROMPT_TYPE_CUSTOM = 'custom';
 
     public static array $promptTypeMaps = [
         self::PROMPT_TYPE_DEFAULT  => '預設',

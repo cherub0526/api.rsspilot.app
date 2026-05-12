@@ -23,8 +23,8 @@ class Plan extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
-    public const bool DOWNLOAD_ENABLED_DEFAULT       = false;
-    public const bool AGENT_ENABLED_DEFAULT          = false;
+    public const bool DOWNLOAD_ENABLED_DEFAULT = false;
+    public const bool AGENT_ENABLED_DEFAULT = false;
     public const bool ADVANCED_MODEL_ENABLED_DEFAULT = false;
     public const bool CUSTOM_SUMMARY_ENABLED_DEFAULT = false;
 
@@ -58,11 +58,11 @@ class Plan extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'sort'                     => 'integer',
-        'download_enabled'         => 'boolean',
-        'agent_enabled'            => 'boolean',
-        'advanced_model_enabled'   => 'boolean',
-        'custom_summary_enabled'   => 'boolean',
+        'sort'                   => 'integer',
+        'download_enabled'       => 'boolean',
+        'agent_enabled'          => 'boolean',
+        'advanced_model_enabled' => 'boolean',
+        'custom_summary_enabled' => 'boolean',
     ];
 
     public function scopeActive($query)

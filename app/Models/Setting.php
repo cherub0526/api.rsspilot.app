@@ -22,7 +22,7 @@ class Setting extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'data' => 'array',
+        'data'    => 'array',
         'version' => 'integer',
     ];
 

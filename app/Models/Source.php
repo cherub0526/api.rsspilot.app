@@ -6,8 +6,8 @@ namespace App\Models;
 
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasMany;
-use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
+use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class Source extends Model

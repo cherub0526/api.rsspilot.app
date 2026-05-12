@@ -14,18 +14,18 @@ class ChatMessage extends Model
     use HasFactory;
 
     public const string ROLE_USER = 'user';
-    public const string ROLE_AI   = 'ai';
+    public const string ROLE_AI = 'ai';
+
+    public const UPDATED_AT = null;
 
     public static array $roleMaps = [
         self::ROLE_USER => '使用者',
         self::ROLE_AI   => 'AI',
     ];
 
-    protected ?string $table = 'chat_messages';
-
     public bool $timestamps = false;
 
-    const UPDATED_AT = null;
+    protected ?string $table = 'chat_messages';
 
     protected array $fillable = [
         'session_id',

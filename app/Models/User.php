@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\Builder;
+use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
