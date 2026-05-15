@@ -4,15 +4,14 @@ declare(strict_types=1);
 
 return [
     'reset_password' => [
-        'subject'       => '重設您的密碼',
-        'greeting'      => '您好！',
-        'line_1'        => '您會收到此電子郵件，是因為我們收到了您帳戶的密碼重設請求。',
+        'subject'       => '重設您的 Audistilizer 密碼',
+        'greeting'      => '您好，',
+        'line_1'        => '我們收到了重設 Audistilizer 帳號密碼的請求。若您確認此操作，請點擊下方按鈕來設定新密碼。若您的連結已失效，請重新提出申請。',
         'action'        => '重設密碼',
-        'line_2'        => '此密碼重設連結將在 :count 分鐘後失效。',
-        'salutation'    => '祝好',
-        'team_name'     => 'CatchUp 團隊',
-        'alt_logo'      => 'CatchUp 標誌',
-        'fallback_text' => '如果您點擊「重設密碼」按鈕時遇到問題，請將下方的網址複製並貼到您的網路瀏覽器中：',
-        'footer_text'   => '&copy; :year CatchUp. 保留所有權利。',
+        'line_2'        => '此連結將於 :count 分鐘後失效',
+        'fallback_text' => '如果按鈕無法點擊，請複製以下連結貼到瀏覽器：',
+        'security_note' => '如果您沒有要求重設密碼，請忽略此郵件，您的帳號依然安全，密碼不會被更改。Audistilizer 絕不會透過電子郵件要求您提供密碼。',
+        'alt_logo'      => 'Audistilizer 標誌',
+        'footer_text'   => '&copy; :year Audistilizer Inc.',
     ],
 ];
