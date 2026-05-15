@@ -20,7 +20,7 @@ Full replacement. The new template is a table-based HTML email compatible with O
 - Hardcoded Chinese text → `__()` i18n calls (see lang section below)
 - `href="#"` on CTA button → `{{ $url }}` (passed from Mailable)
 - Hardcoded expiry date → `{{ __('mails.reset_password.line_2', ['count' => $minutes]) }}`
-- Logo `src="logo.png"` → `{{ asset('/logo2.png') }}`
+- Logo `src="logo.png"` → `{{ asset('/logo.png') }}`
 - Footer links (隱私權政策, 服務條款, 取消接收此類郵件) → **removed**; footer retains only copyright line
 
 Translation keys used in the template:

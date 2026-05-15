@@ -182,7 +182,7 @@ body { margin:0; padding:0; background-color:#f0f4f8; font-family:'Inter',ui-san
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td style="padding-right:10px;vertical-align:middle;line-height:1;">
-              <img src="{{ asset('/logo2.png') }}" width="36" height="36"
+              <img src="{{ asset('/logo.png') }}" width="36" height="36"
                 alt="{{ __('mails.reset_password.alt_logo') }}"
                 style="display:block;width:36px;height:36px;object-fit:contain;">
             </td>
@@ -333,7 +333,7 @@ body { margin:0; padding:0; background-color:#f0f4f8; font-family:'Inter',ui-san
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
           <tr>
             <td align="center" style="padding-bottom:12px;">
-              <img src="{{ asset('/logo2.png') }}" width="20" height="20" alt=""
+              <img src="{{ asset('/logo.png') }}" width="20" height="20" alt=""
                 style="display:inline-block;vertical-align:middle;width:20px;height:20px;object-fit:contain;margin-right:6px;opacity:0.5;">
               <span style="font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;color:#94a3b8;vertical-align:middle;">Audistilizer</span>
             </td>
