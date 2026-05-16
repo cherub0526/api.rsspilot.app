@@ -8,13 +8,13 @@ use App\Models\Source;
 use Hypervel\Http\Request;
 use App\Services\YoutubeService;
 use Hypervel\Support\Facades\Http;
-use Hypervel\HttpClient\ConnectionException;
 use App\Validators\SourceValidator;
 use App\Http\Resources\SourceResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
+use Hypervel\HttpClient\ConnectionException;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class SourcesController extends AbstractController
@@ -40,7 +40,7 @@ class SourcesController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $notify         = (bool) ($params['notify'] ?? true);
+        $notify = (bool) ($params['notify'] ?? true);
         $youtubeService = app(YoutubeService::class);
 
         if ($params['type'] === 'channel') {

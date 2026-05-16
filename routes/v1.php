@@ -7,6 +7,7 @@ use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\UsersController;
+use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
@@ -18,7 +19,6 @@ use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\Subscriptions\PlansController;
-use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 
 Route::group('/feedbacks', function () {
