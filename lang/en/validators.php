@@ -15,6 +15,10 @@ return [
             'invalid_url' => 'Invalid RSS URL.',
             'not_found'   => 'RSS not found.',
         ],
+        'sources' => [
+            'invalid_url' => 'Invalid YouTube URL.',
+            'not_found'   => 'Source not found.',
+        ],
         'subscription' => [
             'plan_not_found'    => 'Plan not found.',
             'price_not_found'   => 'Price not found.',
@@ -96,6 +100,19 @@ return [
         ],
         'url' => [
             'required' => 'URL is required.',
+        ],
+    ],
+    'source' => [
+        'url' => [
+            'required' => 'URL is required.',
+        ],
+        'type' => [
+            'required' => 'Type is required.',
+            'in'       => 'Type must be channel or playlist.',
+        ],
+        'notify' => [
+            'required' => 'Notify setting is required.',
+            'boolean'  => 'Notify setting must be a boolean.',
         ],
     ],
     'subscription' => [

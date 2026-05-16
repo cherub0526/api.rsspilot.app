@@ -18,6 +18,7 @@ use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\Subscriptions\PlansController;
+use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 
 Route::group('/feedbacks', function () {
@@ -121,6 +122,29 @@ Route::group('/rss', function () {
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'rss']);
+
+Route::group('/sources', function () {
+    Route::get('/', [
+        'as'         => 'index',
+        'uses'       => SourcesController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+    Route::post('/', [
+        'as'         => 'store',
+        'uses'       => SourcesController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+    Route::put('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
+        'as'         => 'update',
+        'uses'       => SourcesController::class . '@update',
+        'middleware' => ['auth'],
+    ]);
+    Route::delete('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
+        'as'         => 'destroy',
+        'uses'       => SourcesController::class . '@destroy',
+        'middleware' => ['auth'],
+    ]);
+}, ['as' => 'sources']);
 
 Route::group('/media', function () {
     Route::get(

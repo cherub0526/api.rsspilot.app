@@ -15,6 +15,10 @@ return [
             'invalid_url' => '無效的 RSS 網址。',
             'not_found'   => '找不到指定的 RSS。',
         ],
+        'sources' => [
+            'invalid_url' => '無效的 YouTube 網址。',
+            'not_found'   => '找不到指定的來源。',
+        ],
         'subscription' => [
             'plan_not_found'    => '找不到指定的方案。',
             'price_not_found'   => '找不到指定的價格。',
@@ -96,6 +100,19 @@ return [
         ],
         'url' => [
             'required' => 'URL 為必填。',
+        ],
+    ],
+    'source' => [
+        'url' => [
+            'required' => 'URL 為必填。',
+        ],
+        'type' => [
+            'required' => '類型為必填。',
+            'in'       => '類型必須是 channel 或 playlist。',
+        ],
+        'notify' => [
+            'required' => '通知設定為必填。',
+            'boolean'  => '通知設定必須是布林值。',
         ],
     ],
     'subscription' => [
