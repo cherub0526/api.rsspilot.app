@@ -16,9 +16,12 @@ class UserSource extends Model
     protected array $fillable = [
         'user_id',
         'source_id',
+        'notify',
     ];
 
-    protected array $casts = [];
+    protected array $casts = [
+        'notify' => 'boolean',
+    ];
 
     public function user(): BelongsTo
     {
