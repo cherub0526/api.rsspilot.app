@@ -6,19 +6,50 @@ namespace App\Http\Controllers\API\V1;
 
 use App\Models\Source;
 use Hypervel\Http\Request;
+use OpenApi\Attributes as OAT;
 use App\Services\YoutubeService;
+use App\OpenApi\Responses\HttpOk;
+use App\OpenApi\Responses\Http400;
+use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\Http404;
 use Hypervel\Support\Facades\Http;
 use App\Validators\SourceValidator;
 use App\Http\Resources\SourceResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
+use App\OpenApi\Parameters\Path\SourceId;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use Hypervel\HttpClient\ConnectionException;
+use App\OpenApi\Schemas\SourceResource as SourceSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class SourcesController extends AbstractController
 {
+    #[OAT\Get(
+        path: '/v1/sources',
+        operationId: 'api.v1.sources.index',
+        summary: 'List subscribed sources',
+        security: [['bearerAuth' => []]],
+        tags: ['Sources'],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(
+                            property: 'data',
+                            type: 'array',
+                            items: new OAT\Items(ref: SourceSchema::class)
+                        ),
+                    ],
+                    type: 'object'
+                )
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+        ]
+    )]
     public function index(Request $request): AnonymousResourceCollection
     {
         return SourceResource::collection(
@@ -26,6 +57,50 @@ class SourcesController extends AbstractController
         );
     }
 
+    #[OAT\Post(
+        path: '/v1/sources',
+        operationId: 'api.v1.sources.store',
+        summary: 'Subscribe to a YouTube channel or playlist',
+        security: [['bearerAuth' => []]],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['url', 'type'],
+                properties: [
+                    new OAT\Property(
+                        property: 'url',
+                        description: 'YouTube channel or playlist URL',
+                        type: 'string',
+                        format: 'url',
+                        example: 'https://www.youtube.com/@googledevelopers'
+                    ),
+                    new OAT\Property(
+                        property: 'type',
+                        description: 'Source type',
+                        type: 'string',
+                        enum: ['channel', 'playlist'],
+                        example: 'channel'
+                    ),
+                    new OAT\Property(
+                        property: 'notify',
+                        description: 'Enable email notification for new videos',
+                        type: 'boolean',
+                        example: true
+                    ),
+                ]
+            )
+        ),
+        tags: ['Sources'],
+        responses: [
+            new OAT\Response(
+                response: 201,
+                description: 'Source subscribed successfully',
+                content: new OAT\JsonContent(ref: SourceSchema::class)
+            ),
+            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(ref: Http401::class, response: 401),
+        ]
+    )]
     /**
      * @throws InvalidRequestException
      */
@@ -44,14 +119,14 @@ class SourcesController extends AbstractController
         $youtubeService = app(YoutubeService::class);
 
         if ($params['type'] === 'channel') {
-            [$externalId, $title, $dbType] = $this->resolveChannel($params['url'], $youtubeService);
+            [$externalId, $title, $dbType, $thumbnail] = $this->resolveChannel($params['url'], $youtubeService);
         } else {
-            [$externalId, $title, $dbType] = $this->resolvePlaylist($params['url'], $youtubeService);
+            [$externalId, $title, $dbType, $thumbnail] = $this->resolvePlaylist($params['url'], $youtubeService);
         }
 
         $source = Source::firstOrCreate(
             ['external_id' => $externalId, 'type' => $dbType],
-            ['title' => $title, 'url' => $this->buildRssUrl($dbType, $externalId), 'status' => Source::STATUS_ACTIVE]
+            ['title' => $title, 'url' => $this->buildRssUrl($dbType, $externalId), 'thumbnail' => $thumbnail, 'status' => Source::STATUS_ACTIVE]
         );
 
         if ($request->user()->sources()->find($source->id)) {
@@ -65,6 +140,40 @@ class SourcesController extends AbstractController
         return response()->json((new SourceResource($attached))->resolve(), 201);
     }
 
+    #[OAT\Put(
+        path: '/v1/sources/{sourceId}',
+        operationId: 'api.v1.sources.update',
+        summary: 'Update notification setting for a subscribed source',
+        security: [['bearerAuth' => []]],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['notify'],
+                properties: [
+                    new OAT\Property(
+                        property: 'notify',
+                        description: 'Enable or disable email notification',
+                        type: 'boolean',
+                        example: false
+                    ),
+                ]
+            )
+        ),
+        tags: ['Sources'],
+        parameters: [
+            new OAT\Parameter(ref: SourceId::class),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Source updated successfully',
+                content: new OAT\JsonContent(ref: SourceSchema::class)
+            ),
+            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
     /**
      * @throws InvalidRequestException
      * @throws NotFoundHttpException
@@ -91,6 +200,21 @@ class SourcesController extends AbstractController
         );
     }
 
+    #[OAT\Delete(
+        path: '/v1/sources/{sourceId}',
+        operationId: 'api.v1.sources.destroy',
+        summary: 'Unsubscribe from a source',
+        security: [['bearerAuth' => []]],
+        tags: ['Sources'],
+        parameters: [
+            new OAT\Parameter(ref: SourceId::class),
+        ],
+        responses: [
+            new OAT\Response(ref: HttpOk::class, response: 200),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
     /**
      * @throws NotFoundHttpException
      */
@@ -106,7 +230,7 @@ class SourcesController extends AbstractController
     }
 
     /**
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string, 2: string, 3: null|string}
      * @throws InvalidRequestException
      */
     private function resolveChannel(string $url, YoutubeService $youtubeService): array
@@ -135,11 +259,13 @@ class SourcesController extends AbstractController
             throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
         }
 
-        return [$channelId, (string) ($xml->title ?? 'No Title'), Source::TYPE_YOUTUBE_CHANNEL];
+        $thumbnail = $youtubeService->getChannelThumbnail($channelId);
+
+        return [$channelId, (string) ($xml->title ?? 'No Title'), Source::TYPE_YOUTUBE_CHANNEL, $thumbnail];
     }
 
     /**
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string, 2: string, 3: null|string}
      * @throws InvalidRequestException
      */
     private function resolvePlaylist(string $url, YoutubeService $youtubeService): array
@@ -156,7 +282,7 @@ class SourcesController extends AbstractController
             throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
         }
 
-        return [$playlistId, $details['title'], Source::TYPE_YOUTUBE_PLAYLIST];
+        return [$playlistId, $details['title'], Source::TYPE_YOUTUBE_PLAYLIST, $details['thumbnail']];
     }
 
     private function buildRssUrl(string $dbType, string $externalId): string

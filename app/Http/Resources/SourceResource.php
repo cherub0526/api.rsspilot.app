@@ -23,11 +23,12 @@ class SourceResource extends JsonResource
     public function toArray(): array
     {
         return [
-            'id'     => strval($this->resource->id),
-            'name'   => strval($this->resource->title ?? ''),
-            'url'    => $this->resolveDisplayUrl(),
-            'type'   => $this->resource->type === Source::TYPE_YOUTUBE_CHANNEL ? 'channel' : 'playlist',
-            'notify' => (bool) ($this->resource->pivot?->notify ?? true),
+            'id'        => strval($this->resource->id),
+            'name'      => strval($this->resource->title ?? ''),
+            'url'       => $this->resolveDisplayUrl(),
+            'type'      => $this->resource->type === Source::TYPE_YOUTUBE_CHANNEL ? 'channel' : 'playlist',
+            'notify'    => (bool) ($this->resource->pivot?->notify ?? true),
+            'thumbnail' => $this->resource->thumbnail,
         ];
     }
 }

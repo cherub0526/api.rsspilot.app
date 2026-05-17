@@ -94,6 +94,7 @@ class SourcesControllerTest extends TestCase
         // Valid channel URL
         $this->mock(YoutubeService::class, function (MockInterface $mock) {
             $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCxxxxxxxxxxxxxxxxxxxxxx');
+            $mock->shouldReceive('getChannelThumbnail')->andReturn('https://yt3.googleusercontent.com/ytc/test');
         });
 
         Http::fake([
@@ -133,6 +134,7 @@ class SourcesControllerTest extends TestCase
         // Re-subscribing the same source updates notify and does not duplicate
         $this->mock(YoutubeService::class, function (MockInterface $mock) {
             $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCxxxxxxxxxxxxxxxxxxxxxx');
+            $mock->shouldReceive('getChannelThumbnail')->andReturn('https://yt3.googleusercontent.com/ytc/test');
         });
 
         Http::fake([
@@ -183,6 +185,7 @@ class SourcesControllerTest extends TestCase
                 'title'         => 'Test Playlist',
                 'channel_id'    => 'UCxxxxxx',
                 'channel_title' => 'Some Channel',
+                'thumbnail'     => 'https://yt3.googleusercontent.com/ytc/test-playlist',
             ]);
         });
 

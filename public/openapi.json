@@ -1,7 +1,7 @@
 {
     "openapi": "3.0.0",
     "info": {
-        "title": "CatchUp API",
+        "title": "API Server",
         "version": "0.1.0"
     },
     "servers": [
@@ -986,6 +986,197 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/sources": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "List subscribed sources",
+                "operationId": "api.v1.sources.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SourceResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Subscribe to a YouTube channel or playlist",
+                "operationId": "api.v1.sources.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "url",
+                                    "type"
+                                ],
+                                "properties": {
+                                    "url": {
+                                        "description": "YouTube channel or playlist URL",
+                                        "type": "string",
+                                        "format": "url",
+                                        "example": "https://www.youtube.com/@googledevelopers"
+                                    },
+                                    "type": {
+                                        "description": "Source type",
+                                        "type": "string",
+                                        "enum": [
+                                            "channel",
+                                            "playlist"
+                                        ],
+                                        "example": "channel"
+                                    },
+                                    "notify": {
+                                        "description": "Enable email notification for new videos",
+                                        "type": "boolean",
+                                        "example": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Source subscribed successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SourceResource"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/sources/{sourceId}": {
+            "put": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Update notification setting for a subscribed source",
+                "operationId": "api.v1.sources.update",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "notify"
+                                ],
+                                "properties": {
+                                    "notify": {
+                                        "description": "Enable or disable email notification",
+                                        "type": "boolean",
+                                        "example": false
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Source updated successfully",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SourceResource"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Unsubscribe from a source",
+                "operationId": "api.v1.sources.destroy",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [
@@ -1997,7 +2188,7 @@
                     },
                     "url": {
                         "type": "string",
-                        "example": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxxxxxx"
+                        "example": "https://www.youtube.com/channel/UCxxxxxx"
                     },
                     "title": {
                         "type": "string",
@@ -2007,6 +2198,40 @@
                         "type": "string",
                         "format": "date-time",
                         "example": "2024-01-01 12:00:00"
+                    }
+                },
+                "type": "object"
+            },
+            "SourceResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Google Developers"
+                    },
+                    "url": {
+                        "type": "string",
+                        "example": "https://www.youtube.com/channel/UCAuUUnT6oDeKwE6v1NGQxug"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "channel",
+                            "playlist"
+                        ],
+                        "example": "channel"
+                    },
+                    "notify": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "thumbnail": {
+                        "type": "string",
+                        "example": "https://yt3.googleusercontent.com/ytc/example",
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -2160,6 +2385,16 @@
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
                 }
             },
+            "sourceId": {
+                "name": "sourceId",
+                "in": "path",
+                "description": "Source ID",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
             "subscriptionId": {
                 "name": "subscriptionId",
                 "in": "path",
@@ -2241,6 +2476,10 @@
         {
             "name": "Settings",
             "description": "Settings"
+        },
+        {
+            "name": "Sources",
+            "description": "Sources"
         },
         {
             "name": "Plans",

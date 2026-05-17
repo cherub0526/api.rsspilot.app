@@ -7,6 +7,8 @@ namespace App\Services;
 use Exception;
 use Google\Client;
 use Google\Service\YouTube;
+use Google\Service\YouTube\Video;
+use Google\Service\YouTube\Caption;
 
 class YoutubeService
 {
@@ -70,14 +72,13 @@ class YoutubeService
     /**
      * Get video details by ID.
      *
-     * @param string $videoId
-     * @return \Google\Service\YouTube\Video|null
+     * @return null|Video
      */
     public function getVideoDetails(string $videoId)
     {
         try {
             $response = $this->youtube->videos->listVideos('snippet,contentDetails,statistics', [
-                'id' => $videoId
+                'id' => $videoId,
             ]);
 
             $items = $response->getItems();
@@ -94,8 +95,7 @@ class YoutubeService
     /**
      * Get video captions.
      *
-     * @param string $videoId
-     * @return \Google\Service\YouTube\Caption[]
+     * @return Caption[]
      */
     public function getVideoCaptions(string $videoId)
     {
@@ -111,9 +111,6 @@ class YoutubeService
 
     /**
      * Get caption download URL.
-     *
-     * @param string $captionId
-     * @return string
      */
     public function getCaptionDownloadUrl(string $captionId): string
     {
@@ -123,9 +120,7 @@ class YoutubeService
     /**
      * Download caption content.
      *
-     * @param string $captionId
      * @param string $format 'sbv', 'scc', 'srt', 'ttml', 'vtt'
-     * @return string|null
      */
     public function downloadCaption(string $captionId, string $format = 'vtt'): ?string
     {
@@ -140,7 +135,7 @@ class YoutubeService
 
     /**
      * Extract playlist ID from a YouTube playlist URL.
-     * e.g. https://www.youtube.com/playlist?list=PLxxxxxxx
+     * e.g. https://www.youtube.com/playlist?list=PLxxxxxxx.
      */
     public function getPlaylistIdFromUrl(string $url): ?string
     {
@@ -156,9 +151,9 @@ class YoutubeService
     }
 
     /**
-     * Fetch playlist metadata: title, channel_id, channel_title.
+     * Fetch playlist metadata: title, channel_id, channel_title, thumbnail.
      *
-     * @return null|array{title: string, channel_id: string, channel_title: string}
+     * @return null|array{title: string, channel_id: string, channel_title: string, thumbnail: null|string}
      */
     public function getPlaylistDetails(string $playlistId): ?array
     {
@@ -173,12 +168,37 @@ class YoutubeService
             }
 
             $snippet = $items[0]->getSnippet();
+            $thumbnails = $snippet->getThumbnails();
 
             return [
                 'title'         => $snippet->getTitle() ?? '',
                 'channel_id'    => $snippet->getChannelId() ?? '',
                 'channel_title' => $snippet->getChannelTitle() ?? '',
+                'thumbnail'     => $thumbnails?->getHigh()?->getUrl()
+                    ?? $thumbnails?->getMedium()?->getUrl()
+                    ?? $thumbnails?->getDefault()?->getUrl(),
             ];
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch the channel avatar/thumbnail URL via YouTube Data API.
+     */
+    public function getChannelThumbnail(string $channelId): ?string
+    {
+        try {
+            $response = $this->youtube->channels->listChannels('snippet', ['id' => $channelId]);
+            $items = $response->getItems();
+            if (empty($items)) {
+                return null;
+            }
+            $thumbnails = $items[0]->getSnippet()->getThumbnails();
+
+            return $thumbnails?->getHigh()?->getUrl()
+                ?? $thumbnails?->getMedium()?->getUrl()
+                ?? $thumbnails?->getDefault()?->getUrl();
         } catch (Exception $e) {
             return null;
         }
@@ -190,7 +210,7 @@ class YoutubeService
      */
     public function getPlaylistItems(string $playlistId): array
     {
-        $items     = [];
+        $items = [];
         $pageToken = null;
 
         do {
@@ -206,21 +226,21 @@ class YoutubeService
                 $response = $this->youtube->playlistItems->listPlaylistItems('snippet', $params);
 
                 foreach ($response->getItems() as $item) {
-                    $snippet    = $item->getSnippet();
+                    $snippet = $item->getSnippet();
                     $resourceId = $snippet->getResourceId();
 
                     if ($resourceId->getKind() !== 'youtube#video') {
                         continue;
                     }
 
-                    $videoId      = $resourceId->getVideoId();
-                    $channelId    = $snippet->getVideoOwnerChannelId() ?? $snippet->getChannelId() ?? '';
+                    $videoId = $resourceId->getVideoId();
+                    $channelId = $snippet->getVideoOwnerChannelId() ?? $snippet->getChannelId() ?? '';
                     $channelTitle = $snippet->getVideoOwnerChannelTitle() ?? $snippet->getChannelTitle() ?? '';
-                    $description  = $snippet->getDescription() ?? '';
-                    $publishedAt  = $snippet->getPublishedAt() ?? '';
+                    $description = $snippet->getDescription() ?? '';
+                    $publishedAt = $snippet->getPublishedAt() ?? '';
 
                     $thumbnails = $snippet->getThumbnails();
-                    $thumbnail  = $thumbnails?->getHigh()?->getUrl()
+                    $thumbnail = $thumbnails?->getHigh()?->getUrl()
                         ?? $thumbnails?->getMedium()?->getUrl()
                         ?? $thumbnails?->getDefault()?->getUrl()
                         ?? '';
