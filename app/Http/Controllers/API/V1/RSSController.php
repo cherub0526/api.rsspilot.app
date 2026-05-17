@@ -9,17 +9,17 @@ use App\Jobs\Rss\SyncJob;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Services\YoutubeService;
-use Hypervel\Support\Facades\Http;
-use Hypervel\HttpClient\ConnectionException;
 use App\Validators\RSSValidator;
+use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
-use App\OpenApi\Responses\HttpOk;
+use Hypervel\Support\Facades\Http;
 use App\Http\Resources\RSSResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
+use Hypervel\HttpClient\ConnectionException;
 use App\OpenApi\Schemas\RSSResource as RSSSchema;
 
 class RSSController extends AbstractController
@@ -138,9 +138,9 @@ class RSSController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $rssUrl    = $params['url'];
-        $listId    = null;
-        $title     = null;
+        $rssUrl = $params['url'];
+        $listId = null;
+        $title = null;
         $isPlaylist = false;
 
         if ($params['type'] === Rss::TYPE_YOUTUBE) {
@@ -155,11 +155,11 @@ class RSSController extends AbstractController
                 }
                 $rssUrl = 'https://www.youtube.com/feeds/videos.xml?playlist_id=' . $playlistId;
                 $listId = $playlistId;
-                $title  = $playlistDetails['title'];
+                $title = $playlistDetails['title'];
             } else {
                 $channelId = $youtubeService->getChannelIdFromUrl($params['url']);
-                $rssUrl    = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
-                $listId    = $channelId;
+                $rssUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
+                $listId = $channelId;
             }
         }
 

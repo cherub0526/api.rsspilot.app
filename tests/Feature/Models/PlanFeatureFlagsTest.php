@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Tests\Feature\Models;
@@ -7,6 +8,10 @@ use Tests\TestCase;
 use App\Models\Plan;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class PlanFeatureFlagsTest extends TestCase
 {
     use RefreshDatabase;

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Utils;
 
-use Hyperf\Database\Migrations\Migration;
 use Hyperf\Database\Schema\Blueprint;
+use Hyperf\Database\Migrations\Migration;
 
 abstract class BaseMigration extends Migration
 {

@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use Hypervel\JWT\Providers\Lcobucci;
+use Hypervel\JWT\Providers\Provider;
+use Hypervel\JWT\Storage\TaggedCache;
+use Hypervel\JWT\Validations\ExpiredClaim;
+use Hypervel\JWT\Validations\RequiredClaims;
 
 return [
     /*
@@ -133,7 +138,7 @@ return [
     |
     */
 
-    'algo' => env('JWT_ALGO', Hypervel\JWT\Providers\Provider::ALGO_HS256),
+    'algo' => env('JWT_ALGO', Provider::ALGO_HS256),
 
     /*
     |--------------------------------------------------------------------------
@@ -144,8 +149,8 @@ return [
     |
     */
     'validations' => [
-        \Hypervel\JWT\Validations\RequiredClaims::class,
-        \Hypervel\JWT\Validations\ExpiredClaim::class,
+        RequiredClaims::class,
+        ExpiredClaim::class,
         // \Hypervel\JWT\Validations\IssuedAtClaim::class,
         // \Hypervel\JWT\Validations\NotBeforeCliam::class,
     ],
@@ -262,7 +267,7 @@ return [
         |
         */
 
-        'jwt' => Hypervel\JWT\Providers\Lcobucci::class,
+        'jwt' => Lcobucci::class,
 
         /*
         |--------------------------------------------------------------------------
@@ -273,6 +278,6 @@ return [
         |
         */
 
-        'storage' => Hypervel\JWT\Storage\TaggedCache::class,
+        'storage' => TaggedCache::class,
     ],
 ];

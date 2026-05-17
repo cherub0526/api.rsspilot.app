@@ -13,10 +13,10 @@ use App\Jobs\Rss\SyncJob;
 use Mockery\MockInterface;
 use App\Models\Subscription;
 use App\Services\YoutubeService;
+use Hypervel\Support\Facades\Queue;
 use App\Services\SubscriptionService;
 use Hypervel\Foundation\Testing\TestCase;
 use Hypervel\Foundation\Testing\RefreshDatabase;
-use Hypervel\Support\Facades\Queue;
 
 /**
  * @internal

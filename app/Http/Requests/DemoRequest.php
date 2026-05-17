@@ -22,8 +22,8 @@ class DemoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|min:3',
-            'email' => 'required|email',
+            'name'   => 'required|string|min:3',
+            'email'  => 'required|email',
             'email2' => 'required|array',
         ];
     }

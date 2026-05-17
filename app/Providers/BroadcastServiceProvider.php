@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use Hypervel\Support\Facades\Broadcast;
 use Hypervel\Support\ServiceProvider;
+use Hypervel\Support\Facades\Broadcast;
 
 class BroadcastServiceProvider extends ServiceProvider
 {

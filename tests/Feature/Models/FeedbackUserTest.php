@@ -9,6 +9,10 @@ use App\Models\User;
 use App\Models\Feedback;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class FeedbackUserTest extends TestCase
 {
     use RefreshDatabase;

@@ -8,7 +8,6 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
-use App\OpenApi\Responses\HttpOk;
 use App\Validators\SettingValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;

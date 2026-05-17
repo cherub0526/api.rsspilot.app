@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Subscriptions;
 
-use App\Http\Resources\PlanResource;
 use App\Models\Plan;
-use App\OpenApi\Responses\Http400;
-use App\OpenApi\Schemas\PlanResource as PlanSchema;
 use OpenApi\Attributes as OAT;
+use App\OpenApi\Responses\Http400;
+use App\Http\Resources\PlanResource;
+use App\OpenApi\Schemas\PlanResource as PlanSchema;
+use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class PlansController
 {
@@ -29,7 +30,7 @@ class PlansController
             new OAT\Response(ref: Http400::class, response: 400),
         ]
     )]
-    public function index(): \Hypervel\Http\Resources\Json\AnonymousResourceCollection
+    public function index(): AnonymousResourceCollection
     {
         $plans = Plan::query()->active()
             ->with(['prices'])

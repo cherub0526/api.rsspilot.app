@@ -16,14 +16,14 @@ class PlanResource extends JsonResource
     public function toArray(): array
     {
         return [
-            'id' => strval($this->resource->id),
-            'title' => strval($this->resource->title),
-            'description' => strval($this->resource->description),
+            'id'            => strval($this->resource->id),
+            'title'         => strval($this->resource->title),
+            'description'   => strval($this->resource->description),
             'channel_limit' => intval($this->resource->channel_limit),
-            'video_limit' => intval($this->resource->video_limit),
-            'chat_limit' => intval($this->resource->chat_limit),
-            'prices' => PriceResource::collection($this->whenLoaded('prices')),
-            'paddle' => new PaddleResource($this->whenLoaded('paddle')),
+            'video_limit'   => intval($this->resource->video_limit),
+            'chat_limit'    => intval($this->resource->chat_limit),
+            'prices'        => PriceResource::collection($this->whenLoaded('prices')),
+            'paddle'        => new PaddleResource($this->whenLoaded('paddle')),
         ];
     }
 }

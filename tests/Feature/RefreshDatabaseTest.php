@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use Tests\TestCase;
 use App\Models\User;
 use Hypervel\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
 /**
  * @internal

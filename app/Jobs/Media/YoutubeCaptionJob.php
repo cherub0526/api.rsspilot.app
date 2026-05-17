@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Jobs\Media;
 
-use App\Models\Caption;
 use App\Models\Media;
-use Hypervel\Queue\Contracts\ShouldQueue;
+use App\Models\Caption;
 use Hypervel\Queue\Queueable;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Queue\Contracts\ShouldQueue;
 
 class YoutubeCaptionJob implements ShouldQueue
 {
@@ -42,8 +42,8 @@ class YoutubeCaptionJob implements ShouldQueue
         $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save();
 
         foreach ($captionTracks as $track) {
-            $langCode  = $track['languageCode'] ?? '';
-            $baseUrl   = $track['baseUrl'] ?? '';
+            $langCode = $track['languageCode'] ?? '';
+            $baseUrl = $track['baseUrl'] ?? '';
             $isDefault = ($track['vssId'] ?? '') === 'a.' . $langCode; // auto-generated tracks have vssId prefix "a."
 
             if (empty($baseUrl)) {
@@ -123,12 +123,12 @@ class YoutubeCaptionJob implements ShouldQueue
     /**
      * Parse JSON3 events into plain text and segments array.
      *
-     * @param  array<int, array<string, mixed>>  $events
+     * @param array<int, array<string, mixed>> $events
      * @return array{string, array<int, array<string, mixed>>}
      */
     private function parseEvents(array $events): array
     {
-        $text     = '';
+        $text = '';
         $segments = [];
 
         foreach ($events as $event) {
@@ -136,16 +136,16 @@ class YoutubeCaptionJob implements ShouldQueue
                 continue;
             }
 
-            $startMs    = (int) ($event['tStartMs'] ?? 0);
+            $startMs = (int) ($event['tStartMs'] ?? 0);
             $durationMs = (int) ($event['dDurationMs'] ?? 0);
-            $content    = implode('', array_column($event['segs'], 'utf8'));
-            $content    = trim($content);
+            $content = implode('', array_column($event['segs'], 'utf8'));
+            $content = trim($content);
 
             if ($content === '') {
                 continue;
             }
 
-            $text      .= $content . ' ';
+            $text .= $content . ' ';
             $segments[] = [
                 'start' => round($startMs / 1000, 3),
                 'end'   => round(($startMs + $durationMs) / 1000, 3),

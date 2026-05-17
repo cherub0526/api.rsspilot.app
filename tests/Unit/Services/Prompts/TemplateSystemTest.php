@@ -4,20 +4,23 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Services\Prompts;
 
-use App\Services\Prompts\AnalysisTemplate;
-use App\Services\Prompts\AssistantTemplate;
+use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
 use App\Services\Prompts\CaptionTemplate;
 use App\Services\Prompts\SummaryTemplate;
 use App\Services\Prompts\TemplateFactory;
+use App\Services\Prompts\AnalysisTemplate;
+use App\Services\Prompts\AssistantTemplate;
 use App\Services\Prompts\TemplateInterface;
 use App\Services\Prompts\TranslationTemplate;
-use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 
 /**
  * 模板系統單元測試.
+ * @internal
+ * @coversNothing
  */
-class TemplateSystemTest extends \PHPUnit\Framework\TestCase
+class TemplateSystemTest extends TestCase
 {
     /**
      * 測試 TemplateFactory 建立模板
@@ -101,15 +104,15 @@ class TemplateSystemTest extends \PHPUnit\Framework\TestCase
     public function testSystemPrompts(): void
     {
         $templates = [
-            'summary' => TemplateFactory::create('summary', ['length' => 'short']),
+            'summary'     => TemplateFactory::create('summary', ['length' => 'short']),
             'translation' => TemplateFactory::create('translation', ['target_language' => 'English']),
-            'caption' => TemplateFactory::create('caption', ['language' => 'Traditional Chinese']),
-            'analysis' => TemplateFactory::create('analysis', ['depth' => 'deep']),
+            'caption'     => TemplateFactory::create('caption', ['language' => 'Traditional Chinese']),
+            'analysis'    => TemplateFactory::create('analysis', ['depth' => 'deep']),
         ];
 
         foreach ($templates as $type => $template) {
             $prompt = $template->getSystemPrompt();
-            assert(! empty($prompt), "System prompt should not be empty for {$type}");
+            assert(!empty($prompt), "System prompt should not be empty for {$type}");
             assert(is_string($prompt), "System prompt should be a string for {$type}");
         }
 

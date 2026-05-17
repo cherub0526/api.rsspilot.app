@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Hypervel\Support\Facades\Schema;
 use Hyperf\Database\Schema\Blueprint;
 use Hypervel\Database\Migrations\Migration;
-use Hypervel\Support\Facades\Schema;
 
 return new class extends Migration {
     /**

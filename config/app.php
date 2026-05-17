@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use Psr\Log\LogLevel;
 use Hypervel\Support\Facades\Facade;
+use App\Providers\AppServiceProvider;
 use Hypervel\Support\ServiceProvider;
+use App\Providers\EventServiceProvider;
+use App\Providers\RouteServiceProvider;
 
 return [
     /*
@@ -149,10 +152,10 @@ return [
         /*
          * Application Service Providers...
          */
-        App\Providers\AppServiceProvider::class,
+        AppServiceProvider::class,
         // App\Providers\BroadcastServiceProvider::class,
-        App\Providers\EventServiceProvider::class,
-        App\Providers\RouteServiceProvider::class,
+        EventServiceProvider::class,
+        RouteServiceProvider::class,
     ])->toArray(),
 
     /*

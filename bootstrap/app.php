@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use App\Console\Kernel;
+use App\Exceptions\Handler;
+use Hypervel\Foundation\Application;
+use Hypervel\Context\ApplicationContext;
+use Hypervel\Foundation\Exceptions\Contracts\ExceptionHandler;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,7 +18,7 @@ declare(strict_types=1);
 |
 */
 
-$app = new Hypervel\Foundation\Application();
+$app = new Application();
 
 /*
 |--------------------------------------------------------------------------
@@ -27,14 +32,14 @@ $app = new Hypervel\Foundation\Application();
 
 $app->bind(
     Hypervel\Foundation\Console\Contracts\Kernel::class,
-    App\Console\Kernel::class
+    Kernel::class
 );
 
 $app->bind(
-    Hypervel\Foundation\Exceptions\Contracts\ExceptionHandler::class,
-    App\Exceptions\Handler::class
+    ExceptionHandler::class,
+    Handler::class
 );
 
-Hypervel\Context\ApplicationContext::setContainer($app);
+ApplicationContext::setContainer($app);
 
 return $app;

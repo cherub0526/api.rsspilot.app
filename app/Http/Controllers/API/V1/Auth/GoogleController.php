@@ -6,9 +6,9 @@ namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Models\User;
 use Hypervel\Http\Request;
-use App\Validators\GoogleValidator;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
+use App\Validators\GoogleValidator;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\InvalidRequestException;
 

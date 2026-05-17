@@ -16,9 +16,9 @@ class PriceResource extends JsonResource
     public function toArray(): array
     {
         return [
-            'id' => strval($this->resource->id),
-            'unit' => strval($this->resource->unit),
-            'price' => floatval($this->resource->price),
+            'id'     => strval($this->resource->id),
+            'unit'   => strval($this->resource->unit),
+            'price'  => floatval($this->resource->price),
             'paddle' => new PaddleResource($this->whenLoaded('paddle')),
         ];
     }

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Media;
 
 use Hypervel\Http\Request;
+use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
-use App\Utils\AI\Completion;
 use App\Validators\ChatValidator;
 use App\OpenApi\Responses\Http400;
 use Psr\Http\Message\ResponseInterface;

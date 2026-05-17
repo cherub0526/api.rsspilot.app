@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Utils\BaseMigration;
 use Hypervel\Support\Facades\Schema;
 use Hyperf\Database\Schema\Blueprint;
-use App\Utils\BaseMigration;
 
 return new class extends BaseMigration {
     public function up(): void

@@ -6,7 +6,6 @@ namespace Database\Factories;
 
 use App\Models\User;
 use App\Models\Media;
-use App\Models\WatchHistory;
 use Hypervel\Database\Eloquent\Factories\Factory;
 
 class WatchHistoryFactory extends Factory

@@ -4,7 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\Authenticate;
+use Hypervel\Auth\Middleware\Authorize;
+use Hypervel\Http\Middleware\HandleCors;
+use App\Http\Middleware\ValidateSignature;
+use Hypervel\Router\Middleware\ThrottleRequests;
 use Hypervel\Foundation\Http\Kernel as HttpKernel;
+use Hypervel\Router\Middleware\SubstituteBindings;
 
 class Kernel extends HttpKernel
 {
@@ -16,8 +23,8 @@ class Kernel extends HttpKernel
      * @var array<int, class-string|string>
      */
     protected array $middleware = [
-        \Hypervel\Http\Middleware\HandleCors::class,
-        \App\Http\Middleware\SetLocale::class,
+        HandleCors::class,
+        SetLocale::class,
         // \Hypervel\Http\Middleware\ValidatePostSize::class,
         // \App\Http\Middleware\TrimStrings::class,
         // \App\Http\Middleware\ConvertEmptyStringsToNull::class
@@ -51,11 +58,11 @@ class Kernel extends HttpKernel
      * @var array<string, class-string|string>
      */
     protected array $middlewareAliases = [
-        'auth' => \App\Http\Middleware\Authenticate::class,
-        'can' => \Hypervel\Auth\Middleware\Authorize::class,
-        'throttle' => \Hypervel\Router\Middleware\ThrottleRequests::class,
-        'bindings' => \Hypervel\Router\Middleware\SubstituteBindings::class,
-        'signed' => \App\Http\Middleware\ValidateSignature::class,
+        'auth'     => Authenticate::class,
+        'can'      => Authorize::class,
+        'throttle' => ThrottleRequests::class,
+        'bindings' => SubstituteBindings::class,
+        'signed'   => ValidateSignature::class,
     ];
 
     /**

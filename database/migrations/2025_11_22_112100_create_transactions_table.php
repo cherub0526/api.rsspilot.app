@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Utils\BaseMigration;
 use Hyperf\Database\Schema\Schema;
 use Hyperf\Database\Schema\Blueprint;
 
-return new class extends \App\Utils\BaseMigration {
+return new class extends BaseMigration {
     /**
      * Run the migrations.
      */

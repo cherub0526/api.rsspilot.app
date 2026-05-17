@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Hypervel\Cache\SwooleStore;
 use Hypervel\Support\Str;
+use Hypervel\Cache\SwooleStore;
 
 return [
     /*
@@ -34,29 +34,29 @@ return [
 
     'stores' => [
         'array' => [
-            'driver' => 'array',
+            'driver'    => 'array',
             'serialize' => false,
         ],
 
         'file' => [
-            'driver' => 'file',
-            'path' => storage_path('cache/data'),
+            'driver'    => 'file',
+            'path'      => storage_path('cache/data'),
             'lock_path' => storage_path('cache/data'),
         ],
 
         'redis' => [
-            'driver' => 'redis',
-            'connection' => 'default',
+            'driver'          => 'redis',
+            'connection'      => 'default',
             'lock_connection' => 'default',
         ],
 
         'swoole' => [
-            'driver' => 'swoole',
-            'table' => 'default',
+            'driver'              => 'swoole',
+            'table'               => 'default',
             'memory_limit_buffer' => 0.05,
-            'eviction_policy' => SwooleStore::EVICTION_POLICY_LRU,
+            'eviction_policy'     => SwooleStore::EVICTION_POLICY_LRU,
             'eviction_proportion' => 0.05,
-            'eviction_interval' => 10000, // milliseconds
+            'eviction_interval'   => 10000, // milliseconds
         ],
 
         'stack' => [
@@ -70,20 +70,20 @@ return [
         ],
 
         'database' => [
-            'driver' => 'database',
-            'connection' => env('DB_CACHE_CONNECTION', env('DB_CONNECTION', 'default')),
-            'table' => env('DB_CACHE_TABLE', 'cache'),
+            'driver'          => 'database',
+            'connection'      => env('DB_CACHE_CONNECTION', env('DB_CONNECTION', 'default')),
+            'table'           => env('DB_CACHE_TABLE', 'cache'),
             'lock_connection' => env('DB_CACHE_LOCK_CONNECTION'),
-            'lock_table' => env('DB_CACHE_LOCK_TABLE', 'cache_locks'),
-            'lock_lottery' => [2, 100],
-            'lock_timeout' => 86400,
+            'lock_table'      => env('DB_CACHE_LOCK_TABLE', 'cache_locks'),
+            'lock_lottery'    => [2, 100],
+            'lock_timeout'    => 86400,
         ],
     ],
 
     'swoole_tables' => [
         'default' => [
-            'rows' => 1024,
-            'bytes' => 10240,
+            'rows'                => 1024,
+            'bytes'               => 10240,
             'conflict_proportion' => 0.2,
         ],
     ],

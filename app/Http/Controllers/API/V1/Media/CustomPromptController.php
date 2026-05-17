@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Media;
 
 use Hypervel\Http\Request;
+use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
-use App\Utils\AI\Completion;
 use App\OpenApi\Responses\Http400;
 use App\Services\Prompts\TemplateFactory;
 use App\Validators\CustomPromptValidator;

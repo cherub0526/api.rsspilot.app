@@ -14,7 +14,7 @@ class IndexController extends AbstractController
         $method = $request->getMethod();
 
         return [
-            'method' => $method,
+            'method'  => $method,
             'message' => "Hello {$user}.",
         ];
     }

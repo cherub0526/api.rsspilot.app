@@ -32,8 +32,8 @@ class PlanObserver
             );
 
             $plan->paddle()->create([
-                'foreign_type' => Plan::class,
-                'paddle_id' => $product->id,
+                'foreign_type'  => Plan::class,
+                'paddle_id'     => $product->id,
                 'paddle_detail' => $product,
             ]);
         } catch (ProductApiError $e) {

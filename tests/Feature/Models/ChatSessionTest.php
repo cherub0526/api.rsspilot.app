@@ -7,17 +7,21 @@ namespace Tests\Feature\Models;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\Media;
-use App\Models\ChatSession;
 use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class ChatSessionTest extends TestCase
 {
     use RefreshDatabase;
 
     public function testCanCreateChatSession(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $media = Media::factory()->create();
 
         $session = ChatSession::create([
@@ -36,8 +40,8 @@ class ChatSessionTest extends TestCase
 
     public function testChatMessageBelongsToSession(): void
     {
-        $user    = User::factory()->create();
-        $media   = Media::factory()->create();
+        $user = User::factory()->create();
+        $media = Media::factory()->create();
         $session = ChatSession::create([
             'user_id'  => $user->id,
             'media_id' => $media->id,
@@ -60,7 +64,7 @@ class ChatSessionTest extends TestCase
 
     public function testUserChatSessionsRelationship(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $media = Media::factory()->create();
 
         ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);

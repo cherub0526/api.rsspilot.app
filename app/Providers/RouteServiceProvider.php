@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use Hypervel\Foundation\Support\Providers\RouteServiceProvider as BaseServiceProvider;
 use Hypervel\Support\Facades\Route;
+use Hypervel\Foundation\Support\Providers\RouteServiceProvider as BaseServiceProvider;
 
 class RouteServiceProvider extends BaseServiceProvider
 {
@@ -30,7 +30,7 @@ class RouteServiceProvider extends BaseServiceProvider
             base_path('routes/v1.php'),
             [
                 'middleware' => 'api',
-                'as' => 'api.v1',
+                'as'         => 'api.v1',
             ]
         );
 

@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Paddle\SDK\Client;
-use Paddle\SDK\Environment;
 use Paddle\SDK\Options;
+use Paddle\SDK\Environment;
+use Paddle\SDK\Resources\Prices\PricesClient;
+use Paddle\SDK\Resources\Products\ProductsClient;
+use Paddle\SDK\Resources\Customers\CustomersClient;
+use Paddle\SDK\Resources\Transactions\TransactionsClient;
+use Paddle\SDK\Resources\Subscriptions\SubscriptionsClient;
 
 class PaddleClient
 {
@@ -22,27 +27,27 @@ class PaddleClient
         );
     }
 
-    public function customers(): \Paddle\SDK\Resources\Customers\CustomersClient
+    public function customers(): CustomersClient
     {
         return $this->client->customers;
     }
 
-    public function products(): \Paddle\SDK\Resources\Products\ProductsClient
+    public function products(): ProductsClient
     {
         return $this->client->products;
     }
 
-    public function prices(): \Paddle\SDK\Resources\Prices\PricesClient
+    public function prices(): PricesClient
     {
         return $this->client->prices;
     }
 
-    public function subscriptions(): \Paddle\SDK\Resources\Subscriptions\SubscriptionsClient
+    public function subscriptions(): SubscriptionsClient
     {
         return $this->client->subscriptions;
     }
 
-    public function transactions(): \Paddle\SDK\Resources\Transactions\TransactionsClient
+    public function transactions(): TransactionsClient
     {
         return $this->client->transactions;
     }

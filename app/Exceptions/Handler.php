@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Exceptions;
 
-use Hypervel\Foundation\Exceptions\Handler as ExceptionHandler;
-use Hypervel\Http\Request;
 use Throwable;
+use Hypervel\Http\Request;
+use Psr\Http\Message\ResponseInterface;
+use Hypervel\Foundation\Exceptions\Handler as ExceptionHandler;
 
 class Handler extends ExceptionHandler
 {
@@ -36,7 +37,7 @@ class Handler extends ExceptionHandler
         });
     }
 
-    protected function unauthenticated($request, $exception): \Psr\Http\Message\ResponseInterface
+    protected function unauthenticated($request, $exception): ResponseInterface
     {
         // Return JSON for requests that expect JSON or for API routes
         if ($request->expectsJson() || $request->is('api/*')) {

@@ -10,6 +10,10 @@ use App\Models\Source;
 use App\Models\SummaryConfig;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class SummaryConfigTest extends TestCase
 {
     use RefreshDatabase;
@@ -36,7 +40,7 @@ class SummaryConfigTest extends TestCase
 
     public function testSummaryConfigCanBeLinkedToSources(): void
     {
-        $user    = User::factory()->create();
+        $user = User::factory()->create();
         $source1 = Source::factory()->create();
         $source2 = Source::factory()->create();
 

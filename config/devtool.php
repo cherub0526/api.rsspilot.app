@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+use App\Models\User;
+use App\Models\Model;
 
 return [
     'generator' => [
@@ -38,7 +40,7 @@ return [
         ],
         'model' => [
             'namespace' => 'App\Models',
-            'uses' => App\Models\Model::class,
+            'uses'      => Model::class,
         ],
         'factory' => [
             'path' => 'database/factories',
@@ -57,10 +59,10 @@ return [
         ],
         'channel' => [
             'namespace' => 'App\Broadcasting',
-            'uses' => App\Models\User::class,
+            'uses'      => User::class,
         ],
         'observer' => [
-            'namespace' => 'App\Observers',
+            'namespace'       => 'App\Observers',
             'model_namespace' => 'App\Models',
         ],
         'mail' => [
@@ -70,7 +72,7 @@ return [
             'namespace' => 'App\Notifications',
         ],
         'policy' => [
-            'namespace' => 'App\Policies',
+            'namespace'       => 'App\Policies',
             'model_namespace' => 'App\Models',
         ],
         'rule' => [

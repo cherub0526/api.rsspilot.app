@@ -9,9 +9,9 @@ use App\Models\Rss;
 use App\Models\Media;
 use Hypervel\Queue\Queueable;
 use App\Services\YoutubeService;
+use App\Jobs\Media\YoutubeCaptionJob;
 use App\Services\SubscriptionService;
 use Hypervel\Queue\Contracts\ShouldQueue;
-use App\Jobs\Media\YoutubeCaptionJob;
 
 class SyncJob implements ShouldQueue
 {

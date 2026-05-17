@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use Exception;
+use Psr\Http\Message\ResponseInterface;
 
 class InvalidRequestException extends Exception
 {
@@ -21,7 +22,7 @@ class InvalidRequestException extends Exception
         parent::__construct(self::$statusMessage, $code);
     }
 
-    public function render(): \Psr\Http\Message\ResponseInterface
+    public function render(): ResponseInterface
     {
         return response()->json([
             'messages' => $this->messages,

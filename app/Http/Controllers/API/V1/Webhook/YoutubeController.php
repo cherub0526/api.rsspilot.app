@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Webhook;
 
 use Hypervel\Http\Request;
-use Hyperf\Resource\Json\JsonResource;
 use OpenApi\Attributes as OAT;
 
 class YoutubeController

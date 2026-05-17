@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Prompts;
 
+use App\Utils\AI\Completion;
+
 /**
  * 模板系統使用指南.
  *
@@ -42,7 +44,7 @@ class TemplateUsageExample
     {
         // 使用工廠建立摘要模板
         $template = TemplateFactory::create('summary', [
-            'length' => 'medium',
+            'length'   => 'medium',
             'language' => 'Traditional Chinese',
         ]);
 
@@ -62,12 +64,12 @@ class TemplateUsageExample
     public static function example2(): void
     {
         // 初始化 Completion 服務
-        $completion = \App\Utils\AI\Completion::make();
+        $completion = Completion::make();
 
         // 建立字幕生成模板
         $template = TemplateFactory::create('caption', [
             'language' => 'Traditional Chinese',
-            'style' => 'professional',
+            'style'    => 'professional',
         ]);
 
         // 建立管理器
@@ -76,7 +78,7 @@ class TemplateUsageExample
         // 設定 OpenAI 選項
         $manager->setOptions([
             'temperature' => 0.5,
-            'max_tokens' => 4000,
+            'max_tokens'  => 4000,
         ]);
 
         // 執行完成請求
@@ -89,7 +91,7 @@ class TemplateUsageExample
      */
     public static function example3(): void
     {
-        $completion = \App\Utils\AI\Completion::make();
+        $completion = Completion::make();
 
         // 建立初始模板
         $template = TemplateFactory::create('summary', [
@@ -116,7 +118,7 @@ class TemplateUsageExample
     public static function example4(): void
     {
         // 註冊自訂模板
-        TemplateFactory::register('custom', \App\Services\Prompts\CustomTemplate::class);
+        TemplateFactory::register('custom', CustomTemplate::class);
 
         // 使用自訂模板
         $template = TemplateFactory::create('custom', [

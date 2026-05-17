@@ -4,19 +4,23 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Models;
 
+use Throwable;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\Source;
-use App\Models\UserSource;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class UserSourceTest extends TestCase
 {
     use RefreshDatabase;
 
     public function testUserCanSubscribeToSource(): void
     {
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $source = Source::factory()->create();
 
         $user->sources()->attach($source->id);
@@ -31,12 +35,12 @@ class UserSourceTest extends TestCase
 
     public function testUniqueConstraintPreventsDuplicates(): void
     {
-        $user   = User::factory()->create();
+        $user = User::factory()->create();
         $source = Source::factory()->create();
 
         $user->sources()->attach($source->id);
 
-        $this->expectException(\Throwable::class);
+        $this->expectException(Throwable::class);
         $user->sources()->attach($source->id);
     }
 }

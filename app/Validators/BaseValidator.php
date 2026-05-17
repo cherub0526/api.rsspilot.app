@@ -23,7 +23,7 @@ class BaseValidator
     {
         $this->validator = validator($this->params, $this->rules, $this->messages);
 
-        return ! $this->validator->fails();
+        return !$this->validator->fails();
     }
 
     public function errors()

@@ -7,9 +7,9 @@ use Hyperf\ViewEngine\HyperfViewEngine;
 
 return [
     'engine' => HyperfViewEngine::class,
-    'mode' => Mode::SYNC,
+    'mode'   => Mode::SYNC,
     'config' => [
-        'view_path' => base_path('resources/views'),
+        'view_path'  => base_path('resources/views'),
         'cache_path' => storage_path('framework/views'),
     ],
     'event' => [

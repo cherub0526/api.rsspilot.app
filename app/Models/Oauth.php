@@ -12,7 +12,7 @@ class Oauth extends Model
 
     public static array $providerMaps = [
         self::PROVIDER_FACEBOOK => 'Facebook',
-        self::PROVIDER_GOOGLE => 'Google',
+        self::PROVIDER_GOOGLE   => 'Google',
     ];
 
     protected ?string $table = 'oauths';

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Observers;
 
+use Exception;
 use App\Models\Price;
 use App\Services\PaddleClient;
-use Exception;
-use Paddle\SDK\Entities\Shared\CurrencyCode;
-use Paddle\SDK\Entities\Shared\Interval;
 use Paddle\SDK\Entities\Shared\Money;
-use Paddle\SDK\Entities\Shared\PriceQuantity;
+use Paddle\SDK\Entities\Shared\Interval;
 use Paddle\SDK\Entities\Shared\TimePeriod;
+use Paddle\SDK\Entities\Shared\CurrencyCode;
+use Paddle\SDK\Entities\Shared\PriceQuantity;
 use Paddle\SDK\Resources\Prices\Operations\CreatePrice;
 
 class PriceObserver
@@ -25,8 +25,8 @@ class PriceObserver
 
         $period = match ($price->unit) {
             Price::UNIT_QUARTERLY => [Interval::Month(), 3],
-            Price::UNIT_ANNUALLY => [Interval::Year(), 1],
-            default => [Interval::Month(), 1]
+            Price::UNIT_ANNUALLY  => [Interval::Year(), 1],
+            default               => [Interval::Month(), 1]
         };
 
         try {
@@ -47,8 +47,8 @@ class PriceObserver
             );
 
             $price->paddle()->create([
-                'foreign_type' => Price::class,
-                'paddle_id' => $response->id,
+                'foreign_type'  => Price::class,
+                'paddle_id'     => $response->id,
                 'paddle_detail' => $response,
             ]);
         } catch (Exception $e) {

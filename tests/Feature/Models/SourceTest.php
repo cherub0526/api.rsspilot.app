@@ -8,6 +8,10 @@ use Tests\TestCase;
 use App\Models\Source;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class SourceTest extends TestCase
 {
     use RefreshDatabase;

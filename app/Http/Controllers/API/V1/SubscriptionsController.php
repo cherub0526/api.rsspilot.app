@@ -13,7 +13,6 @@ use App\Services\PaddleClient;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
-use App\OpenApi\Responses\HttpOk;
 use Paddle\SDK\Exceptions\ApiError;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;

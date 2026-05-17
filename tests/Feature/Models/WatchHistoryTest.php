@@ -10,13 +10,17 @@ use App\Models\Media;
 use App\Models\WatchHistory;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
+/**
+ * @internal
+ * @coversNothing
+ */
 class WatchHistoryTest extends TestCase
 {
     use RefreshDatabase;
 
     public function testCanRecordWatchHistory(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $media = Media::factory()->create();
 
         $history = WatchHistory::create([
@@ -38,7 +42,7 @@ class WatchHistoryTest extends TestCase
 
     public function testUserWatchHistoryRelationship(): void
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $media = Media::factory()->create();
 
         WatchHistory::create([
