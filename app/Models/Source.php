@@ -39,11 +39,13 @@ class Source extends Model
         'metadata',
         'last_synced_at',
         'status',
+        'free',
     ];
 
     protected array $casts = [
         'metadata'       => 'array',
         'last_synced_at' => 'datetime',
+        'free'           => 'boolean',
     ];
 
     public function scopeActive($query)
