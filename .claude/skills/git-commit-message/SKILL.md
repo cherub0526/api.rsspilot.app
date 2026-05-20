@@ -52,7 +52,7 @@ Inputs:
 
 Successful output:
 - 一個或多個 `git commit -m "$(cat <<'EOF' ... EOF)"` 指令
-- 通過 `scripts/validate_commit_message.py` 檢查
+- 通過 `.claude/skills/git-commit-message/scripts/validate_commit_message.py` 檢查
 - Footer 末段含 Co-Authored-By line
 </decision_boundary>
 
@@ -102,7 +102,7 @@ Step 4: Footer
 - Validation：footer 與 body 之間空一行；Co-Authored-By 放最末行
 
 Step 5: Validate
-- Action：把訊息存為暫存 → `python3 scripts/validate_commit_message.py <file>`
+- Action：把訊息存為暫存 → `python3 .claude/skills/git-commit-message/scripts/validate_commit_message.py <file>`
 - Validation：退出碼 0 才提交；有錯誤回 Step 2-4 修正
 
 Step 6: Commit
@@ -128,7 +128,7 @@ Step 6: Commit
 - HEREDOC：`cat <<'EOF' ... EOF` 包訊息，避免 `$` / 反引號跳脫
 - Git：**不**用 `--no-verify`、`--amend`（除非 user 明確要求）
 - Staging：明列 `git add <path>`，**不**用 `git add -A` / `git add .`
-- Script：完成草稿後必跑 `scripts/validate_commit_message.py`
+- Script：完成草稿後必跑 `.claude/skills/git-commit-message/scripts/validate_commit_message.py`
 </tool_rules>
 
 <default_follow_through_policy>
@@ -204,7 +204,7 @@ EOF
 
 ## Scripts
 
-- `scripts/validate_commit_message.py <file>`：驗證 subject 長度、type、行寬、footer；退出碼 0 代表通過
+- `.claude/skills/git-commit-message/scripts/validate_commit_message.py <file>`：驗證 subject 長度、type、行寬、footer；退出碼 0 代表通過
 
 ## Assets
 
