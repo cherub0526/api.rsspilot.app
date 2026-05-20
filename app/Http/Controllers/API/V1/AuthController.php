@@ -78,7 +78,12 @@ class AuthController extends AbstractController
             throw new InvalidRequestException(['password' => [__('validators.controllers.auth.invalid_credentials')]]);
         }
 
-        return $this->responseAccessToken(auth()->login($request->user()));
+        $user = User::query()
+            ->where('account', $params['account'])
+            ->where('social_type', User::SOCIAL_TYPE_LOCAL)
+            ->first();
+
+        return $this->responseAccessToken($this->guard()->login($user));
     }
 
     /**
