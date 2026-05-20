@@ -772,6 +772,88 @@
                 }
             }
         },
+        "/v1/popularies": {
+            "get": {
+                "tags": [
+                    "Popularies"
+                ],
+                "summary": "List all free sources with their recent videos",
+                "operationId": "api.v1.popularies.index",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Filter by source type",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "channel",
+                                "playlist"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "type": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "channel",
+                                                            "playlist"
+                                                        ]
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "desc": {
+                                                        "type": "string"
+                                                    },
+                                                    "thumbnail": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "video_count": {
+                                                        "type": "integer"
+                                                    },
+                                                    "subscriber_count": {
+                                                        "type": "string",
+                                                        "example": "12.4K",
+                                                        "nullable": true
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/rss": {
             "get": {
                 "tags": [
@@ -2468,6 +2550,10 @@
         {
             "name": "Media",
             "description": "Media"
+        },
+        {
+            "name": "Popularies",
+            "description": "Popularies"
         },
         {
             "name": "RSS",

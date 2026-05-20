@@ -8,6 +8,7 @@ use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\UsersController;
 use App\Http\Controllers\API\V1\SourcesController;
+use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
@@ -122,6 +123,14 @@ Route::group('/rss', function () {
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'rss']);
+
+Route::group('/popularies', function () {
+    Route::get('/', [
+        'as'         => 'index',
+        'uses'       => PopulariesController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+}, ['as' => 'popularies']);
 
 Route::group('/sources', function () {
     Route::get('/', [
