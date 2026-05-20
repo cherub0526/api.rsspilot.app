@@ -129,6 +129,14 @@ class SourcesController extends AbstractController
             ['title' => $title, 'url' => $this->buildRssUrl($dbType, $externalId), 'thumbnail' => $thumbnail, 'status' => Source::STATUS_ACTIVE]
         );
 
+        if ($dbType === Source::TYPE_YOUTUBE_CHANNEL && empty($source->metadata['subscriber_count'])) {
+            $stats = $youtubeService->getChannelStatistics($externalId);
+            if ($stats) {
+                $source->metadata = array_merge($source->metadata ?? [], $stats);
+                $source->save();
+            }
+        }
+
         if ($request->user()->sources()->find($source->id)) {
             $request->user()->sources()->updateExistingPivot($source->id, ['notify' => $notify]);
         } else {

@@ -184,6 +184,30 @@ class YoutubeService
     }
 
     /**
+     * Fetch channel statistics (subscriber_count, video_count) via YouTube Data API.
+     *
+     * @return null|array{subscriber_count: int, video_count: int}
+     */
+    public function getChannelStatistics(string $channelId): ?array
+    {
+        try {
+            $response = $this->youtube->channels->listChannels('statistics', ['id' => $channelId]);
+            $items = $response->getItems();
+            if (empty($items)) {
+                return null;
+            }
+            $stats = $items[0]->getStatistics();
+
+            return [
+                'subscriber_count' => (int) $stats->getSubscriberCount(),
+                'video_count'      => (int) $stats->getVideoCount(),
+            ];
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
      * Fetch the channel avatar/thumbnail URL via YouTube Data API.
      */
     public function getChannelThumbnail(string $channelId): ?string
