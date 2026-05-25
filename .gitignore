@@ -21,3 +21,5 @@
 .phpactor.json
 .phpunit.result.cache
 /database/*.sqlite
+.spectra/
+openspec/.vector-search.db*
