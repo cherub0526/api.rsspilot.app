@@ -12,6 +12,9 @@ use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property-read Source|null $source
+ */
 class Media extends Model
 {
     use HasUlids;

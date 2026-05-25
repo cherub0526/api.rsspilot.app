@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Parameters\Query;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\Http404;
 use App\Validators\MediaValidator;
 use App\OpenApi\Schemas\Paginators;
 use App\Http\Resources\MediaResource;
+use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\OpenApi\Schemas\MediaResource as MediaSchema;
@@ -92,9 +95,6 @@ class MediaController extends AbstractController
         return MediaResource::collection($media);
     }
 
-    /**
-     * @throws InvalidRequestException
-     */
     #[OAT\Get(
         path: '/v1/media/{mediaId}',
         operationId: 'api.v1.media.show',
@@ -110,14 +110,28 @@ class MediaController extends AbstractController
                 description: 'Successful operation',
                 content: new OAT\JsonContent(ref: MediaSchema::class)
             ),
-            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
         ]
     )]
+    /**
+     * @throws NotFoundHttpException
+     */
     public function show(Request $request, string $mediaId): MediaResource
     {
-        if (!$media = $request->user()->media()->find($mediaId)) {
-            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        $media = Media::find($mediaId);
+
+        if (!$media) {
+            throw new NotFoundHttpException();
+        }
+
+        $source = $media->source;
+
+        $hasAccess = ($source?->free ?? false)
+            || ($source && $request->user()->sources()->where('sources.id', $source->getKey())->exists());
+
+        if (!$hasAccess) {
+            throw new NotFoundHttpException();
         }
 
         return new MediaResource($media);
