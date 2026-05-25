@@ -95,6 +95,7 @@ class SourcesControllerTest extends TestCase
         $this->mock(YoutubeService::class, function (MockInterface $mock) {
             $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCxxxxxxxxxxxxxxxxxxxxxx');
             $mock->shouldReceive('getChannelThumbnail')->andReturn('https://yt3.googleusercontent.com/ytc/test');
+            $mock->shouldReceive('getChannelStatistics')->andReturn(['subscriber_count' => 1230000]);
         });
 
         Http::fake([
@@ -135,6 +136,7 @@ class SourcesControllerTest extends TestCase
         $this->mock(YoutubeService::class, function (MockInterface $mock) {
             $mock->shouldReceive('getChannelIdFromUrl')->andReturn('UCxxxxxxxxxxxxxxxxxxxxxx');
             $mock->shouldReceive('getChannelThumbnail')->andReturn('https://yt3.googleusercontent.com/ytc/test');
+            $mock->shouldReceive('getChannelStatistics')->andReturn(['subscriber_count' => 1230000]);
         });
 
         Http::fake([
@@ -255,6 +257,58 @@ class SourcesControllerTest extends TestCase
         $otherUri    = route('api.v1.sources.update', ['sourceId' => $otherSource->id]);
 
         $this->json('PUT', $otherUri, ['notify' => false])->assertStatus(404);
+    }
+
+    public function testShow(): void
+    {
+        $source = Source::factory()->create([
+            'type'        => Source::TYPE_YOUTUBE_CHANNEL,
+            'title'       => 'Test Channel',
+            'external_id' => 'UCxxxxxxxxxxxxxxxxxxxxxx',
+            'description' => 'A great channel.',
+            'metadata'    => ['subscriber_count' => 500000],
+        ]);
+
+        // 5.4 未驗證請求回傳 401
+        $this->json('GET', route('api.v1.sources.show', ['sourceId' => $source->id]))
+            ->assertStatus(401);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // 5.3 來源不在訂閱中且非免費時回傳 404
+        $this->json('GET', route('api.v1.sources.show', ['sourceId' => $source->id]))
+            ->assertStatus(404);
+
+        // 5.1 已訂閱使用者可取得來源（200 + 欄位正確）
+        $user->sources()->attach($source->id, ['notify' => true]);
+
+        $this->json('GET', route('api.v1.sources.show', ['sourceId' => $source->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('id', $source->id)
+            ->assertJsonPath('name', 'Test Channel')
+            ->assertJsonPath('type', 'channel')
+            ->assertJsonPath('notify', true)
+            ->assertJsonPath('url', 'https://www.youtube.com/channel/UCxxxxxxxxxxxxxxxxxxxxxx')
+            ->assertJsonPath('description', 'A great channel.')
+            ->assertJsonPath('subscriber_count', 500000);
+
+        // 5.2 已驗證使用者可取得免費來源（無需訂閱）
+        $freeSource = Source::factory()->create([
+            'type'        => Source::TYPE_YOUTUBE_CHANNEL,
+            'title'       => 'Free Channel',
+            'external_id' => 'UCfreexxxxxxxxxxxxxxxx',
+            'free'        => true,
+        ]);
+
+        $this->json('GET', route('api.v1.sources.show', ['sourceId' => $freeSource->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('id', $freeSource->id)
+            ->assertJsonPath('type', 'channel');
+
+        // 5.5 sourceId 格式無效時回傳 404
+        $this->json('GET', '/api/v1/sources/not-a-valid-ulid')
+            ->assertStatus(404);
     }
 
     public function testDestroy(): void

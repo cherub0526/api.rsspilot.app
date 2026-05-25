@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Models\User;
 use Carbon\Carbon;
 use Hypervel\Database\Eloquent\Factories\Factory;
 
@@ -24,6 +25,7 @@ class UserFactory extends Factory
             'email'             => fake()->unique()->safeEmail(),
             'email_verified_at' => Carbon::now(),
             'password'          => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
+            'social_type'       => User::SOCIAL_TYPE_LOCAL,
         ];
     }
 
