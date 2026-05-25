@@ -62,16 +62,19 @@ Returned when `sourceId` does not exist in the authenticated user's subscribed s
 | `type`            | string       | `Source::type`                      | `"channel"` or `"playlist"`               |
 | `notify`          | bool         | `pivot.notify`                      | User-specific subscription setting        |
 | `thumbnail`       | string\|null | `Source::thumbnail`                 | May be null                                |
-| `description`     | string\|null | `Source::description`               | May be null                                |
-| `subscriber_count`| int\|null    | `Source::metadata['subscriber_count']` | Non-null only for `youtube_channel` type |
+| `description`     | string       | `Source::description`               | Empty string `""` if null in DB            |
+| `subscriber_count`| int          | `Source::metadata['subscriber_count']` | Always an integer; fallback to `0`      |
 
 ---
 
 ## Access Control
 
 - Requires JWT authentication (`auth` middleware).
-- Returns 404 if the source is not in the authenticated user's subscribed sources, consistent with the `update()` and `destroy()` access pattern.
-- Does **not** independently check `Source::status` — subscription membership implicitly validates the source exists and is usable.
+- A source is accessible if **either** condition is true:
+  1. `Source::free = true` — free sources are visible to all authenticated users.
+  2. The source is in the authenticated user's subscribed sources.
+- Returns 404 if neither condition is met.
+- Does **not** independently check `Source::status`.
 
 ---
 
