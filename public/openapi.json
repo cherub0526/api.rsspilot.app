@@ -1077,6 +1077,60 @@
                 ]
             }
         },
+        "/v1/sources/{sourceId}/medias": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "List paginated media for a source",
+                "operationId": "api.v1.sources.medias.index",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/limit"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/MediaResource"
+                                            }
+                                        },
+                                        "links": {
+                                            "$ref": "#/components/schemas/PaginatorLinks"
+                                        },
+                                        "meta": {
+                                            "$ref": "#/components/schemas/PaginatorMeta"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/sources": {
             "get": {
                 "tags": [
@@ -1181,6 +1235,82 @@
             }
         },
         "/v1/sources/{sourceId}": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Get details of a single source",
+                "operationId": "api.v1.sources.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "example": "Google Developers"
+                                        },
+                                        "url": {
+                                            "type": "string",
+                                            "format": "url",
+                                            "example": "https://www.youtube.com/channel/UC295-Dw4tzbkl8M9I2GFRtg"
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "channel",
+                                                "playlist"
+                                            ],
+                                            "example": "channel"
+                                        },
+                                        "notify": {
+                                            "type": "boolean",
+                                            "example": true
+                                        },
+                                        "thumbnail": {
+                                            "type": "string",
+                                            "example": "https://yt3.ggpht.com/...",
+                                            "nullable": true
+                                        },
+                                        "description": {
+                                            "type": "string",
+                                            "example": "News and tutorials from the Google Developers team."
+                                        },
+                                        "subscriber_count": {
+                                            "type": "integer",
+                                            "example": 1230000,
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
             "put": {
                 "tags": [
                     "Sources"

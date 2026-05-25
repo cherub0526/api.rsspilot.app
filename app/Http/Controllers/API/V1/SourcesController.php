@@ -15,6 +15,7 @@ use App\OpenApi\Responses\Http404;
 use Hypervel\Support\Facades\Http;
 use App\Validators\SourceValidator;
 use App\Http\Resources\SourceResource;
+use App\Http\Resources\SourceDetailResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Parameters\Path\SourceId;
@@ -146,6 +147,57 @@ class SourcesController extends AbstractController
         $attached = $request->user()->sources()->find($source->id);
 
         return response()->json((new SourceResource($attached))->resolve(), 201);
+    }
+
+    #[OAT\Get(
+        path: '/v1/sources/{sourceId}',
+        operationId: 'api.v1.sources.show',
+        summary: 'Get details of a single source',
+        security: [['bearerAuth' => []]],
+        tags: ['Sources'],
+        parameters: [
+            new OAT\Parameter(ref: SourceId::class),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(property: 'id', type: 'string', example: '01JCXYZ123456789ABCDEFGHIJ'),
+                        new OAT\Property(property: 'name', type: 'string', example: 'Google Developers'),
+                        new OAT\Property(property: 'url', type: 'string', format: 'url', example: 'https://www.youtube.com/channel/UC295-Dw4tzbkl8M9I2GFRtg'),
+                        new OAT\Property(property: 'type', type: 'string', enum: ['channel', 'playlist'], example: 'channel'),
+                        new OAT\Property(property: 'notify', type: 'boolean', example: true),
+                        new OAT\Property(property: 'thumbnail', type: 'string', nullable: true, example: 'https://yt3.ggpht.com/...'),
+                        new OAT\Property(property: 'description', type: 'string', example: 'News and tutorials from the Google Developers team.'),
+                        new OAT\Property(property: 'subscriber_count', type: 'integer', nullable: true, example: 1230000),
+                    ],
+                    type: 'object'
+                )
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
+    /**
+     * @throws NotFoundHttpException
+     */
+    public function show(Request $request, string $sourceId): ResponseInterface
+    {
+        // 優先從使用者已訂閱來源載入（保留 pivot 資料）
+        $source = $request->user()->sources()->find($sourceId);
+
+        if (! $source) {
+            // 退而確認是否為免費來源
+            $source = Source::where('id', $sourceId)->where('free', true)->first();
+        }
+
+        if (! $source) {
+            throw new NotFoundHttpException();
+        }
+
+        return response()->json((new SourceDetailResource($source))->resolve());
     }
 
     #[OAT\Put(

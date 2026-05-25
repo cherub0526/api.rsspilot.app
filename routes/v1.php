@@ -9,6 +9,7 @@ use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\UsersController;
 use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\PopulariesController;
+use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
@@ -143,6 +144,11 @@ Route::group('/sources', function () {
         'uses'       => SourcesController::class . '@store',
         'middleware' => ['auth'],
     ]);
+    Route::get('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
+        'as'         => 'show',
+        'uses'       => SourcesController::class . '@show',
+        'middleware' => ['auth'],
+    ]);
     Route::put('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'         => 'update',
         'uses'       => SourcesController::class . '@update',
@@ -153,6 +159,14 @@ Route::group('/sources', function () {
         'uses'       => SourcesController::class . '@destroy',
         'middleware' => ['auth'],
     ]);
+
+    Route::group('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}/medias', function () {
+        Route::get('/', [
+            'as'         => 'index',
+            'uses'       => SourceMediasController::class . '@index',
+            'middleware' => ['auth'],
+        ]);
+    }, ['as' => 'medias']);
 }, ['as' => 'sources']);
 
 Route::group('/media', function () {
