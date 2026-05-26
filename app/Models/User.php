@@ -41,6 +41,7 @@ class User extends Authenticatable
         'email_verified_at',
         'password',
         'social_type',
+        'avatar',
     ];
 
     public function oauths(): HasMany
@@ -112,5 +113,10 @@ class User extends Authenticatable
     public function setting(): HasOne
     {
         return $this->hasOne(Setting::class, 'user_id', 'id');
+    }
+
+    public function avatars(): HasMany
+    {
+        return $this->hasMany(UserAvatar::class, 'user_id', 'id');
     }
 }

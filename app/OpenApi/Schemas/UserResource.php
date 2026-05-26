@@ -13,6 +13,12 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'name', type: 'string', example: 'John Doe'),
         new OAT\Property(property: 'email', type: 'string', format: 'email', example: 'john@example.com'),
         new OAT\Property(property: 'account', type: 'string', example: 'johndoe'),
+        new OAT\Property(
+            property: 'avatar',
+            type: 'string',
+            nullable: true,
+            example: 'https://cdn.example.com/avatars/01JCXYZ.../uuid.jpg'
+        ),
         new OAT\Property(property: 'setting', type: 'object'),
     ],
     type: 'object'

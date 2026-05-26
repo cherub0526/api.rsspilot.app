@@ -7,6 +7,7 @@ use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\UsersController;
+use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
@@ -86,6 +87,12 @@ Route::group('/users', function () {
     Route::put('/', [
         'as'         => 'update',
         'uses'       => UsersController::class . '@update',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::post('/avatar', [
+        'as'         => 'avatar.store',
+        'uses'       => AvatarController::class . '@store',
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'users']);

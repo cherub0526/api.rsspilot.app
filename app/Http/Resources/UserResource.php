@@ -20,6 +20,9 @@ class UserResource extends JsonResource
             'name'    => strval($this->resource->name),
             'email'   => strval($this->resource->email),
             'account' => strval($this->resource->account),
+            'avatar'  => $this->resource->avatar
+                ? rtrim(config('app.cdn_url'), '/') . '/' . $this->resource->avatar
+                : null,
             'setting' => new SettingResource($this->whenLoaded('setting')),
         ];
     }
