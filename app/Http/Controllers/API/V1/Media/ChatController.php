@@ -4,27 +4,28 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Media;
 
+use Throwable;
 use App\Models\Media;
 use Hypervel\Http\Request;
 use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
+use Swoole\Coroutine\Channel;
 use OpenApi\Attributes as OAT;
 use Hypervel\Http\StreamOutput;
 use App\Validators\ChatValidator;
+use App\Events\Chat\ChatDoneEvent;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
-use Hypervel\Support\Facades\Event;
-use App\Events\Chat\ChatDoneEvent;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
+use Hypervel\Support\Facades\Event;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
 use App\Services\Prompts\TemplateCompletionManager;
-use Swoole\Coroutine\Channel;
 
 class ChatController
 {
@@ -36,7 +37,7 @@ class ChatController
      */
     private function sseHeaders(Request $request): array
     {
-        $origin         = $request->header('Origin', '');
+        $origin = $request->header('Origin', '');
         $allowedOrigins = config('cors.allowed_origins', ['*']);
 
         if (in_array('*', $allowedOrigins)) {
@@ -76,7 +77,7 @@ class ChatController
             throw new NotFoundHttpException();
         }
 
-        $source    = $media->source;
+        $source = $media->source;
         $hasAccess = ($source?->free ?? false)
             || ($source && $request->user()->sources()->where('sources.id', $source->getKey())->exists())
             || $request->user()->media()->where('media.id', $mediaId)->exists();
@@ -89,7 +90,7 @@ class ChatController
     }
 
     /**
-     * POST /v1/media/{mediaId}/chat
+     * POST /v1/media/{mediaId}/chat.
      *
      * 接收使用者訊息，向 OpenRouter 發送串流請求。
      * 每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。
@@ -161,7 +162,7 @@ class ChatController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $media  = $this->resolveMedia($request, $mediaId);
+        $media = $this->resolveMedia($request, $mediaId);
         $userId = (string) $request->user()->getKey();
 
         $userMessage = collect($params['messages'])->last()['content'] ?? '';
@@ -172,11 +173,11 @@ class ChatController
             'respond_language' => ISO6391::getNameByCode($request->user()->setting()->first()->data['ai']['language']),
         ]);
 
-        $manager     = new TemplateCompletionManager(Completion::make(), $template);
+        $manager = new TemplateCompletionManager(Completion::make(), $template);
         $psrResponse = $manager->completeStream($userMessage);
 
         try {
-            $body   = $psrResponse->getBody();
+            $body = $psrResponse->getBody();
             $buffer = '';
 
             while (!$body->eof()) {
@@ -187,7 +188,7 @@ class ChatController
                 }
 
                 $buffer .= $chunk;
-                $lines  = explode("\n", $buffer);
+                $lines = explode("\n", $buffer);
                 $buffer = array_pop($lines) ?: '';
 
                 foreach ($lines as $line) {
@@ -205,7 +206,7 @@ class ChatController
                         return response()->json(['status' => 'done']);
                     }
 
-                    $json  = json_decode($data, true);
+                    $json = json_decode($data, true);
                     $token = $json['choices'][0]['delta']['content'] ?? null;
 
                     if ($token !== null) {
@@ -215,7 +216,7 @@ class ChatController
             }
 
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Event::dispatch(new ChatErrorEvent($e->getMessage(), $userId, $mediaId));
             throw $e;
         }
@@ -224,7 +225,7 @@ class ChatController
     }
 
     /**
-     * GET /v1/media/{mediaId}/chat/stream
+     * GET /v1/media/{mediaId}/chat/stream.
      *
      * 建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。
      *
@@ -273,7 +274,7 @@ class ChatController
 
             // 每條連線有自己的 Channel（緩衝 50 個 payload）
             $channel = new Channel(50);
-            $active  = true;
+            $active = true;
 
             // 用閉包過濾：只處理屬於此 user + media 的事件
             $tokenListener = function (ChatTokenEvent $event) use ($channel, $userId, $mediaId, &$active): void {
