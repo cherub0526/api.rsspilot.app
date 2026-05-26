@@ -6,6 +6,7 @@ namespace App\Utils\AI;
 
 use RuntimeException;
 use Hypervel\Support\Facades\Http;
+use Psr\Http\Message\ResponseInterface;
 
 class Completion
 {
@@ -45,6 +46,32 @@ class Completion
         ], $options);
 
         return $this->send('/chat/completions', $payload);
+    }
+
+    /**
+     * Send a streaming chat completion request.
+     * Returns a PSR-7 ResponseInterface whose body is a readable SSE stream.
+     *
+     * @param array $options Additional parameters (e.g. max_tokens, temperature)
+     */
+    public function streamCompletions(string $model, array $messages, array $options = []): ResponseInterface
+    {
+        $payload = array_merge([
+            'model'       => $model,
+            'messages'    => $messages,
+            'max_tokens'  => 20000,
+            'temperature' => 0.7,
+            'top_p'       => 1,
+            'stream'      => true,
+        ], $options);
+
+        return Http::withToken($this->apiKey)
+            ->withHeaders($this->extraHeaders)
+            ->timeout(120)
+            ->acceptJson()
+            ->withOptions(['stream' => true])
+            ->post($this->baseUri . '/chat/completions', $payload)
+            ->toPsrResponse();
     }
 
     private function send(string $path, array $payload): array

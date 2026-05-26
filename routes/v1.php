@@ -231,6 +231,11 @@ Route::group('/media', function () {
             'uses'       => ChatController::class . '@store',
             'middleware' => ['auth'],
         ]);
+        Route::get('/stream', [
+            'as'         => 'stream',
+            'uses'       => ChatController::class . '@stream',
+            'middleware' => ['auth'],
+        ]);
     }, ['as' => 'chat']);
 }, ['as' => 'media']);
 

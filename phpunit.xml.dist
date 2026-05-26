@@ -26,5 +26,6 @@
         <env name="DB_CONNECTION" value="sqlite_testing" force="true"/>
         <env name="CACHE_DRIVER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="OPENROUTER_API_KEY" value="test-key" force="true"/>
     </php>
 </phpunit>

@@ -507,6 +507,83 @@
                 }
             }
         },
+        "/v1/media/{mediaId}/chat/stream": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Stream chat with video content (SSE)",
+                "operationId": "api.v1.media.chat.stream",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "messages"
+                                ],
+                                "properties": {
+                                    "messages": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "role",
+                                                "content"
+                                            ],
+                                            "properties": {
+                                                "role": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "user",
+                                                        "assistant",
+                                                        "system"
+                                                    ],
+                                                    "example": "user"
+                                                },
+                                                "content": {
+                                                    "type": "string",
+                                                    "example": "What is this video about?"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "minItems": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "SSE stream of AI reply tokens",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "example": "data: {\"token\":\"Hello\"}\n\ndata: [DONE]\n\n"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
+        },
         "/v1/media/{mediaId}/custom-prompt": {
             "post": {
                 "tags": [
@@ -713,11 +790,11 @@
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [

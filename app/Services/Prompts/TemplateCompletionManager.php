@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Prompts;
 
 use App\Utils\AI\Completion;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * 模板完成管理器
@@ -92,6 +93,24 @@ class TemplateCompletionManager
 
         // 呼叫 OpenAI API
         return $this->completion->completions($model, $messages, $options);
+    }
+
+    /**
+     * 發送串流完成請求，回傳可逐行讀取的 PSR-7 ResponseInterface。
+     * Body 為 OpenRouter SSE 格式（text/event-stream）。
+     *
+     * @param string $userContent 使用者輸入
+     * @param string $model       模型名稱（空字串使用 config 預設值）
+     */
+    public function completeStream(string $userContent, string $model = ''): ResponseInterface
+    {
+        if ($model === '') {
+            $model = config('ai.default_model');
+        }
+
+        $messages = $this->template->buildMessages($userContent);
+
+        return $this->completion->streamCompletions($model, $messages, $this->options);
     }
 
     /**
