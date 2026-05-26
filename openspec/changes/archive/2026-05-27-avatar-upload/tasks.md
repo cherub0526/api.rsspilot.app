@@ -38,4 +38,4 @@
 
 - [x] 6.1 執行 `composer cs-diff` 修正 code style
 - [x] 6.2 執行 `composer analyse` 確認 PHPStan 無警告（既有錯誤 86 個，新增檔案零錯誤）
-- [ ] 6.3 Commit 所有變更
+- [x] 6.3 Commit 所有變更
