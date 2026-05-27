@@ -15,12 +15,12 @@ use App\OpenApi\Responses\Http404;
 use Hypervel\Support\Facades\Http;
 use App\Validators\SourceValidator;
 use App\Http\Resources\SourceResource;
-use App\Http\Resources\SourceDetailResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Parameters\Path\SourceId;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
+use App\Http\Resources\SourceDetailResource;
 use Hypervel\HttpClient\ConnectionException;
 use App\OpenApi\Schemas\SourceResource as SourceSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
@@ -188,12 +188,12 @@ class SourcesController extends AbstractController
         // 優先從使用者已訂閱來源載入（保留 pivot 資料）
         $source = $request->user()->sources()->find($sourceId);
 
-        if (! $source) {
+        if (!$source) {
             // 退而確認是否為免費來源
             $source = Source::where('id', $sourceId)->where('free', true)->first();
         }
 
-        if (! $source) {
+        if (!$source) {
             throw new NotFoundHttpException();
         }
 
