@@ -36,6 +36,7 @@ class MediaController extends AbstractController
             new OAT\Parameter(ref: Query\Type::class),
             new OAT\Parameter(ref: Query\Range::class),
             new OAT\Parameter(ref: Query\Limit::class),
+            new OAT\Parameter(ref: Query\Keyword::class),
         ],
         responses: [
             new OAT\Response(
@@ -65,7 +66,7 @@ class MediaController extends AbstractController
     )]
     public function index(Request $request): AnonymousResourceCollection
     {
-        $params = $request->only(['type', 'range', 'limit']);
+        $params = $request->only(['type', 'range', 'limit', 'keyword']);
         $v = new MediaValidator($params);
         $v->setIndexRules();
 
@@ -73,7 +74,12 @@ class MediaController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $media = $request->user()->media()
+        $user = $request->user();
+        $media = Media::whereHas('source', function ($query) use ($user) {
+            $query->whereHas('userSources', function ($q) use ($user) {
+                $q->where('user_id', $user->getKey());
+            });
+        })
             ->where('type', $params['type'])
             ->when($params['range'] ?? false, function ($query) use ($params) {
                 $date = match ($params['range']) {
@@ -87,10 +93,14 @@ class MediaController extends AbstractController
                     $query->where('published_at', '>=', $date);
                 }
             })
+            ->when($params['keyword'] ?? false, function ($query) use ($params) {
+                $query->where('title', 'like', '%' . $params['keyword'] . '%')
+                    ->orWhereHas('source', function ($q) use ($params) {
+                        $q->where('title', 'like', '%' . $params['keyword'] . '%');
+                    });
+            })
             ->orderByDesc('published_at')
-            ->paginate(
-                $params['limit'] ?? 12
-            );
+            ->paginate($params['limit'] ?? 12);
 
         return MediaResource::collection($media);
     }

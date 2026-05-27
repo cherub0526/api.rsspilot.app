@@ -432,7 +432,8 @@
                 "tags": [
                     "Media"
                 ],
-                "summary": "Chat with video content",
+                "summary": "Send message and broadcast AI tokens via SSE",
+                "description": "POST /v1/media/{mediaId}/chat.\n\n接收使用者訊息，向 OpenRouter 發送串流請求。\n每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。\n回傳時機：完整回應產生後（或發生錯誤時）。",
                 "operationId": "api.v1.media.chat.store",
                 "parameters": [
                     {
@@ -482,18 +483,14 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Assistant reply",
+                        "description": "AI response dispatched via SSE events",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "role": {
+                                        "status": {
                                             "type": "string",
-                                            "example": "assistant"
-                                        },
-                                        "content": {
-                                            "type": "string",
-                                            "example": "This video covers..."
+                                            "example": "done"
                                         }
                                     },
                                     "type": "object"
@@ -503,77 +500,40 @@
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 }
             }
         },
         "/v1/media/{mediaId}/chat/stream": {
-            "post": {
+            "get": {
                 "tags": [
                     "Media"
                 ],
-                "summary": "Stream chat with video content (SSE)",
+                "summary": "SSE long connection to receive AI reply tokens",
+                "description": "GET /v1/media/{mediaId}/chat/stream.\n\n建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。\n\n流程：\n 1. 開啟長連線，送出 connected 事件\n 2. 為此連線建立專屬 Swoole Channel\n 3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent\n    （依 userId + mediaId 過濾，只接收屬於自己的事件）\n 4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈",
                 "operationId": "api.v1.media.chat.stream",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
                     }
                 ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "messages"
-                                ],
-                                "properties": {
-                                    "messages": {
-                                        "type": "array",
-                                        "items": {
-                                            "required": [
-                                                "role",
-                                                "content"
-                                            ],
-                                            "properties": {
-                                                "role": {
-                                                    "type": "string",
-                                                    "enum": [
-                                                        "user",
-                                                        "assistant",
-                                                        "system"
-                                                    ],
-                                                    "example": "user"
-                                                },
-                                                "content": {
-                                                    "type": "string",
-                                                    "example": "What is this video about?"
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "minItems": 1
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
                 "responses": {
                     "200": {
-                        "description": "SSE stream of AI reply tokens",
+                        "description": "SSE stream: token / done / error events",
                         "content": {
                             "text/event-stream": {
                                 "schema": {
                                     "type": "string",
-                                    "example": "data: {\"token\":\"Hello\"}\n\ndata: [DONE]\n\n"
+                                    "example": "data: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
                                 }
                             }
                         }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
@@ -726,6 +686,9 @@
                     },
                     {
                         "$ref": "#/components/parameters/limit"
+                    },
+                    {
+                        "$ref": "#/components/parameters/keyword"
                     }
                 ],
                 "responses": {
@@ -1786,6 +1749,58 @@
                 ]
             }
         },
+        "/v1/users/avatar": {
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Upload user avatar",
+                "operationId": "api.v1.users.avatar.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "file"
+                                ],
+                                "properties": {
+                                    "file": {
+                                        "description": "Avatar image (jpeg, png, jpg, webp; max 2 MB)",
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated user profile with avatar URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserResource"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/users": {
             "get": {
                 "tags": [
@@ -2560,6 +2575,11 @@
                         "type": "string",
                         "example": "johndoe"
                     },
+                    "avatar": {
+                        "type": "string",
+                        "example": "https://cdn.example.com/avatars/01JCXYZ.../uuid.jpg",
+                        "nullable": true
+                    },
                     "setting": {
                         "type": "object"
                     }
@@ -2702,6 +2722,17 @@
                 "schema": {
                     "type": "string",
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "keyword": {
+                "name": "keyword",
+                "in": "query",
+                "description": "Filter media by title keyword (case-insensitive partial match)",
+                "required": false,
+                "schema": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "example": "Laravel tutorial"
                 }
             },
             "limit": {

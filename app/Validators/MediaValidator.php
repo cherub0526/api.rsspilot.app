@@ -25,8 +25,9 @@ class MediaValidator extends BaseValidator
     public function setIndexRules(): self
     {
         $this->rules = [
-            'type'  => 'required|string|in:' . implode(',', array_keys(Media::$typeMaps)),
-            'limit' => 'sometimes|integer|min:1|max:10',
+            'type'    => 'required|string|in:' . implode(',', array_keys(Media::$typeMaps)),
+            'limit'   => 'sometimes|integer|min:1|max:10',
+            'keyword' => 'sometimes|nullable|string|max:255',
         ];
 
         return $this;
