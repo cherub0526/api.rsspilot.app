@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Media;
 
+use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Http\Resources\CaptionResource;
+use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
 use App\OpenApi\Schemas\CaptionResource as CaptionSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
@@ -18,6 +20,7 @@ class CaptionsController
 {
     /**
      * @throws InvalidRequestException
+     * @throws NotFoundHttpException
      */
     #[OAT\Get(
         path: '/v1/media/{mediaId}/captions',
@@ -57,8 +60,14 @@ class CaptionsController
     )]
     public function index(Request $request, string $mediaId): AnonymousResourceCollection
     {
-        if (!$media = $request->user()->media()->find($mediaId)) {
-            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        if (!$media = Media::find($mediaId)) {
+            throw new NotFoundHttpException();
+        }
+
+        $source = $media->source()->first();
+
+        if (!$source || !$source->isAccessibleBy($request->user())) {
+            throw new NotFoundHttpException();
         }
 
         $captions = $media->captions()->orderByDesc('primary')->get(['id', 'locale']);
@@ -68,6 +77,7 @@ class CaptionsController
 
     /**
      * @throws InvalidRequestException
+     * @throws NotFoundHttpException
      */
     #[OAT\Get(
         path: '/v1/media/{mediaId}/captions/{captionId}',
@@ -91,12 +101,18 @@ class CaptionsController
     )]
     public function show(Request $request, string $mediaId, string $captionId): CaptionResource
     {
-        if (!$media = $request->user()->media()->find($mediaId)) {
-            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        if (!$media = Media::find($mediaId)) {
+            throw new NotFoundHttpException();
+        }
+
+        $source = $media->source()->first();
+
+        if (!$source || !$source->isAccessibleBy($request->user())) {
+            throw new NotFoundHttpException();
         }
 
         if (!$caption = $media->captions()->find($captionId)) {
-            throw new InvalidRequestException(['caption' => [__('validators.controllers.media.caption_not_found')]]);
+            throw new NotFoundHttpException();
         }
 
         return new CaptionResource($caption);
