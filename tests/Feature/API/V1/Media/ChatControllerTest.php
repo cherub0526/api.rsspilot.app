@@ -485,4 +485,80 @@ class ChatControllerTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.title', 'My session');
     }
+
+    // ================================================================
+    // GET /v1/media/{mediaId}/chat/sessions/{sessionId}  (session show)
+    // ================================================================
+
+    /**
+     * 未登入 → 401.
+     */
+    public function testSessionShowRequiresAuth(): void
+    {
+        $media   = Media::factory()->create();
+        $user    = User::factory()->create();
+        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.show', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(401);
+    }
+
+    /**
+     * session 不屬於此 user → 404.
+     */
+    public function testSessionShowReturns404WhenNotOwned(): void
+    {
+        $this->fakeLogin();
+        $other   = User::factory()->create();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.show', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(404);
+    }
+
+    /**
+     * 正常情境：回傳 session 與訊息列表。
+     */
+    public function testSessionShowReturnsSessionWithMessages(): void
+    {
+        /** @var User $user */
+        $user    = $this->fakeLogin();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'Test session',
+        ]);
+
+        \App\Models\ChatMessage::create([
+            'session_id' => $session->id,
+            'role'       => 'user',
+            'content'    => 'Hello',
+            'created_at' => now(),
+        ]);
+        \App\Models\ChatMessage::create([
+            'session_id' => $session->id,
+            'role'       => 'ai',
+            'content'    => 'World',
+            'created_at' => now(),
+        ]);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.show', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))
+            ->assertStatus(200)
+            ->assertJsonPath('id', $session->id)
+            ->assertJsonPath('title', 'Test session')
+            ->assertJsonCount(2, 'messages')
+            ->assertJsonPath('messages.0.role', 'user')
+            ->assertJsonPath('messages.1.role', 'ai');
+    }
 }

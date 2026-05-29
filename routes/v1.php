@@ -248,6 +248,14 @@ Route::group('/media', function () {
             'uses'       => ChatController::class . '@sessions',
             'middleware' => ['auth'],
         ]);
+        Route::get(
+            '/sessions/{sessionId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
+            [
+                'as'         => 'sessions.show',
+                'uses'       => ChatController::class . '@sessionShow',
+                'middleware' => ['auth'],
+            ]
+        );
     }, ['as' => 'chat']);
 }, ['as' => 'media']);
 

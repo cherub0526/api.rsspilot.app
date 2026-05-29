@@ -30,6 +30,8 @@ use App\Services\Prompts\TemplateFactory;
 use App\OpenApi\Schemas\ChatSessionSchema;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Resources\ChatSessionResource;
+use App\OpenApi\Schemas\ChatSessionDetailSchema;
+use App\Http\Resources\ChatSessionDetailResource;
 use App\Services\Prompts\TemplateCompletionManager;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -342,6 +344,57 @@ class ChatController
             ->paginate(20);
 
         return ChatSessionResource::collection($sessions);
+    }
+
+    /**
+     * GET /v1/media/{mediaId}/chat/sessions/{sessionId}.
+     *
+     * 回傳指定 ChatSession 與其訊息記錄。
+     *
+     * @throws NotFoundHttpException
+     */
+    #[OAT\Get(
+        path: '/v1/media/{mediaId}/chat/sessions/{sessionId}',
+        operationId: 'api.v1.media.chat.sessions.show',
+        summary: 'Get a chat session with its messages',
+        security: [['bearerAuth' => []]],
+        tags: ['Media'],
+        parameters: [
+            new OAT\Parameter(ref: MediaId::class),
+            new OAT\Parameter(
+                name: 'sessionId',
+                in: 'path',
+                required: true,
+                schema: new OAT\Schema(type: 'string', example: '01jsvgt3prpypqwex4wj78bznk')
+            ),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OAT\JsonContent(ref: ChatSessionDetailSchema::class)
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
+    public function sessionShow(Request $request, string $mediaId, string $sessionId): ChatSessionDetailResource
+    {
+        $this->resolveMedia($request, $mediaId);
+
+        $userId = (string) $request->user()->getKey();
+
+        $session = ChatSession::with('messages')
+            ->where('id', $sessionId)
+            ->where('user_id', $userId)
+            ->where('media_id', $mediaId)
+            ->first();
+
+        if (!$session) {
+            throw new NotFoundHttpException();
+        }
+
+        return new ChatSessionDetailResource($session);
     }
 
     /**
