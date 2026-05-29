@@ -153,7 +153,7 @@ class ChatController
     )]
     public function store(Request $request, string $mediaId): ResponseInterface
     {
-        $params = $request->only(['messages']);
+        $params = $request->only(['session_id', 'messages']);
 
         $v = new ChatValidator($params);
         $v->setStoreRules();

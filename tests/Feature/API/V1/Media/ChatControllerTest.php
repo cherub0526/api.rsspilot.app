@@ -106,6 +106,25 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * 傳入非 ULID 格式的 session_id → 422.
+     */
+    public function testStoreValidatesSessionIdFormat(): void
+    {
+        /** @var User $user */
+        $user   = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $uri    = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
+
+        $this->json('POST', $uri, [
+            'session_id' => 'not-a-ulid',
+            'messages'   => [['role' => 'user', 'content' => 'hi']],
+        ])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['session_id']]);
+    }
+
+    /**
      * 3. 合法格式但不存在的 mediaId → 404.
      */
     public function testStoreReturns404ForNonExistentMedia(): void

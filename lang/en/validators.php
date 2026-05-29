@@ -56,6 +56,9 @@ return [
         ],
     ],
     'chat' => [
+        'session_id' => [
+            'invalid' => 'The session ID format is invalid.',
+        ],
         'messages' => [
             'required' => 'The messages field is required.',
             'array'    => 'The messages must be an array.',

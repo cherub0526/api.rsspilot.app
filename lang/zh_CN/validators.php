@@ -56,6 +56,9 @@ return [
         ],
     ],
     'chat' => [
+        'session_id' => [
+            'invalid' => 'Session ID 格式不正确',
+        ],
         'messages' => [
             'required' => '讯息为必填。',
             'array'    => '讯息必须是数组。',

@@ -11,6 +11,7 @@ class ChatValidator extends BaseValidator
         parent::__construct($params);
 
         $this->messages = [
+            'session_id.regex'            => __('validators.chat.session_id.invalid'),
             'messages.required'           => __('validators.chat.messages.required'),
             'messages.array'              => __('validators.chat.messages.array'),
             'messages.min'                => __('validators.chat.messages.min'),
@@ -25,6 +26,7 @@ class ChatValidator extends BaseValidator
     public function setStoreRules(): self
     {
         $this->rules = [
+            'session_id'         => ['nullable', 'string', 'regex:/^[0-7][0-9a-hjkmnp-tv-z]{25}$/'],
             'messages'           => 'required|array|min:1',
             'messages.*.role'    => 'required|string|in:user,assistant,system',
             'messages.*.content' => 'required|string',
