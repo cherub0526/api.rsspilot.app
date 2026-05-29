@@ -22,8 +22,13 @@ class PlanResource extends JsonResource
             'channel_limit' => intval($this->resource->channel_limit),
             'video_limit'   => intval($this->resource->video_limit),
             'chat_limit'    => intval($this->resource->chat_limit),
-            'prices'        => PriceResource::collection($this->whenLoaded('prices')),
-            'paddle'        => new PaddleResource($this->whenLoaded('paddle')),
+            'download_enabled'       => boolval($this->resource->download_enabled),
+            'agent_enabled'          => boolval($this->resource->agent_enabled),
+            'advanced_model_enabled' => boolval($this->resource->advanced_model_enabled),
+            'custom_summary_enabled' => boolval($this->resource->custom_summary_enabled),
+            'ai_quality'             => strval($this->resource->ai_quality),
+            'prices'                 => PriceResource::collection($this->whenLoaded('prices')),
+            'paddle'                 => new PaddleResource($this->whenLoaded('paddle')),
         ];
     }
 }

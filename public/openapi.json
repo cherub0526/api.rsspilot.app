@@ -2742,6 +2742,31 @@
                         "type": "integer",
                         "example": 500
                     },
+                    "download_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "agent_enabled": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "advanced_model_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "custom_summary_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "ai_quality": {
+                        "type": "string",
+                        "enum": [
+                            "pro",
+                            "advanced",
+                            "deep"
+                        ],
+                        "example": "advanced"
+                    },
                     "prices": {
                         "type": "array",
                         "items": {

@@ -23,6 +23,10 @@ class Plan extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    public const string AI_QUALITY_PRO      = 'pro';
+    public const string AI_QUALITY_ADVANCED = 'advanced';
+    public const string AI_QUALITY_DEEP     = 'deep';
+
     public const bool DOWNLOAD_ENABLED_DEFAULT = false;
     public const bool AGENT_ENABLED_DEFAULT = false;
     public const bool ADVANCED_MODEL_ENABLED_DEFAULT = false;
@@ -50,6 +54,7 @@ class Plan extends Model
         'agent_enabled',
         'advanced_model_enabled',
         'custom_summary_enabled',
+        'ai_quality',
         'sort',
         'status',
     ];

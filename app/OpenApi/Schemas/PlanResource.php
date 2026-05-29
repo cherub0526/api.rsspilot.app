@@ -15,6 +15,11 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'channel_limit', type: 'integer', example: 10),
         new OAT\Property(property: 'video_limit', type: 'integer', example: 100),
         new OAT\Property(property: 'chat_limit', type: 'integer', example: 500),
+        new OAT\Property(property: 'download_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'agent_enabled', type: 'boolean', example: false),
+        new OAT\Property(property: 'advanced_model_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'custom_summary_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'ai_quality', type: 'string', enum: ['pro', 'advanced', 'deep'], example: 'advanced'),
         new OAT\Property(
             property: 'prices',
             type: 'array',
