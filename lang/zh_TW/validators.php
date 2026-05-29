@@ -57,7 +57,7 @@ return [
     ],
     'chat' => [
         'session_id' => [
-            'invalid' => 'Session ID 格式不正確',
+            'invalid' => 'Session ID 格式不正確。',
         ],
         'messages' => [
             'required' => '訊息為必填。',

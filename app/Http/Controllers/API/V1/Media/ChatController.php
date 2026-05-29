@@ -109,6 +109,13 @@ class ChatController
                 required: ['messages'],
                 properties: [
                     new OAT\Property(
+                        property: 'session_id',
+                        type: 'string',
+                        nullable: true,
+                        description: 'Existing session ID to continue. If omitted, a new session is created.',
+                        example: '01jsvgt3prpypqwex4wj78bznk'
+                    ),
+                    new OAT\Property(
                         property: 'messages',
                         type: 'array',
                         items: new OAT\Items(
