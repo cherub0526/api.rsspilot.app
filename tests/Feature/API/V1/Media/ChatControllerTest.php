@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Feature\API\V1\Media;
 
-use App\Events\Chat\ChatDoneEvent;
-use App\Events\Chat\ChatTokenEvent;
-use App\Models\Media;
-use App\Models\Setting;
-use App\Models\Source;
-use App\Models\User;
-use Hypervel\Foundation\Testing\RefreshDatabase;
-use Hypervel\Support\Facades\Event;
-use Hypervel\Support\Facades\Http;
 use Tests\TestCase;
+use App\Models\User;
+use App\Models\Media;
+use App\Models\Source;
+use App\Models\Setting;
+use App\Models\ChatSession;
+use App\Events\Chat\ChatDoneEvent;
+use Hypervel\Support\Facades\Http;
+use App\Events\Chat\ChatTokenEvent;
+use Hypervel\Support\Facades\Event;
+use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
  * @internal
@@ -59,7 +60,7 @@ class ChatControllerTest extends TestCase
     public function testStoreRequiresAuth(): void
     {
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => 'test']],
@@ -74,10 +75,10 @@ class ChatControllerTest extends TestCase
     public function testStoreValidatesMessages(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => true]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
-        $uri    = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $uri = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
 
         // 完全缺少 messages 欄位
         $this->json('POST', $uri, [])
@@ -111,10 +112,10 @@ class ChatControllerTest extends TestCase
     public function testStoreValidatesSessionIdFormat(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => true]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
-        $uri    = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $uri = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
 
         $this->json('POST', $uri, [
             'session_id' => 'not-a-ulid',
@@ -148,7 +149,7 @@ class ChatControllerTest extends TestCase
         $this->fakeLogin();
 
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => 'test']],
@@ -161,9 +162,9 @@ class ChatControllerTest extends TestCase
     public function testStoreSucceedsWhenUserSubscribedToSource(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $user->sources()->attach($source->id, ['notify' => true]);
         $this->createUserSetting($user);
@@ -182,9 +183,9 @@ class ChatControllerTest extends TestCase
     public function testStoreSucceedsForFreeSourceMedia(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => true]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
         $this->fakeOpenRouter();
@@ -202,7 +203,7 @@ class ChatControllerTest extends TestCase
     public function testStoreSucceedsForDirectlyOwnedMedia(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $media = Media::factory()->create(); // 無 source_id
 
         $user->media()->attach($media->id);
@@ -223,9 +224,9 @@ class ChatControllerTest extends TestCase
     public function testStoreDispatchesChatTokenAndDoneEvents(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => true]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
 
@@ -266,22 +267,120 @@ class ChatControllerTest extends TestCase
     public function testStoreAcceptsConversationHistory(): void
     {
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['free' => true]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
         $this->fakeOpenRouter('回答在此');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user',      'content' => '第一句話'],
+                ['role' => 'user', 'content' => '第一句話'],
                 ['role' => 'assistant', 'content' => '第一回應'],
-                ['role' => 'user',      'content' => '第二句話'],
+                ['role' => 'user', 'content' => '第二句話'],
             ],
         ])
             ->assertStatus(200)
             ->assertJson(['status' => 'done']);
+    }
+
+    /**
+     * 不傳 session_id → 自動建立 ChatSession，保存 user 與 AI 訊息。
+     */
+    public function testStoreCreatesSessionAndSavesMessages(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter('Hello');
+
+        $response = $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => 'What is this about?']],
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['status', 'session_id']);
+
+        $sessionId = $response->json('session_id');
+
+        $this->assertDatabaseHas('chat_sessions', [
+            'id'       => $sessionId,
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+        ]);
+
+        $this->assertDatabaseHas('chat_messages', [
+            'session_id' => $sessionId,
+            'role'       => 'user',
+            'content'    => 'What is this about?',
+        ]);
+
+        $this->assertDatabaseHas('chat_messages', [
+            'session_id' => $sessionId,
+            'role'       => 'ai',
+            'content'    => 'Hello',
+        ]);
+    }
+
+    /**
+     * 傳入既有合法 session_id → 繼續該 session，不建立新 session。
+     */
+    public function testStoreContinuesExistingSession(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'First question',
+        ]);
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter('World');
+
+        $response = $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => 'Follow-up question']],
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson(['status' => 'done', 'session_id' => $session->id]);
+
+        // 不建立新 session
+        $this->assertDatabaseCount('chat_sessions', 1);
+
+        // 訊息掛在既有 session 下
+        $this->assertDatabaseHas('chat_messages', [
+            'session_id' => $session->id,
+            'role'       => 'user',
+            'content'    => 'Follow-up question',
+        ]);
+    }
+
+    /**
+     * 傳入不屬於此 user 的 session_id → 404.
+     */
+    public function testStoreReturns404ForSessionNotOwnedByUser(): void
+    {
+        $this->fakeLogin();
+        $other = User::factory()->create();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create([
+            'user_id'  => $other->id,
+            'media_id' => $media->id,
+        ]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => 'hi']],
+        ])->assertStatus(404);
     }
 
     // ================================================================
@@ -300,7 +399,7 @@ class ChatControllerTest extends TestCase
     public function testStreamRequiresAuth(): void
     {
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('GET', route('api.v1.media.chat.stream', ['mediaId' => $media->id]))
             ->assertStatus(401);
@@ -325,7 +424,7 @@ class ChatControllerTest extends TestCase
         $this->fakeLogin();
 
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('GET', route('api.v1.media.chat.stream', ['mediaId' => $media->id]))
             ->assertStatus(404);

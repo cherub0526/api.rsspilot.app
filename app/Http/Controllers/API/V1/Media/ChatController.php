@@ -7,6 +7,8 @@ namespace App\Http\Controllers\API\V1\Media;
 use Throwable;
 use App\Models\Media;
 use Hypervel\Http\Request;
+use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
 use Swoole\Coroutine\Channel;
@@ -87,6 +89,50 @@ class ChatController
         }
 
         return $media;
+    }
+
+    /**
+     * 找到或建立 ChatSession。
+     * session_id 有傳 → 驗證所有權；未傳 → 自動建立。
+     *
+     * @throws NotFoundHttpException
+     */
+    private function findOrCreateSession(string $userId, string $mediaId, ?string $sessionId, string $userMessage): ChatSession
+    {
+        if ($sessionId !== null) {
+            $session = ChatSession::where('id', $sessionId)
+                ->where('user_id', $userId)
+                ->where('media_id', $mediaId)
+                ->first();
+
+            if (!$session) {
+                throw new NotFoundHttpException();
+            }
+
+            return $session;
+        }
+
+        $title = mb_substr($userMessage, 0, 50);
+
+        return ChatSession::create([
+            'user_id'  => $userId,
+            'media_id' => $mediaId,
+            'title'    => $title,
+        ]);
+    }
+
+    private function saveMessage(string $sessionId, string $role, string $content): void
+    {
+        if ($content === '') {
+            return;
+        }
+
+        ChatMessage::create([
+            'session_id' => $sessionId,
+            'role'       => $role,
+            'content'    => $content,
+            'created_at' => now(),
+        ]);
     }
 
     /**
@@ -173,6 +219,14 @@ class ChatController
         $userId = (string) $request->user()->getKey();
 
         $userMessage = collect($params['messages'])->last()['content'] ?? '';
+        $session = $this->findOrCreateSession(
+            $userId,
+            $mediaId,
+            $params['session_id'] ?? null,
+            $userMessage
+        );
+        $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_USER, $userMessage);
+        $buffer = '';
 
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
@@ -185,7 +239,7 @@ class ChatController
 
         try {
             $body = $psrResponse->getBody();
-            $buffer = '';
+            $chunkBuffer = '';
 
             while (!$body->eof()) {
                 $chunk = $body->read(1024);
@@ -194,9 +248,9 @@ class ChatController
                     break;
                 }
 
-                $buffer .= $chunk;
-                $lines = explode("\n", $buffer);
-                $buffer = array_pop($lines) ?: '';
+                $chunkBuffer .= $chunk;
+                $lines = explode("\n", $chunkBuffer);
+                $chunkBuffer = array_pop($lines) ?: '';
 
                 foreach ($lines as $line) {
                     $line = trim($line);
@@ -208,27 +262,30 @@ class ChatController
                     $data = substr($line, 6);
 
                     if ($data === '[DONE]') {
+                        $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
                         Event::dispatch(new ChatDoneEvent($userId, $mediaId));
 
-                        return response()->json(['status' => 'done']);
+                        return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
                     }
 
                     $json = json_decode($data, true);
                     $token = $json['choices'][0]['delta']['content'] ?? null;
 
                     if ($token !== null) {
+                        $buffer .= $token;
                         Event::dispatch(new ChatTokenEvent($token, $userId, $mediaId));
                     }
                 }
             }
 
+            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
             Event::dispatch(new ChatErrorEvent($e->getMessage(), $userId, $mediaId));
             throw $e;
         }
 
-        return response()->json(['status' => 'done']);
+        return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
     }
 
     /**
