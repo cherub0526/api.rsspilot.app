@@ -1990,6 +1990,27 @@
                         "bearerAuth": []
                     }
                 ]
+            },
+            "delete": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Delete all chat sessions for the authenticated user",
+                "description": "DELETE /v1/users/sessions.\n\n刪除當前使用者所有 ChatSession（soft delete）。",
+                "operationId": "api.v1.users.sessions.destroy",
+                "responses": {
+                    "204": {
+                        "$ref": "#/components/responses/204"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/users": {
@@ -2909,6 +2930,9 @@
             }
         },
         "responses": {
+            "204": {
+                "description": "No Content"
+            },
             "400": {
                 "description": "Invalid request parameters",
                 "content": {

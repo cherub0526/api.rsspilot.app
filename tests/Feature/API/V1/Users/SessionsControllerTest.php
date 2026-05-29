@@ -159,4 +159,66 @@ class SessionsControllerTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('data.0.media.title', 'My Video');
     }
+
+    // ================================================================
+    // DELETE /v1/users/sessions
+    // ================================================================
+
+    /**
+     * 未登入 → 401.
+     */
+    public function testDestroyRequiresAuth(): void
+    {
+        $this->json('DELETE', route('api.v1.users.sessions.destroy'))
+            ->assertStatus(401);
+    }
+
+    /**
+     * 有 sessions 時全部軟刪除，回傳 204.
+     */
+    public function testDestroyDeletesAllUserSessionsAndReturns204(): void
+    {
+        /** @var User $user */
+        $user  = $this->fakeLogin();
+        $media = Media::factory()->create();
+
+        $session1 = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'S1']);
+        $session2 = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'S2']);
+
+        $this->json('DELETE', route('api.v1.users.sessions.destroy'))
+            ->assertStatus(204);
+
+        $this->assertSoftDeleted('chat_sessions', ['id' => $session1->id]);
+        $this->assertSoftDeleted('chat_sessions', ['id' => $session2->id]);
+    }
+
+    /**
+     * 無 sessions 時仍回傳 204（冪等）。
+     */
+    public function testDestroyIsIdempotentWhenNoSessions(): void
+    {
+        $this->fakeLogin();
+
+        $this->json('DELETE', route('api.v1.users.sessions.destroy'))
+            ->assertStatus(204);
+    }
+
+    /**
+     * 只刪除當前 user 的 sessions，其他 user 的不受影響。
+     */
+    public function testDestroyDoesNotAffectOtherUsersSessions(): void
+    {
+        /** @var User $user */
+        $user  = $this->fakeLogin();
+        $other = User::factory()->create();
+        $media = Media::factory()->create();
+
+        ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'Mine']);
+        $otherSession = ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id, 'title' => 'Other']);
+
+        $this->json('DELETE', route('api.v1.users.sessions.destroy'))
+            ->assertStatus(204);
+
+        $this->assertDatabaseHas('chat_sessions', ['id' => $otherSession->id, 'deleted_at' => null]);
+    }
 }

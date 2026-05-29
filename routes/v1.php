@@ -104,6 +104,12 @@ Route::group('/users', function () {
         'uses'       => UserSessionsController::class . '@index',
         'middleware' => ['auth'],
     ]);
+
+    Route::delete('/sessions', [
+        'as'         => 'sessions.destroy',
+        'uses'       => UserSessionsController::class . '@destroy',
+        'middleware' => ['auth'],
+    ]);
 }, ['as' => 'users']);
 
 Route::group('/settings', function () {
