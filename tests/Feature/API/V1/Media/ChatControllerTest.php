@@ -523,6 +523,23 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * media 不可存取（非 free、未訂閱）→ 404.
+     */
+    public function testSessionShowReturns404WhenMediaNotAccessible(): void
+    {
+        /** @var \App\Models\User $user */
+        $user    = $this->fakeLogin();
+        $source  = Source::factory()->create(['free' => false]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.show', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(404);
+    }
+
+    /**
      * 正常情境：回傳 session 與訊息列表。
      */
     public function testSessionShowReturnsSessionWithMessages(): void
@@ -547,7 +564,7 @@ class ChatControllerTest extends TestCase
             'session_id' => $session->id,
             'role'       => 'ai',
             'content'    => 'World',
-            'created_at' => now(),
+            'created_at' => now()->addSecond(),
         ]);
 
         $this->json('GET', route('api.v1.media.chat.sessions.show', [
