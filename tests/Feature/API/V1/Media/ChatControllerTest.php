@@ -435,4 +435,54 @@ class ChatControllerTest extends TestCase
         $this->json('GET', route('api.v1.media.chat.stream', ['mediaId' => $media->id]))
             ->assertStatus(404);
     }
+
+    // ================================================================
+    // GET /v1/media/{mediaId}/chat/sessions  (sessions index)
+    // ================================================================
+
+    /**
+     * 未登入 → 401.
+     */
+    public function testSessionsIndexRequiresAuth(): void
+    {
+        $media = Media::factory()->create();
+
+        $this->json('GET', route('api.v1.media.chat.sessions.index', ['mediaId' => $media->id]))
+            ->assertStatus(401);
+    }
+
+    /**
+     * 使用者無 media 存取權限 → 404.
+     */
+    public function testSessionsIndexReturns404WhenNoAccess(): void
+    {
+        $this->fakeLogin();
+        $source = Source::factory()->create(['free' => false]);
+        $media  = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.index', ['mediaId' => $media->id]))
+            ->assertStatus(404);
+    }
+
+    /**
+     * 正常情境：只回傳此 user 在此 media 的 sessions。
+     */
+    public function testSessionsIndexReturnsUserSessions(): void
+    {
+        /** @var User $user */
+        $user    = $this->fakeLogin();
+        $other   = User::factory()->create();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $media2  = Media::factory()->create(['source_id' => $source->id]);
+
+        \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'My session']);
+        \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id, 'title' => 'Other user session']);
+        \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media2->id, 'title' => 'Other media session']);
+
+        $this->json('GET', route('api.v1.media.chat.sessions.index', ['mediaId' => $media->id]))
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'My session');
+    }
 }

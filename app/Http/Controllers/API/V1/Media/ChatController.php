@@ -23,11 +23,15 @@ use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use Psr\Http\Message\ResponseInterface;
+use App\Http\Resources\ChatSessionResource;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
+use App\OpenApi\Schemas\ChatSessionSchema;
+use App\OpenApi\Schemas\Paginators;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
 use App\Services\Prompts\TemplateCompletionManager;
+use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class ChatController
 {
@@ -288,6 +292,56 @@ class ChatController
         }
 
         return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
+    }
+
+    /**
+     * GET /v1/media/{mediaId}/chat/sessions.
+     *
+     * 回傳此使用者在此媒體上所有的 ChatSession，依 updated_at 降冪排列。
+     *
+     * @throws NotFoundHttpException
+     */
+    #[OAT\Get(
+        path: '/v1/media/{mediaId}/chat/sessions',
+        operationId: 'api.v1.media.chat.sessions.index',
+        summary: 'List chat sessions for a media',
+        security: [['bearerAuth' => []]],
+        tags: ['Media'],
+        parameters: [
+            new OAT\Parameter(ref: MediaId::class),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(
+                            property: 'data',
+                            type: 'array',
+                            items: new OAT\Items(ref: ChatSessionSchema::class)
+                        ),
+                        new OAT\Property(property: 'links', ref: Paginators\Links::class),
+                        new OAT\Property(property: 'meta', ref: Paginators\Meta::class),
+                    ]
+                )
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
+    public function sessions(Request $request, string $mediaId): AnonymousResourceCollection
+    {
+        $this->resolveMedia($request, $mediaId);
+
+        $userId = (string) $request->user()->getKey();
+
+        $sessions = ChatSession::where('user_id', $userId)
+            ->where('media_id', $mediaId)
+            ->orderByDesc('updated_at')
+            ->paginate(20);
+
+        return ChatSessionResource::collection($sessions);
     }
 
     /**
