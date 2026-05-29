@@ -234,6 +234,7 @@ class ChatController
         );
         $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_USER, $userMessage);
         $buffer = '';
+        $saved  = false;
 
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
@@ -270,6 +271,7 @@ class ChatController
 
                     if ($data === '[DONE]') {
                         $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+                        $saved = true;
                         Event::dispatch(new ChatDoneEvent($userId, $mediaId));
 
                         return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
@@ -285,10 +287,16 @@ class ChatController
                 }
             }
 
-            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+            // @phpstan-ignore-next-line Condition is false if [DONE] was processed
+            if (!$saved) {
+                $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+                $saved = true;
+            }
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
-            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+            if (!$saved) {
+                $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+            }
             Event::dispatch(new ChatErrorEvent($e->getMessage(), $userId, $mediaId));
             throw $e;
         }
@@ -451,18 +459,21 @@ class ChatController
 
             // 用閉包過濾：只處理屬於此 user + media 的事件
             $tokenListener = function (ChatTokenEvent $event) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
                 if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
                     $channel->push(['type' => 'token', 'token' => $event->token]);
                 }
             };
 
             $doneListener = function (ChatDoneEvent $event) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
                 if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
                     $channel->push(['type' => 'done']);
                 }
             };
 
             $errorListener = function (ChatErrorEvent $event) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
                 if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
                     $channel->push(['type' => 'error', 'message' => $event->message]);
                 }

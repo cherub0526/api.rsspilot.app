@@ -389,6 +389,27 @@ class ChatControllerTest extends TestCase
         ])->assertStatus(404);
     }
 
+    /**
+     * 傳入屬於自己但綁定不同 media 的 session_id → 404.
+     */
+    public function testStoreReturns404ForSessionWithWrongMedia(): void
+    {
+        /** @var \App\Models\User $user */
+        $user    = $this->fakeLogin();
+        $source  = Source::factory()->create(['free' => true]);
+        $media1  = Media::factory()->create(['source_id' => $source->id]);
+        $media2  = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media2->id,
+        ]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media1->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => 'hi']],
+        ])->assertStatus(404);
+    }
+
     // ================================================================
     // GET /v1/media/{mediaId}/chat/stream  (stream)
     //
