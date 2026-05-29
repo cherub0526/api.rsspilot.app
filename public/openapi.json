@@ -524,6 +524,44 @@
                         "bearerAuth": []
                     }
                 ]
+            },
+            "delete": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Delete a chat session",
+                "description": "DELETE /v1/media/{mediaId}/chat/sessions/{sessionId}.\n\n刪除指定 ChatSession（soft delete）。",
+                "operationId": "api.v1.media.chat.sessions.destroy",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "01jsvgt3prpypqwex4wj78bznk"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/media/{mediaId}/chat/stream": {
