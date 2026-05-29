@@ -196,6 +196,7 @@ class ChatController
                 content: new OAT\JsonContent(
                     properties: [
                         new OAT\Property(property: 'status', type: 'string', example: 'done'),
+                        new OAT\Property(property: 'session_id', type: 'string', example: '01jsvgt3prpypqwex4wj78bznk'),
                     ]
                 )
             ),
@@ -281,6 +282,7 @@ class ChatController
             $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
+            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
             Event::dispatch(new ChatErrorEvent($e->getMessage(), $userId, $mediaId));
             throw $e;
         }

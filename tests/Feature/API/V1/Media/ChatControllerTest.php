@@ -361,6 +361,12 @@ class ChatControllerTest extends TestCase
             'role'       => 'user',
             'content'    => 'Follow-up question',
         ]);
+
+        $this->assertDatabaseHas('chat_messages', [
+            'session_id' => $session->id,
+            'role'       => 'ai',
+            'content'    => 'World',
+        ]);
     }
 
     /**
