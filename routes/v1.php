@@ -265,6 +265,14 @@ Route::group('/media', function () {
                 'middleware' => ['auth'],
             ]
         );
+        Route::delete(
+            '/sessions/{sessionId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
+            [
+                'as'         => 'sessions.destroy',
+                'uses'       => ChatSessionsController::class . '@destroy',
+                'middleware' => ['auth'],
+            ]
+        );
     }, ['as' => 'chat']);
 }, ['as' => 'media']);
 

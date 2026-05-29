@@ -7,9 +7,11 @@ namespace App\Http\Controllers\API\V1\Media\Chat;
 use Hypervel\Http\Request;
 use App\Models\ChatSession;
 use OpenApi\Attributes as OAT;
+use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\OpenApi\Schemas\Paginators;
+use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Schemas\ChatSessionSchema;
@@ -121,5 +123,53 @@ class SessionsController
         }
 
         return new ChatSessionDetailResource($session);
+    }
+
+    /**
+     * DELETE /v1/media/{mediaId}/chat/sessions/{sessionId}.
+     *
+     * 刪除指定 ChatSession（soft delete）。
+     *
+     * @throws NotFoundHttpException
+     */
+    #[OAT\Delete(
+        path: '/v1/media/{mediaId}/chat/sessions/{sessionId}',
+        operationId: 'api.v1.media.chat.sessions.destroy',
+        summary: 'Delete a chat session',
+        security: [['bearerAuth' => []]],
+        tags: ['Media'],
+        parameters: [
+            new OAT\Parameter(ref: MediaId::class),
+            new OAT\Parameter(
+                name: 'sessionId',
+                in: 'path',
+                required: true,
+                schema: new OAT\Schema(type: 'string', example: '01jsvgt3prpypqwex4wj78bznk')
+            ),
+        ],
+        responses: [
+            new OAT\Response(ref: HttpOk::class, response: 200),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
+    public function destroy(Request $request, string $mediaId, string $sessionId): ResponseInterface
+    {
+        $this->resolveMedia($request, $mediaId);
+
+        $userId = (string) $request->user()->getKey();
+
+        $session = ChatSession::where('id', $sessionId)
+            ->where('user_id', $userId)
+            ->where('media_id', $mediaId)
+            ->first();
+
+        if (!$session) {
+            throw new NotFoundHttpException();
+        }
+
+        $session->delete();
+
+        return response()->make('OK.');
     }
 }
