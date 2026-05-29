@@ -449,6 +449,12 @@
                                     "messages"
                                 ],
                                 "properties": {
+                                    "session_id": {
+                                        "description": "Existing session ID to continue. If omitted, a new session is created.",
+                                        "type": "string",
+                                        "example": "01jsvgt3prpypqwex4wj78bznk",
+                                        "nullable": true
+                                    },
                                     "messages": {
                                         "type": "array",
                                         "items": {
@@ -491,6 +497,10 @@
                                         "status": {
                                             "type": "string",
                                             "example": "done"
+                                        },
+                                        "session_id": {
+                                            "type": "string",
+                                            "example": "01jsvgt3prpypqwex4wj78bznk"
                                         }
                                     },
                                     "type": "object"
@@ -508,6 +518,105 @@
                         "$ref": "#/components/responses/404"
                     }
                 }
+            }
+        },
+        "/v1/media/{mediaId}/chat/sessions": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "List chat sessions for a media",
+                "description": "GET /v1/media/{mediaId}/chat/sessions.\n\n回傳此使用者在此媒體上所有的 ChatSession，依 updated_at 降冪排列。",
+                "operationId": "api.v1.media.chat.sessions.index",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ChatSession"
+                                            }
+                                        },
+                                        "links": {
+                                            "$ref": "#/components/schemas/PaginatorLinks"
+                                        },
+                                        "meta": {
+                                            "$ref": "#/components/schemas/PaginatorMeta"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/media/{mediaId}/chat/sessions/{sessionId}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get a chat session with its messages",
+                "description": "GET /v1/media/{mediaId}/chat/sessions/{sessionId}.\n\n回傳指定 ChatSession 與其訊息記錄。",
+                "operationId": "api.v1.media.chat.sessions.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "01jsvgt3prpypqwex4wj78bznk"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ChatSessionDetail"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/media/{mediaId}/chat/stream": {
@@ -2329,6 +2438,86 @@
                 },
                 "type": "object"
             },
+            "ChatMessage": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "user",
+                            "ai"
+                        ],
+                        "example": "user"
+                    },
+                    "content": {
+                        "type": "string",
+                        "example": "What is this video about?"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:00:00Z"
+                    }
+                },
+                "type": "object"
+            },
+            "ChatSessionDetail": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "What is this video about?",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:00:00Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:05:00Z"
+                    },
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ChatMessage"
+                        }
+                    }
+                },
+                "type": "object"
+            },
+            "ChatSession": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "What is this video about?",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:00:00Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:05:00Z"
+                    }
+                },
+                "type": "object"
+            },
             "MediaResource": {
                 "properties": {
                     "id": {
@@ -2363,6 +2552,14 @@
                     "short_summary": {
                         "type": "string",
                         "example": "A short summary of the video content."
+                    },
+                    "source": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/SourceResource"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "type": "object"
