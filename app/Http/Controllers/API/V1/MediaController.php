@@ -75,11 +75,12 @@ class MediaController extends AbstractController
         }
 
         $user = $request->user();
-        $media = Media::whereHas('source', function ($query) use ($user) {
-            $query->whereHas('userSources', function ($q) use ($user) {
-                $q->where('user_id', $user->getKey());
-            });
-        })
+        $media = Media::with('source')
+            ->whereHas('source', function ($query) use ($user) {
+                $query->whereHas('userSources', function ($q) use ($user) {
+                    $q->where('user_id', $user->getKey());
+                });
+            })
             ->where('type', $params['type'])
             ->when($params['range'] ?? false, function ($query) use ($params) {
                 $date = match ($params['range']) {
@@ -129,7 +130,7 @@ class MediaController extends AbstractController
      */
     public function show(Request $request, string $mediaId): MediaResource
     {
-        $media = Media::find($mediaId);
+        $media = Media::with('source')->find($mediaId);
 
         if (!$media) {
             throw new NotFoundHttpException();

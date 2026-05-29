@@ -24,19 +24,7 @@ class MediaResource extends JsonResource
             'thumbnail'     => strval($this->resource->thumbnail),
             'published_at'  => strval($this->resource->published_at),
             'short_summary' => $this->resource->summary ? $this->resource->summary->text['short_summary'] : '',
-            //            'author'       => $this->whenLoaded('rss', function () {
-            //                return match ($this->resource->type) {
-            //                    Media::TYPE_YOUTUBE => $this->youtube(),
-            //                };
-            //            }),
-        ];
-    }
-
-    protected function youtube(): array
-    {
-        return [
-            'name'   => $this->resource->rss->avatar,
-            'avatar' => $this->resource->rss->avatar,
+            'source'        => $this->whenLoaded('source', fn () => new SourceResource($this->resource->source)),
         ];
     }
 }

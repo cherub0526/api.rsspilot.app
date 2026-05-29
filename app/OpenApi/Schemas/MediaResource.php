@@ -17,6 +17,7 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'thumbnail', type: 'string', example: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'),
         new OAT\Property(property: 'published_at', type: 'string', format: 'date-time', example: '2024-01-01 12:00:00'),
         new OAT\Property(property: 'short_summary', type: 'string', example: 'A short summary of the video content.'),
+        new OAT\Property(property: 'source', ref: SourceResource::class, nullable: true),
     ],
     type: 'object'
 )]
