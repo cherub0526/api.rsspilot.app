@@ -427,99 +427,6 @@
                 ]
             }
         },
-        "/v1/media/{mediaId}/chat": {
-            "post": {
-                "tags": [
-                    "Media"
-                ],
-                "summary": "Send message and broadcast AI tokens via SSE",
-                "description": "POST /v1/media/{mediaId}/chat.\n\n接收使用者訊息，向 OpenRouter 發送串流請求。\n每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。\n回傳時機：完整回應產生後（或發生錯誤時）。",
-                "operationId": "api.v1.media.chat.store",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/mediaId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "messages"
-                                ],
-                                "properties": {
-                                    "session_id": {
-                                        "description": "Existing session ID to continue. If omitted, a new session is created.",
-                                        "type": "string",
-                                        "example": "01jsvgt3prpypqwex4wj78bznk",
-                                        "nullable": true
-                                    },
-                                    "messages": {
-                                        "type": "array",
-                                        "items": {
-                                            "required": [
-                                                "role",
-                                                "content"
-                                            ],
-                                            "properties": {
-                                                "role": {
-                                                    "type": "string",
-                                                    "enum": [
-                                                        "user",
-                                                        "assistant",
-                                                        "system"
-                                                    ],
-                                                    "example": "user"
-                                                },
-                                                "content": {
-                                                    "type": "string",
-                                                    "example": "What is this video about?"
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "minItems": 1
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "AI response dispatched via SSE events",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "done"
-                                        },
-                                        "session_id": {
-                                            "type": "string",
-                                            "example": "01jsvgt3prpypqwex4wj78bznk"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    },
-                    "404": {
-                        "$ref": "#/components/responses/404"
-                    }
-                }
-            }
-        },
         "/v1/media/{mediaId}/chat/sessions": {
             "get": {
                 "tags": [
@@ -643,6 +550,99 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
+        },
+        "/v1/media/{mediaId}/chat": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Send message and broadcast AI tokens via SSE",
+                "description": "POST /v1/media/{mediaId}/chat.\n\n接收使用者訊息，向 OpenRouter 發送串流請求。\n每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。\n回傳時機：完整回應產生後（或發生錯誤時）。",
+                "operationId": "api.v1.media.chat.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "messages"
+                                ],
+                                "properties": {
+                                    "session_id": {
+                                        "description": "Existing session ID to continue. If omitted, a new session is created.",
+                                        "type": "string",
+                                        "example": "01jsvgt3prpypqwex4wj78bznk",
+                                        "nullable": true
+                                    },
+                                    "messages": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "role",
+                                                "content"
+                                            ],
+                                            "properties": {
+                                                "role": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "user",
+                                                        "assistant",
+                                                        "system"
+                                                    ],
+                                                    "example": "user"
+                                                },
+                                                "content": {
+                                                    "type": "string",
+                                                    "example": "What is this video about?"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "minItems": 1
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "AI response dispatched via SSE events",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "done"
+                                        },
+                                        "session_id": {
+                                            "type": "string",
+                                            "example": "01jsvgt3prpypqwex4wj78bznk"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
@@ -1910,6 +1910,50 @@
                 ]
             }
         },
+        "/v1/users/sessions": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "List all chat sessions for the authenticated user",
+                "description": "GET /v1/users/sessions.\n\n列出當前使用者所有 ChatSession，依建立時間降冪排列。\n每筆 session 包含關聯 Media、訊息總數、最後兩則訊息。",
+                "operationId": "api.v1.users.sessions.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/UserChatSession"
+                                            }
+                                        },
+                                        "links": {
+                                            "$ref": "#/components/schemas/PaginatorLinks"
+                                        },
+                                        "meta": {
+                                            "$ref": "#/components/schemas/PaginatorMeta"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/users": {
             "get": {
                 "tags": [
@@ -2749,6 +2793,48 @@
                     },
                     "text": {
                         "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "UserChatSession": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "What is this video about?",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:00:00Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2026-05-29T10:05:00Z"
+                    },
+                    "message_count": {
+                        "type": "integer",
+                        "example": 12
+                    },
+                    "media": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/MediaResource"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "last_messages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ChatMessage"
+                        }
                     }
                 },
                 "type": "object"
