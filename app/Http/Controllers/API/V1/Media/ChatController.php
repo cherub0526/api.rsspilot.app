@@ -5,15 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Media;
 
 use Throwable;
-use App\Models\Media;
 use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
-use Swoole\Coroutine\Channel;
 use OpenApi\Attributes as OAT;
-use Hypervel\Http\StreamOutput;
 use App\Validators\ChatValidator;
 use App\Events\Chat\ChatDoneEvent;
 use App\OpenApi\Responses\Http400;
@@ -21,125 +18,18 @@ use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
-use App\OpenApi\Schemas\Paginators;
 use Hypervel\Support\Facades\Event;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
-use App\OpenApi\Schemas\ChatSessionSchema;
 use App\Exceptions\InvalidRequestException;
-use App\Http\Resources\ChatSessionResource;
-use App\OpenApi\Schemas\ChatSessionDetailSchema;
-use App\Http\Resources\ChatSessionDetailResource;
 use App\Services\Prompts\TemplateCompletionManager;
-use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
+use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
 
 class ChatController
 {
-    /**
-     * 為 SSE streaming response 建立含 CORS 的 headers。
-     *
-     * response()->stream() 透過 Swoole socket 直接送出 headers，
-     * 發生在 CORS middleware after-phase 之前，所以必須在此手動帶入。
-     */
-    private function sseHeaders(Request $request): array
-    {
-        $origin = $request->header('Origin', '');
-        $allowedOrigins = config('cors.allowed_origins', ['*']);
-
-        if (in_array('*', $allowedOrigins)) {
-            $corsOrigin = '*';
-        } elseif (in_array($origin, $allowedOrigins)) {
-            $corsOrigin = $origin;
-        } else {
-            $corsOrigin = '';
-        }
-
-        $headers = [
-            'Cache-Control'     => 'no-cache',
-            'Connection'        => 'keep-alive',
-            'X-Accel-Buffering' => 'no',
-        ];
-
-        if ($corsOrigin !== '') {
-            $headers['Access-Control-Allow-Origin'] = $corsOrigin;
-            if ($corsOrigin !== '*') {
-                $headers['Vary'] = 'Origin';
-            }
-        }
-
-        return $headers;
-    }
-
-    /**
-     * 驗證媒體存取權限，回傳 Media 實例。
-     *
-     * @throws NotFoundHttpException
-     */
-    private function resolveMedia(Request $request, string $mediaId): Media
-    {
-        $media = Media::find($mediaId);
-
-        if (!$media) {
-            throw new NotFoundHttpException();
-        }
-
-        $source = $media->source;
-        $hasAccess = ($source?->free ?? false)
-            || ($source && $request->user()->sources()->where('sources.id', $source->getKey())->exists())
-            || $request->user()->media()->where('media.id', $mediaId)->exists();
-
-        if (!$hasAccess) {
-            throw new NotFoundHttpException();
-        }
-
-        return $media;
-    }
-
-    /**
-     * 找到或建立 ChatSession。
-     * session_id 有傳 → 驗證所有權；未傳 → 自動建立。
-     *
-     * @throws NotFoundHttpException
-     */
-    private function findOrCreateSession(string $userId, string $mediaId, ?string $sessionId, string $userMessage): ChatSession
-    {
-        if ($sessionId !== null) {
-            $session = ChatSession::where('id', $sessionId)
-                ->where('user_id', $userId)
-                ->where('media_id', $mediaId)
-                ->first();
-
-            if (!$session) {
-                throw new NotFoundHttpException();
-            }
-
-            return $session;
-        }
-
-        $title = mb_substr($userMessage, 0, 50);
-
-        return ChatSession::create([
-            'user_id'  => $userId,
-            'media_id' => $mediaId,
-            'title'    => $title,
-        ]);
-    }
-
-    private function saveMessage(string $sessionId, string $role, string $content): void
-    {
-        if ($content === '') {
-            return;
-        }
-
-        ChatMessage::create([
-            'session_id' => $sessionId,
-            'role'       => $role,
-            'content'    => $content,
-            'created_at' => now(),
-        ]);
-    }
+    use ResolvesMedia;
 
     /**
      * POST /v1/media/{mediaId}/chat.
@@ -234,7 +124,7 @@ class ChatController
         );
         $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_USER, $userMessage);
         $buffer = '';
-        $saved  = false;
+        $saved = false;
 
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
@@ -305,205 +195,46 @@ class ChatController
     }
 
     /**
-     * GET /v1/media/{mediaId}/chat/sessions.
-     *
-     * 回傳此使用者在此媒體上所有的 ChatSession，依 updated_at 降冪排列。
-     *
-     * @throws NotFoundHttpException
-     */
-    #[OAT\Get(
-        path: '/v1/media/{mediaId}/chat/sessions',
-        operationId: 'api.v1.media.chat.sessions.index',
-        summary: 'List chat sessions for a media',
-        security: [['bearerAuth' => []]],
-        tags: ['Media'],
-        parameters: [
-            new OAT\Parameter(ref: MediaId::class),
-        ],
-        responses: [
-            new OAT\Response(
-                response: 200,
-                description: 'Successful operation',
-                content: new OAT\JsonContent(
-                    properties: [
-                        new OAT\Property(
-                            property: 'data',
-                            type: 'array',
-                            items: new OAT\Items(ref: ChatSessionSchema::class)
-                        ),
-                        new OAT\Property(property: 'links', ref: Paginators\Links::class),
-                        new OAT\Property(property: 'meta', ref: Paginators\Meta::class),
-                    ]
-                )
-            ),
-            new OAT\Response(ref: Http401::class, response: 401),
-            new OAT\Response(ref: Http404::class, response: 404),
-        ]
-    )]
-    public function sessions(Request $request, string $mediaId): AnonymousResourceCollection
-    {
-        $this->resolveMedia($request, $mediaId);
-
-        $userId = (string) $request->user()->getKey();
-
-        $sessions = ChatSession::where('user_id', $userId)
-            ->where('media_id', $mediaId)
-            ->orderByDesc('updated_at')
-            ->paginate(20);
-
-        return ChatSessionResource::collection($sessions);
-    }
-
-    /**
-     * GET /v1/media/{mediaId}/chat/sessions/{sessionId}.
-     *
-     * 回傳指定 ChatSession 與其訊息記錄。
+     * 找到或建立 ChatSession。
+     * session_id 有傳 → 驗證所有權；未傳 → 自動建立。
      *
      * @throws NotFoundHttpException
      */
-    #[OAT\Get(
-        path: '/v1/media/{mediaId}/chat/sessions/{sessionId}',
-        operationId: 'api.v1.media.chat.sessions.show',
-        summary: 'Get a chat session with its messages',
-        security: [['bearerAuth' => []]],
-        tags: ['Media'],
-        parameters: [
-            new OAT\Parameter(ref: MediaId::class),
-            new OAT\Parameter(
-                name: 'sessionId',
-                in: 'path',
-                required: true,
-                schema: new OAT\Schema(type: 'string', example: '01jsvgt3prpypqwex4wj78bznk')
-            ),
-        ],
-        responses: [
-            new OAT\Response(
-                response: 200,
-                description: 'Successful operation',
-                content: new OAT\JsonContent(ref: ChatSessionDetailSchema::class)
-            ),
-            new OAT\Response(ref: Http401::class, response: 401),
-            new OAT\Response(ref: Http404::class, response: 404),
-        ]
-    )]
-    public function sessionShow(Request $request, string $mediaId, string $sessionId): ChatSessionDetailResource
+    private function findOrCreateSession(string $userId, string $mediaId, ?string $sessionId, string $userMessage): ChatSession
     {
-        $this->resolveMedia($request, $mediaId);
+        if ($sessionId !== null) {
+            $session = ChatSession::where('id', $sessionId)
+                ->where('user_id', $userId)
+                ->where('media_id', $mediaId)
+                ->first();
 
-        $userId = (string) $request->user()->getKey();
+            if (!$session) {
+                throw new NotFoundHttpException();
+            }
 
-        $session = ChatSession::with('messages')
-            ->where('id', $sessionId)
-            ->where('user_id', $userId)
-            ->where('media_id', $mediaId)
-            ->first();
-
-        if (!$session) {
-            throw new NotFoundHttpException();
+            return $session;
         }
 
-        return new ChatSessionDetailResource($session);
+        $title = mb_substr($userMessage, 0, 50);
+
+        return ChatSession::create([
+            'user_id'  => $userId,
+            'media_id' => $mediaId,
+            'title'    => $title,
+        ]);
     }
 
-    /**
-     * GET /v1/media/{mediaId}/chat/stream.
-     *
-     * 建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。
-     *
-     * 流程：
-     *  1. 開啟長連線，送出 connected 事件
-     *  2. 為此連線建立專屬 Swoole Channel
-     *  3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent
-     *     （依 userId + mediaId 過濾，只接收屬於自己的事件）
-     *  4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈
-     *
-     * @throws NotFoundHttpException
-     */
-    #[OAT\Get(
-        path: '/v1/media/{mediaId}/chat/stream',
-        operationId: 'api.v1.media.chat.stream',
-        summary: 'SSE long connection to receive AI reply tokens',
-        tags: ['Media'],
-        parameters: [
-            new OAT\Parameter(ref: MediaId::class),
-        ],
-        responses: [
-            new OAT\Response(
-                response: 200,
-                description: 'SSE stream: token / done / error events',
-                content: new OAT\MediaType(
-                    mediaType: 'text/event-stream',
-                    schema: new OAT\Schema(
-                        type: 'string',
-                        example: "data: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
-                    )
-                )
-            ),
-            new OAT\Response(ref: Http401::class, response: 401),
-            new OAT\Response(ref: Http404::class, response: 404),
-        ]
-    )]
-    public function stream(Request $request, string $mediaId): ResponseInterface
+    private function saveMessage(string $sessionId, string $role, string $content): void
     {
-        $this->resolveMedia($request, $mediaId);
+        if ($content === '') {
+            return;
+        }
 
-        $userId = (string) $request->user()->getKey();
-
-        return response()->stream(function (StreamOutput $output) use ($userId, $mediaId): void {
-            // 送出連線成功事件
-            $output->write('data: ' . json_encode(['type' => 'connected']) . "\n\n");
-
-            // 每條連線有自己的 Channel（緩衝 50 個 payload）
-            $channel = new Channel(50);
-            $active = true;
-
-            // 用閉包過濾：只處理屬於此 user + media 的事件
-            $tokenListener = function (ChatTokenEvent $event) use ($channel, $userId, $mediaId, &$active): void {
-                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
-                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
-                    $channel->push(['type' => 'token', 'token' => $event->token]);
-                }
-            };
-
-            $doneListener = function (ChatDoneEvent $event) use ($channel, $userId, $mediaId, &$active): void {
-                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
-                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
-                    $channel->push(['type' => 'done']);
-                }
-            };
-
-            $errorListener = function (ChatErrorEvent $event) use ($channel, $userId, $mediaId, &$active): void {
-                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
-                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
-                    $channel->push(['type' => 'error', 'message' => $event->message]);
-                }
-            };
-
-            Event::listen(ChatTokenEvent::class, $tokenListener);
-            Event::listen(ChatDoneEvent::class, $doneListener);
-            Event::listen(ChatErrorEvent::class, $errorListener);
-
-            try {
-                while (true) {
-                    // 等待 30 秒；timeout → 發 heartbeat
-                    $payload = $channel->pop(30.0);
-
-                    if ($payload === false) {
-                        if (!$output->write(": heartbeat\n\n")) {
-                            break; // 前端斷線
-                        }
-                        continue;
-                    }
-
-                    if (!$output->write('data: ' . json_encode($payload) . "\n\n")) {
-                        break; // 前端斷線
-                    }
-                }
-            } finally {
-                // 停用監聽器、關閉 Channel
-                $active = false;
-                $channel->close();
-            }
-        }, $this->sseHeaders($request));
+        ChatMessage::create([
+            'session_id' => $sessionId,
+            'role'       => $role,
+            'content'    => $content,
+            'created_at' => now(),
+        ]);
     }
 }

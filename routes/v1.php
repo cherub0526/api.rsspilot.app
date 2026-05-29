@@ -7,14 +7,13 @@ use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\UsersController;
-use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\SourcesController;
-use App\Http\Controllers\API\V1\PopulariesController;
-use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
+use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Auth\GoogleController;
+use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
@@ -23,6 +22,9 @@ use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\Subscriptions\PlansController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
+use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
+use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
+use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 
 Route::group('/feedbacks', function () {
     Route::post('/', [
@@ -240,19 +242,19 @@ Route::group('/media', function () {
         ]);
         Route::get('/stream', [
             'as'         => 'stream',
-            'uses'       => ChatController::class . '@stream',
+            'uses'       => ChatStreamController::class . '@show',
             'middleware' => ['auth'],
         ]);
         Route::get('/sessions', [
             'as'         => 'sessions.index',
-            'uses'       => ChatController::class . '@sessions',
+            'uses'       => ChatSessionsController::class . '@index',
             'middleware' => ['auth'],
         ]);
         Route::get(
             '/sessions/{sessionId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
             [
                 'as'         => 'sessions.show',
-                'uses'       => ChatController::class . '@sessionShow',
+                'uses'       => ChatSessionsController::class . '@show',
                 'middleware' => ['auth'],
             ]
         );
