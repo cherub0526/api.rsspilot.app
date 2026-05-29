@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'daily_digest' => [
+        'subject' => '今日新增了 :count 部影片摘要',
+    ],
+
     'reset_password' => [
         'subject'       => '重設您的 Audistilizer 密碼',
         'greeting'      => '您好，',

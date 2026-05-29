@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'daily_digest' => [
+        'subject' => ':count new video summaries today',
+    ],
+
     'reset_password' => [
         'subject'       => 'Reset Your Audistilizer Password',
         'greeting'      => 'Hello,',
