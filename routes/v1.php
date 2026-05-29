@@ -23,6 +23,7 @@ use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\Subscriptions\PlansController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
+use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 
@@ -95,6 +96,12 @@ Route::group('/users', function () {
     Route::post('/avatar', [
         'as'         => 'avatar.store',
         'uses'       => AvatarController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::get('/sessions', [
+        'as'         => 'sessions.index',
+        'uses'       => UserSessionsController::class . '@index',
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'users']);
