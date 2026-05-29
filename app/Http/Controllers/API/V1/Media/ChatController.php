@@ -21,15 +21,15 @@ use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
+use App\OpenApi\Schemas\Paginators;
 use Hypervel\Support\Facades\Event;
 use Psr\Http\Message\ResponseInterface;
-use App\Http\Resources\ChatSessionResource;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
-use App\OpenApi\Schemas\ChatSessionSchema;
-use App\OpenApi\Schemas\Paginators;
 use App\Services\Prompts\TemplateFactory;
+use App\OpenApi\Schemas\ChatSessionSchema;
 use App\Exceptions\InvalidRequestException;
+use App\Http\Resources\ChatSessionResource;
 use App\Services\Prompts\TemplateCompletionManager;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
