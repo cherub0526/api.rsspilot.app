@@ -16,7 +16,7 @@ class ChatMessageResource extends JsonResource
             'id'         => strval($this->resource->id),
             'role'       => strval($this->resource->getAttribute('role')),
             'content'    => strval($this->resource->getAttribute('content')),
-            'created_at' => strval($this->resource->getAttribute('created_at')),
+            'created_at' => $this->resource->getAttribute('created_at')?->toIso8601String(),
         ];
     }
 }

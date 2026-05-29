@@ -15,8 +15,8 @@ class ChatSessionResource extends JsonResource
         return [
             'id'         => strval($this->resource->id),
             'title'      => strval($this->resource->getAttribute('title') ?? ''),
-            'created_at' => strval($this->resource->getAttribute('created_at')),
-            'updated_at' => strval($this->resource->getAttribute('updated_at')),
+            'created_at' => $this->resource->getAttribute('created_at')?->toIso8601String(),
+            'updated_at' => $this->resource->getAttribute('updated_at')?->toIso8601String(),
         ];
     }
 }
