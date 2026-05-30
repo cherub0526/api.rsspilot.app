@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Sources;
 
+use Exception;
 use Carbon\Carbon;
+use App\Models\User;
 use App\Models\Media;
 use App\Models\Source;
 use Hypervel\Console\Command;
 use Hypervel\Support\Facades\Http;
+use App\Services\SubscriptionService;
 
 class Sync extends Command
 {
@@ -60,7 +63,8 @@ class Sync extends Command
         }
 
         $created = 0;
-        $linked  = 0;
+        $linked = 0;
+        $hasNewMedias = false;
 
         foreach ($entries as $entry) {
             $media = Media::firstOrCreate(
@@ -81,16 +85,31 @@ class Sync extends Command
 
             if ($media->wasRecentlyCreated) {
                 ++$created;
+                $hasNewMedias = true;
                 continue;
             }
 
-            if (! $media->source_id) {
+            if (!$media->source_id) {
                 $media->update(['source_id' => $source->id]);
                 ++$linked;
             }
         }
 
         $source->update(['last_synced_at' => now()]);
+
+        // Push newly created media into each subscribed user's userables so
+        // the 30-day quota is enforced consistently regardless of how media
+        // enters the system (sync vs. user subscribing to a source).
+        if ($hasNewMedias) {
+            $subscriptionService = app(SubscriptionService::class);
+            User::query()
+                ->whereHas('sources', fn ($q) => $q->where('sources.id', $source->id))
+                ->chunkById(100, function ($users) use ($source, $subscriptionService) {
+                    foreach ($users as $user) {
+                        $subscriptionService->syncSourceMediaToUserables($user, $source);
+                    }
+                });
+        }
 
         $this->line("    created={$created} linked={$linked}");
     }
@@ -113,11 +132,11 @@ class Sync extends Command
     {
         try {
             $response = Http::get($url);
-        } catch (\Exception) {
+        } catch (Exception) {
             return null;
         }
 
-        if (! $response->successful()) {
+        if (!$response->successful()) {
             return null;
         }
 
@@ -128,16 +147,16 @@ class Sync extends Command
         }
 
         $namespaces = $xml->getNamespaces(true);
-        $entries    = [];
+        $entries = [];
 
         foreach ($xml->entry as $entry) {
-            $yt    = $entry->children($namespaces['yt'] ?? '');
+            $yt = $entry->children($namespaces['yt'] ?? '');
             $media = $entry->children($namespaces['media'] ?? '');
 
-            $videoId   = (string) ($yt->videoId ?? '');
+            $videoId = (string) ($yt->videoId ?? '');
             $channelId = (string) ($yt->channelId ?? '');
 
-            $thumbnail  = '';
+            $thumbnail = '';
             $mediaGroup = $media->group ?? null;
             if ($mediaGroup) {
                 $thumbAttr = $mediaGroup->thumbnail?->attributes();

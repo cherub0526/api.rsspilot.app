@@ -75,12 +75,8 @@ class MediaController extends AbstractController
         }
 
         $user = $request->user();
-        $media = Media::with('source')
-            ->whereHas('source', function ($query) use ($user) {
-                $query->whereHas('userSources', function ($q) use ($user) {
-                    $q->where('user_id', $user->getKey());
-                });
-            })
+        $media = $user->media()
+            ->with('source')
             ->where('type', $params['type'])
             ->when($params['range'] ?? false, function ($query) use ($params) {
                 $date = match ($params['range']) {
@@ -91,16 +87,16 @@ class MediaController extends AbstractController
                     default => null,
                 };
                 if ($date) {
-                    $query->where('published_at', '>=', $date);
+                    $query->where('media.published_at', '>=', $date);
                 }
             })
             ->when($params['keyword'] ?? false, function ($query) use ($params) {
-                $query->where('title', 'like', '%' . $params['keyword'] . '%')
+                $query->where('media.title', 'like', '%' . $params['keyword'] . '%')
                     ->orWhereHas('source', function ($q) use ($params) {
                         $q->where('title', 'like', '%' . $params['keyword'] . '%');
                     });
             })
-            ->orderByDesc('published_at')
+            ->orderByDesc('media.published_at')
             ->paginate($params['limit'] ?? 12);
 
         return MediaResource::collection($media);

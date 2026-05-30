@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Plan;
+use App\Models\User;
 use App\Models\Price;
+use App\Models\Source;
 use App\Models\Subscription;
 
 class SubscriptionService
@@ -33,5 +35,46 @@ class SubscriptionService
         }
 
         return $plan;
+    }
+
+    /**
+     * Write media from a source into a user's userables, respecting their
+     * 30-day video quota. Only new entries are inserted — existing ones are
+     * never removed — so unsubscribing a source cannot reduce usage count.
+     */
+    public function syncSourceMediaToUserables(User $user, Source $source): void
+    {
+        $betweenDays = [now()->subDays(30)->startOfDay(), now()->endOfDay()];
+
+        $plan = $this->getUserSubscriptionPlan($this->getUserSubscription($user->id));
+
+        $usedCount = $user->media()
+            ->whereBetween('userables.created_at', $betweenDays)
+            ->count();
+
+        $limit = null;
+        if ($plan->video_limit > 0) {
+            $remaining = $plan->video_limit - $usedCount;
+            if ($remaining <= 0) {
+                return;
+            }
+            $limit = $remaining;
+        }
+
+        $query = $source->media()
+            ->whereDoesntHave('users', fn ($q) => $q->where('id', $user->getKey()))
+            ->orderByDesc('published_at');
+
+        if ($limit !== null) {
+            $query->limit($limit);
+        }
+
+        $newIds = $query->pluck('media.id')->all();
+
+        if (empty($newIds)) {
+            return;
+        }
+
+        $user->media()->syncWithoutDetaching($newIds);
     }
 }

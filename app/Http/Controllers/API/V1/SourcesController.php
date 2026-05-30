@@ -14,6 +14,7 @@ use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use Hypervel\Support\Facades\Http;
 use App\Validators\SourceValidator;
+use App\Services\SubscriptionService;
 use App\Http\Resources\SourceResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
@@ -138,13 +139,20 @@ class SourcesController extends AbstractController
             }
         }
 
-        if ($request->user()->sources()->find($source->id)) {
-            $request->user()->sources()->updateExistingPivot($source->id, ['notify' => $notify]);
+        $user = $request->user();
+
+        if ($user->sources()->find($source->id)) {
+            $user->sources()->updateExistingPivot($source->id, ['notify' => $notify]);
         } else {
-            $request->user()->sources()->attach($source->id, ['notify' => $notify]);
+            $user->sources()->attach($source->id, ['notify' => $notify]);
         }
 
-        $attached = $request->user()->sources()->find($source->id);
+        // Sync existing media from this source into userables so the 30-day
+        // quota is tracked correctly. Records are only added, never removed,
+        // preventing the add-then-delete exploit.
+        app(SubscriptionService::class)->syncSourceMediaToUserables($user, $source);
+
+        $attached = $user->sources()->find($source->id);
 
         return response()->json((new SourceResource($attached))->resolve(), 201);
     }

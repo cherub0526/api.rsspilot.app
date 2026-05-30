@@ -336,9 +336,25 @@ class SubscriptionsController extends AbstractController
                             nullable: true,
                             description: 'Present only when status=complete',
                             properties: [
-                                new OAT\Property(property: 'period_start', type: 'string', format: 'date-time', example: '2026-05-30T00:00:00+00:00'),
-                                new OAT\Property(property: 'period_end', type: 'string', format: 'date-time', example: '2026-06-30T00:00:00+00:00'),
-                                new OAT\Property(property: 'amount', type: 'number', format: 'float', nullable: true, example: 9.99),
+                                new OAT\Property(
+                                    property: 'period_start',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    example: '2026-05-30T00:00:00+00:00'
+                                ),
+                                new OAT\Property(
+                                    property: 'period_end',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    example: '2026-06-30T00:00:00+00:00'
+                                ),
+                                new OAT\Property(
+                                    property: 'amount',
+                                    type: 'number',
+                                    format: 'float',
+                                    nullable: true,
+                                    example: 9.99
+                                ),
                                 new OAT\Property(property: 'currency', type: 'string', nullable: true, example: 'USD'),
                             ]
                         ),
@@ -374,14 +390,12 @@ class SubscriptionsController extends AbstractController
 
     public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface
     {
-        $between = [
-            'start' => now()->subDays(30)->startOfDay(),
-            'end'   => now()->endOfDay(),
-        ];
-
         $plan = $subscriptionService->getUserSubscriptionPlan(
             $subscriptionService->getUserSubscription($request->user()->id)
         );
+
+        $user = $request->user();
+        $betweenDays = [now()->subDays(30)->startOfDay(), now()->endOfDay()];
 
         return response()->json([
             'data' => [
@@ -390,8 +404,10 @@ class SubscriptionsController extends AbstractController
                     'media'    => $plan->video_limit,
                 ],
                 'usage' => [
-                    'channels' => $request->user()->rss()->count(),
-                    'media'    => $request->user()->media()->whereBetween('userables.created_at', $between)->count(),
+                    'channels' => $user->sources()->count(),
+                    'media'    => $user->media()
+                        ->whereBetween('userables.created_at', $betweenDays)
+                        ->count(),
                 ],
             ],
         ]);
