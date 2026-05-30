@@ -7,9 +7,7 @@ namespace App\Providers;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Price;
-use App\Observers\PlanObserver;
 use App\Observers\UserObserver;
-use App\Observers\PriceObserver;
 use App\Observers\StripePlanObserver;
 use App\Observers\StripePriceObserver;
 use App\Observers\StripeUserObserver;
@@ -21,9 +19,7 @@ class AppServiceProvider extends ServiceProvider
     {
         User::observe(UserObserver::class);
         User::observe(StripeUserObserver::class);
-        Plan::observe(PlanObserver::class);
         Plan::observe(StripePlanObserver::class);
-        Price::observe(PriceObserver::class);
         Price::observe(StripePriceObserver::class);
         //        Media::observe(MediaObserver::class);
     }
