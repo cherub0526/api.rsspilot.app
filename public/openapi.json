@@ -1644,7 +1644,7 @@
                 "tags": [
                     "Subscriptions"
                 ],
-                "summary": "Initiate a Paddle checkout for a subscription",
+                "summary": "Initiate a checkout for a subscription",
                 "operationId": "api.v1.subscriptions.store",
                 "requestBody": {
                     "required": true,
@@ -1665,6 +1665,15 @@
                                         "description": "Price ID (ULID)",
                                         "type": "string",
                                         "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                    },
+                                    "paymentMethod": {
+                                        "description": "Payment gateway (stripe or paddle, defaults to stripe)",
+                                        "type": "string",
+                                        "enum": [
+                                            "stripe",
+                                            "paddle"
+                                        ],
+                                        "example": "stripe"
                                     }
                                 },
                                 "type": "object"
@@ -1674,59 +1683,21 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Paddle checkout initialization payload",
+                        "description": "Checkout initialization payload",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "paddle": {
+                                        "stripe": {
                                             "properties": {
-                                                "client_token": {
+                                                "publishable_key": {
                                                     "type": "string",
-                                                    "example": "live_..."
+                                                    "example": "pk_live_..."
                                                 },
-                                                "environment": {
+                                                "client_secret": {
+                                                    "description": "Checkout Session client_secret for stripe.initEmbeddedCheckout()",
                                                     "type": "string",
-                                                    "enum": [
-                                                        "sandbox",
-                                                        "production"
-                                                    ],
-                                                    "example": "production"
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "items": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "string",
-                                                "example": "pri_01abc..."
-                                            }
-                                        },
-                                        "customer": {
-                                            "properties": {
-                                                "name": {
-                                                    "type": "string",
-                                                    "example": "John Doe"
-                                                },
-                                                "email": {
-                                                    "type": "string",
-                                                    "format": "email",
-                                                    "example": "john@example.com"
-                                                },
-                                                "id": {
-                                                    "description": "Paddle customer ID (present if user has an existing Paddle account)",
-                                                    "type": "string",
-                                                    "example": "ctm_01abc..."
-                                                }
-                                            },
-                                            "type": "object"
-                                        },
-                                        "customData": {
-                                            "properties": {
-                                                "subscriptionId": {
-                                                    "type": "string",
-                                                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                                    "example": "cs_live_xxx_secret_xxx"
                                                 }
                                             },
                                             "type": "object"
@@ -1785,7 +1756,7 @@
                 },
                 "responses": {
                     "200": {
-                        "$ref": "App\\Http\\Controllers\\API\\V1\\Ok"
+                        "description": "OK"
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
@@ -1814,7 +1785,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "$ref": "App\\Http\\Controllers\\API\\V1\\Ok"
+                        "description": "OK"
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
@@ -1849,12 +1820,10 @@
                                                 "plan": {
                                                     "properties": {
                                                         "channels": {
-                                                            "description": "Channel limit for the plan",
                                                             "type": "integer",
                                                             "example": 10
                                                         },
                                                         "media": {
-                                                            "description": "Video limit for the plan",
                                                             "type": "integer",
                                                             "example": 100
                                                         }
@@ -1864,12 +1833,10 @@
                                                 "usage": {
                                                     "properties": {
                                                         "channels": {
-                                                            "description": "Number of subscribed RSS channels",
                                                             "type": "integer",
                                                             "example": 3
                                                         },
                                                         "media": {
-                                                            "description": "Number of videos added in the past 30 days",
                                                             "type": "integer",
                                                             "example": 42
                                                         }
@@ -1887,6 +1854,66 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/checkout-session": {
+            "get": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Retrieve Stripe Checkout Session status after redirect",
+                "operationId": "api.v1.subscriptions.checkout-session",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "query",
+                        "description": "Stripe Checkout Session ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "cs_live_xxx"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session status",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "open",
+                                                "complete",
+                                                "expired"
+                                            ],
+                                            "example": "complete"
+                                        },
+                                        "customer_email": {
+                                            "type": "string",
+                                            "example": "user@example.com",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "description": "Session not found or does not belong to user"
                     }
                 },
                 "security": [
@@ -2280,6 +2307,23 @@
                         }
                     }
                 },
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/webhook/stripe": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Stripe webhook events",
+                "operationId": "api.v1.webhook.stripe.store",
                 "responses": {
                     "200": {
                         "$ref": "#/components/responses/200"
