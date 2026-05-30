@@ -126,10 +126,18 @@ class StripeSubscriptionService
             'stripe_detail' => $stripeSub->toArray(),
         ]);
 
-        $subscription->fill([
+        $insertData = [
             'status'    => Subscription::STATUS_ACTIVE,
-            'next_date' => Carbon::createFromTimestamp($stripeSub->current_period_end)->toDateTime(),
-        ])->save();
+            'next_date' => Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_end)->toDateTime(),
+        ];
+
+        if (!$subscription->start_date) {
+            $insertData['start_date'] = Carbon::createFromTimestamp(
+                $stripeSub->items->data[0]->current_period_start
+            )->toDateTime();
+        }
+
+        $subscription->fill($insertData)->save();
     }
 
     public function handleInvoicePaid(array $event): void
@@ -149,12 +157,18 @@ class StripeSubscriptionService
 
         $stripe = new StripeClient();
         $stripeSub = $stripe->subscriptions()->retrieve($stripeSubId);
-        $currentPeriodEnd = Carbon::createFromTimestamp($stripeSub->current_period_end);
+        $currentPeriodStart = Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_start);
+        $currentPeriodEnd = Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_end);
 
-        $subscription->fill([
+        $insertData = [
             'status'    => Subscription::STATUS_ACTIVE,
             'next_date' => $currentPeriodEnd->toDateTime(),
-        ])->save();
+        ];
+
+        if (!$subscription->start_date) {
+            $insertData['start_date'] = $currentPeriodStart->toDateTime();
+        }
+        $subscription->fill($insertData)->save();
 
         if (
             !$subscription->transactions()->whereHas(

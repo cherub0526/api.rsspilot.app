@@ -9,10 +9,10 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
-use Stripe\Exception\SignatureVerificationException;
+use App\Exceptions\InvalidRequestException;
 use App\Services\StripeSubscriptionService;
 use App\Http\Controllers\AbstractController;
-use App\Exceptions\InvalidRequestException;
+use Stripe\Exception\SignatureVerificationException;
 
 class StripeController extends AbstractController
 {
@@ -31,7 +31,7 @@ class StripeController extends AbstractController
      */
     public function store(Request $request)
     {
-        $payload   = (string) $request->getBody();
+        $payload = (string) $request->getBody();
         $sigHeader = $request->header('Stripe-Signature', '');
 
         try {
@@ -47,14 +47,14 @@ class StripeController extends AbstractController
         }
 
         $eventData = $event->toArray();
-        $service   = new StripeSubscriptionService();
+        $service = new StripeSubscriptionService();
 
         match ($event->type) {
-            'checkout.session.completed'     => $service->handleCheckoutSessionCompleted($eventData),
-            'invoice.paid'                   => $service->handleInvoicePaid($eventData),
-            'customer.subscription.deleted'  => $service->handleSubscriptionDeleted($eventData),
-            'invoice.payment_failed'         => $service->handleInvoicePaymentFailed($eventData),
-            default                          => null,
+            'checkout.session.completed'    => $service->handleCheckoutSessionCompleted($eventData),
+            'invoice.paid'                  => $service->handleInvoicePaid($eventData),
+            'customer.subscription.deleted' => $service->handleSubscriptionDeleted($eventData),
+            'invoice.payment_failed'        => $service->handleInvoicePaymentFailed($eventData),
+            default                         => null,
         };
 
         return response()->make(self::RESPONSE_OK);
