@@ -15,10 +15,12 @@ class StripePlanObserver
         $stripe = new StripeClient();
 
         try {
-            $product = $stripe->products()->create([
-                'name'        => $plan->title,
-                'description' => $plan->description ?? '',
-            ]);
+            $params = ['name' => $plan->title];
+            if (!empty($plan->description)) {
+                $params['description'] = $plan->description;
+            }
+
+            $product = $stripe->products()->create($params);
 
             $plan->stripe()->create([
                 'foreign_type'  => Plan::class,
