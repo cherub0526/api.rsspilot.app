@@ -20,25 +20,25 @@ class StripeSubscriptionService
 
         $customerId = $this->resolveCustomer($stripe, $user);
 
-        $stripeSubscription = $stripe->subscriptions()->create([
-            'customer'         => $customerId,
-            'items'            => [['price' => $price->stripe->stripe_id]],
-            'payment_behavior' => 'default_incomplete',
-            'payment_settings' => ['save_default_payment_method' => 'on_subscription'],
-            'expand'           => ['latest_invoice.payment_intent'],
-            'metadata'         => ['subscriptionId' => $subscription->id],
+        $session = $stripe->checkoutSessions()->create([
+            'customer'   => $customerId,
+            'ui_mode'    => 'embedded',
+            'mode'       => 'subscription',
+            'line_items' => [['price' => $price->stripe->stripe_id, 'quantity' => 1]],
+            'return_url' => env('STRIPE_RETURN_URL') . '?session_id={CHECKOUT_SESSION_ID}',
+            'metadata'   => ['subscriptionId' => $subscription->id],
         ]);
 
         $subscription->stripe()->create([
             'foreign_type'  => Subscription::class,
-            'stripe_id'     => $stripeSubscription->id,
-            'stripe_detail' => $stripeSubscription->toArray(),
+            'stripe_id'     => $session->id,
+            'stripe_detail' => $session->toArray(),
         ]);
 
         return [
             'stripe' => [
                 'publishable_key' => env('STRIPE_PUBLISHABLE_KEY'),
-                'client_secret'   => $stripeSubscription->latest_invoice->payment_intent->client_secret,
+                'client_secret'   => $session->client_secret,
             ],
         ];
     }
@@ -47,6 +47,59 @@ class StripeSubscriptionService
     {
         $stripe = new StripeClient();
         $stripe->subscriptions()->cancel($subscription->stripe->stripe_id);
+    }
+
+    public function retrieveCheckoutSession(string $sessionId, string $userId): array
+    {
+        $stripe  = new StripeClient();
+        $session = $stripe->checkoutSessions()->retrieve($sessionId);
+
+        // 確認 session 屬於該 user 的訂閱，防止越權查詢
+        $subscriptionId = $session->metadata['subscriptionId'] ?? null;
+        if (
+            !$subscriptionId
+            || !Subscription::query()
+                ->where('id', $subscriptionId)
+                ->where('user_id', $userId)
+                ->exists()
+        ) {
+            throw new \App\Exceptions\NotFoundHttpException();
+        }
+
+        return [
+            'status'         => $session->status,
+            'customer_email' => $session->customer_details?->email,
+        ];
+    }
+
+    public function handleCheckoutSessionCompleted(array $event): void
+    {
+        $session        = $event['data']['object'];
+        $subscriptionId = $session['metadata']['subscriptionId'] ?? null;
+        $stripeSubId    = $session['subscription'] ?? null;
+
+        if (!$subscriptionId || !$stripeSubId) {
+            return;
+        }
+
+        if (!$subscription = Subscription::query()->find($subscriptionId)) {
+            return;
+        }
+
+        $stripe    = new StripeClient();
+        $stripeSub = $stripe->subscriptions()->retrieve($stripeSubId);
+
+        // 將 stripe 記錄從 Checkout Session ID 更新為 Stripe Subscription ID，
+        // 讓後續 invoice.paid / subscription.deleted 事件能正確找到對應訂閱。
+        $subscription->stripe()->update([
+            'stripe_id'     => $stripeSubId,
+            'stripe_detail' => $stripeSub->toArray(),
+        ]);
+
+        $subscription->fill([
+            'status'    => Subscription::STATUS_ACTIVE,
+            'next_date' => Carbon::createFromTimestamp($stripeSub->current_period_end)->toDateTime(),
+        ])->save();
     }
 
     public function handleInvoicePaid(array $event): void

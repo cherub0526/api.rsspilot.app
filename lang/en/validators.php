@@ -20,10 +20,11 @@ return [
             'not_found'   => 'Source not found.',
         ],
         'subscription' => [
-            'plan_not_found'    => 'Plan not found.',
-            'price_not_found'   => 'Price not found.',
-            'price_not_in_plan' => 'Price not found in plan.',
-            'not_found'         => 'Subscription not found.',
+            'plan_not_found'       => 'Plan not found.',
+            'price_not_found'      => 'Price not found.',
+            'price_not_in_plan'    => 'Price not found in plan.',
+            'not_found'            => 'Subscription not found.',
+            'session_id_required'  => 'session_id is required.',
         ],
         'webhook' => [
             'paddle' => [

@@ -50,6 +50,7 @@ class StripeController extends AbstractController
         $service   = new StripeSubscriptionService();
 
         match ($event->type) {
+            'checkout.session.completed'     => $service->handleCheckoutSessionCompleted($eventData),
             'invoice.paid'                   => $service->handleInvoicePaid($eventData),
             'customer.subscription.deleted'  => $service->handleSubscriptionDeleted($eventData),
             'invoice.payment_failed'         => $service->handleInvoicePaymentFailed($eventData),

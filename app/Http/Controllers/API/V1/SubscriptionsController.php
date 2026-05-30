@@ -97,33 +97,14 @@ class SubscriptionsController extends AbstractController
                 response: 200,
                 description: 'Checkout initialization payload',
                 content: new OAT\JsonContent(
-                    oneOf: [
-                        new OAT\Schema(
+                    properties: [
+                        new OAT\Property(
+                            property: 'stripe',
                             properties: [
-                                new OAT\Property(
-                                    property: 'stripe',
-                                    properties: [
-                                        new OAT\Property(property: 'publishable_key', type: 'string', example: 'pk_live_...'),
-                                        new OAT\Property(property: 'client_secret', type: 'string', example: 'pi_xxx_secret_xxx'),
-                                    ],
-                                    type: 'object'
-                                ),
-                            ]
-                        ),
-                        new OAT\Schema(
-                            properties: [
-                                new OAT\Property(
-                                    property: 'paddle',
-                                    properties: [
-                                        new OAT\Property(property: 'client_token', type: 'string', example: 'live_...'),
-                                        new OAT\Property(property: 'environment', type: 'string', enum: ['sandbox', 'production']),
-                                    ],
-                                    type: 'object'
-                                ),
-                                new OAT\Property(property: 'items', type: 'array', items: new OAT\Items(type: 'string')),
-                                new OAT\Property(property: 'customer', type: 'object'),
-                                new OAT\Property(property: 'customData', type: 'object'),
-                            ]
+                                new OAT\Property(property: 'publishable_key', type: 'string', example: 'pk_live_...'),
+                                new OAT\Property(property: 'client_secret', description: 'Checkout Session client_secret for stripe.initEmbeddedCheckout()', type: 'string', example: 'cs_live_xxx_secret_xxx'),
+                            ],
+                            type: 'object'
                         ),
                     ]
                 )
@@ -304,6 +285,52 @@ class SubscriptionsController extends AbstractController
             new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
+    #[OAT\Get(
+        path: '/v1/subscriptions/checkout-session',
+        operationId: 'api.v1.subscriptions.checkout-session',
+        summary: 'Retrieve Stripe Checkout Session status after redirect',
+        security: [['bearerAuth' => []]],
+        tags: ['Subscriptions'],
+        parameters: [
+            new OAT\Parameter(
+                name: 'session_id',
+                in: 'query',
+                required: true,
+                description: 'Stripe Checkout Session ID',
+                schema: new OAT\Schema(type: 'string', example: 'cs_live_xxx')
+            ),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Session status',
+                content: new OAT\JsonContent(
+                    properties: [
+                        new OAT\Property(property: 'status', type: 'string', enum: ['open', 'complete', 'expired'], example: 'complete'),
+                        new OAT\Property(property: 'customer_email', type: 'string', nullable: true, example: 'user@example.com'),
+                    ]
+                )
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(response: 404, description: 'Session not found or does not belong to user'),
+        ]
+    )]
+    public function checkoutSession(Request $request): ResponseInterface
+    {
+        $sessionId = (string) $request->input('session_id', '');
+
+        if (!$sessionId) {
+            throw new InvalidRequestException(['session_id' => [__('validators.controllers.subscription.session_id_required')]]);
+        }
+
+        $result = (new StripeSubscriptionService())->retrieveCheckoutSession(
+            $sessionId,
+            $request->user()->id
+        );
+
+        return response()->json($result);
+    }
+
     public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface
     {
         $between = [

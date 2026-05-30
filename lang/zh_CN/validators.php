@@ -20,10 +20,11 @@ return [
             'not_found'   => '找不到指定的来源。',
         ],
         'subscription' => [
-            'plan_not_found'    => '找不到指定的方案。',
-            'price_not_found'   => '找不到指定的价格。',
-            'price_not_in_plan' => '方案中找不到指定的价格。',
-            'not_found'         => '找不到指定的订阅。',
+            'plan_not_found'      => '找不到指定的方案。',
+            'price_not_found'     => '找不到指定的价格。',
+            'price_not_in_plan'   => '方案中找不到指定的价格。',
+            'not_found'           => '找不到指定的订阅。',
+            'session_id_required' => 'session_id 为必填。',
         ],
         'webhook' => [
             'paddle' => [

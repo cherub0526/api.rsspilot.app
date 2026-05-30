@@ -308,6 +308,12 @@ Route::group('/subscriptions', function () {
         'middleware' => ['auth'],
     ]);
 
+    Route::get('/checkout-session', [
+        'as'         => 'checkout-session',
+        'uses'       => SubscriptionsController::class . '@checkoutSession',
+        'middleware' => ['auth'],
+    ]);
+
     Route::get('/usage', [
         'as'         => 'usage',
         'uses'       => SubscriptionsController::class . '@usage',

@@ -39,4 +39,9 @@ class StripeClient
     {
         return $this->client->invoices;
     }
+
+    public function checkoutSessions(): \Stripe\Service\Checkout\SessionService
+    {
+        return $this->client->checkout->sessions;
+    }
 }
