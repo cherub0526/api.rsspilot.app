@@ -17,18 +17,13 @@ trait ResolvesMedia
      */
     private function resolveMedia(Request $request, string $mediaId): Media
     {
-        $media = Media::find($mediaId);
+        $media = Media::with('source')->find($mediaId);
 
         if (!$media) {
             throw new NotFoundHttpException();
         }
 
-        $source = $media->source;
-        $hasAccess = ($source?->free ?? false)
-            || ($source && $request->user()->sources()->where('sources.id', $source->getKey())->exists())
-            || $request->user()->media()->where('media.id', $mediaId)->exists();
-
-        if (!$hasAccess) {
+        if (!$media->isAccessibleBy($request->user())) {
             throw new NotFoundHttpException();
         }
 

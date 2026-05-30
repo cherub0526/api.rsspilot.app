@@ -13,7 +13,7 @@ use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 /**
- * @property-read Source|null $source
+ * @property-read null|Source $source
  */
 class Media extends Model
 {
@@ -111,6 +111,12 @@ class Media extends Model
     public function chatSessions(): HasMany
     {
         return $this->hasMany(ChatSession::class, 'media_id', 'id');
+    }
+
+    public function isAccessibleBy(User $user): bool
+    {
+        return ($this->source?->free ?? false)
+            || $this->users()->where('users.id', $user->getKey())->exists();
     }
 
     public function users(): BelongsToMany

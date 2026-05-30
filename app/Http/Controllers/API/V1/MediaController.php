@@ -132,12 +132,7 @@ class MediaController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        $source = $media->source;
-
-        $hasAccess = ($source?->free ?? false)
-            || ($source && $request->user()->media()->where('id', $media->getKey())->exists());
-
-        if (!$hasAccess) {
+        if (!$media->isAccessibleBy($request->user())) {
             throw new NotFoundHttpException();
         }
 
