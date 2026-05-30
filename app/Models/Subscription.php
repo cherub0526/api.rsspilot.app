@@ -30,6 +30,8 @@ class Subscription extends Model
 
     public const string PAYMENT_METHOD_PADDLE = 'paddle';
 
+    public const string PAYMENT_METHOD_STRIPE = 'stripe';
+
     public static array $statusMaps = [
         self::STATUS_PAYING   => '付款中',
         self::STATUS_TRIAL    => '試用中',
@@ -39,6 +41,7 @@ class Subscription extends Model
 
     public static array $paymentMethodMaps = [
         self::PAYMENT_METHOD_PADDLE => 'Paddle',
+        self::PAYMENT_METHOD_STRIPE => 'Stripe',
     ];
 
     protected ?string $table = 'subscriptions';
@@ -93,6 +96,12 @@ class Subscription extends Model
     public function paddle(): Builder|HasOne
     {
         return $this->hasOne(Paddle::class, 'foreign_id', 'id')
+            ->where('foreign_type', self::class);
+    }
+
+    public function stripe(): Builder|HasOne
+    {
+        return $this->hasOne(Stripe::class, 'foreign_id', 'id')
             ->where('foreign_type', self::class);
     }
 

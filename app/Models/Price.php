@@ -58,4 +58,9 @@ class Price extends Model
     {
         return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
+
+    public function stripe(): Builder|HasOne
+    {
+        return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
 }

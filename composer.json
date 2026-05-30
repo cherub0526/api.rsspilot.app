@@ -24,6 +24,7 @@
     "league/flysystem-aws-s3-v3": "^3.0",
     "paddlehq/paddle-php-sdk": "^1.14",
     "php-http/guzzle7-adapter": "^1.1",
+    "stripe/stripe-php": "^20.2",
     "zircote/swagger-php": "^6.0"
   },
   "require-dev": {

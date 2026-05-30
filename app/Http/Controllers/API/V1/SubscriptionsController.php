@@ -4,27 +4,23 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1;
 
-use Carbon\Carbon;
 use App\Models\Plan;
 use App\Models\Price;
 use Hypervel\Http\Request;
 use App\Models\Subscription;
-use App\Services\PaddleClient;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
-use Paddle\SDK\Exceptions\ApiError;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;
+use App\Services\PaddleSubscriptionService;
+use App\Services\StripeSubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
-use Paddle\SDK\Entities\Shared\TransactionStatus;
 use App\OpenApi\Schemas\PlanResource as PlanSchema;
-use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
-use Paddle\SDK\Notifications\Entities\Payout\PayoutStatus;
 use App\OpenApi\Parameters\Path\SubscriptionId as SubscriptionIdParam;
 
 class SubscriptionsController extends AbstractController
@@ -47,7 +43,7 @@ class SubscriptionsController extends AbstractController
     public function index(Request $request, SubscriptionService $subscriptionService): PlanResource
     {
         $subscription = $subscriptionService->getUserSubscription($request->user()->id);
-        $plan = $subscriptionService->getUserSubscriptionPlan($subscription);
+        $plan         = $subscriptionService->getUserSubscriptionPlan($subscription);
 
         $plan->load([
             'prices' => function ($builder) use ($subscription) {
@@ -66,7 +62,7 @@ class SubscriptionsController extends AbstractController
     #[OAT\Post(
         path: '/v1/subscriptions',
         operationId: 'api.v1.subscriptions.store',
-        summary: 'Initiate a Paddle checkout for a subscription',
+        summary: 'Initiate a checkout for a subscription',
         security: [['bearerAuth' => []]],
         requestBody: new OAT\RequestBody(
             required: true,
@@ -85,6 +81,13 @@ class SubscriptionsController extends AbstractController
                         type: 'string',
                         example: '01JCXYZ123456789ABCDEFGHIJ'
                     ),
+                    new OAT\Property(
+                        property: 'paymentMethod',
+                        description: 'Payment gateway (stripe or paddle, defaults to stripe)',
+                        type: 'string',
+                        enum: ['stripe', 'paddle'],
+                        example: 'stripe'
+                    ),
                 ]
             )
         ),
@@ -92,54 +95,35 @@ class SubscriptionsController extends AbstractController
         responses: [
             new OAT\Response(
                 response: 200,
-                description: 'Paddle checkout initialization payload',
+                description: 'Checkout initialization payload',
                 content: new OAT\JsonContent(
-                    properties: [
-                        new OAT\Property(
-                            property: 'paddle',
-                            properties: [
-                                new OAT\Property(property: 'client_token', type: 'string', example: 'live_...'),
-                                new OAT\Property(property: 'environment', type: 'string', enum: [
-                                    'sandbox',
-                                    'production',
-                                ], example: 'production'),
-                            ],
-                            type: 'object'
-                        ),
-                        new OAT\Property(
-                            property: 'items',
-                            type: 'array',
-                            items: new OAT\Items(type: 'string', example: 'pri_01abc...')
-                        ),
-                        new OAT\Property(
-                            property: 'customer',
-                            properties: [
-                                new OAT\Property(property: 'name', type: 'string', example: 'John Doe'),
-                                new OAT\Property(
-                                    property: 'email',
-                                    type: 'string',
-                                    format: 'email',
-                                    example: 'john@example.com'
-                                ),
-                                new OAT\Property(
-                                    property: 'id',
-                                    description: 'Paddle customer ID (present if user has an existing Paddle account)',
-                                    type: 'string',
-                                    example: 'ctm_01abc...'
-                                ),
-                            ],
-                            type: 'object'
-                        ),
-                        new OAT\Property(
-                            property: 'customData',
+                    oneOf: [
+                        new OAT\Schema(
                             properties: [
                                 new OAT\Property(
-                                    property: 'subscriptionId',
-                                    type: 'string',
-                                    example: '01JCXYZ123456789ABCDEFGHIJ'
+                                    property: 'stripe',
+                                    properties: [
+                                        new OAT\Property(property: 'publishable_key', type: 'string', example: 'pk_live_...'),
+                                        new OAT\Property(property: 'client_secret', type: 'string', example: 'pi_xxx_secret_xxx'),
+                                    ],
+                                    type: 'object'
                                 ),
-                            ],
-                            type: 'object'
+                            ]
+                        ),
+                        new OAT\Schema(
+                            properties: [
+                                new OAT\Property(
+                                    property: 'paddle',
+                                    properties: [
+                                        new OAT\Property(property: 'client_token', type: 'string', example: 'live_...'),
+                                        new OAT\Property(property: 'environment', type: 'string', enum: ['sandbox', 'production']),
+                                    ],
+                                    type: 'object'
+                                ),
+                                new OAT\Property(property: 'items', type: 'array', items: new OAT\Items(type: 'string')),
+                                new OAT\Property(property: 'customer', type: 'object'),
+                                new OAT\Property(property: 'customData', type: 'object'),
+                            ]
                         ),
                     ]
                 )
@@ -150,7 +134,7 @@ class SubscriptionsController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['planId', 'priceId']);
+        $params = $request->only(['planId', 'priceId', 'paymentMethod']);
 
         $v = new SubscriptionValidator($params);
         $v->setStoreRules();
@@ -175,30 +159,23 @@ class SubscriptionsController extends AbstractController
             );
         }
 
+        $paymentMethod = $params['paymentMethod'] ?? Subscription::PAYMENT_METHOD_STRIPE;
+
         $subscription = $request->user()->subscriptions()->create([
             'plan_id'        => $plan->id,
             'price_id'       => $price->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'payment_method' => $paymentMethod,
             'status'         => Subscription::STATUS_PAYING,
         ]);
 
-        $data = [
-            'paddle' => [
-                'client_token' => env('PADDLE_CLIENT_TOKEN'),
-                'environment'  => env('PADDLE_SANDBOX') ? 'sandbox' : 'production',
-            ],
-            'items'    => [$price->paddle->paddle_id],
-            'customer' => [
-                'name'  => $request->user()->name,
-                'email' => $request->user()->email,
-            ],
-            'customData' => [
-                'subscriptionId' => $subscription->id,
-            ],
-        ];
-
-        if ($request->user()->paddle) {
-            $data['customer']['id'] = $request->user()->paddle->paddle_customer_id;
+        if ($paymentMethod === Subscription::PAYMENT_METHOD_STRIPE) {
+            $data = (new StripeSubscriptionService())->createCheckout(
+                $request->user(), $plan, $price, $subscription
+            );
+        } else {
+            $data = (new PaddleSubscriptionService())->createCheckout(
+                $request->user(), $plan, $price, $subscription
+            );
         }
 
         return response()->json($data);
@@ -231,7 +208,7 @@ class SubscriptionsController extends AbstractController
             new OAT\Parameter(ref: SubscriptionIdParam::class),
         ],
         responses: [
-            new OAT\Response(ref: Ok::class, response: 200),
+            new OAT\Response(response: 200, description: 'OK'),
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
         ]
@@ -244,36 +221,13 @@ class SubscriptionsController extends AbstractController
             );
         }
 
-        $params = $request->all();
+        $confirmed = (new PaddleSubscriptionService())->confirm(
+            $subscription,
+            $request->input('transaction_id', '')
+        );
 
-        $paddle = new PaddleClient();
-        try {
-            $paddleTransaction = $paddle->transactions()->get($params['transaction_id']);
-
-            if (
-                $paddleTransaction->status->getValue() === PayoutStatus::Paid()->getValue()
-                || $paddleTransaction->status->getValue() === TransactionStatus::Completed()->getValue()
-            ) {
-                $billedAt = Carbon::parse($paddleTransaction->billedAt);
-
-                $items = $paddleTransaction->items;
-
-                $subscription->fill([
-                    'status'     => Subscription::STATUS_ACTIVE,
-                    'start_date' => $billedAt->clone()->toDateTime(),
-                    'next_date'  => $billedAt->clone()->add(
-                        sprintf(
-                            '%d %s',
-                            $items[0]->price->billingCycle->frequency,
-                            $items[0]->price->billingCycle->interval
-                        )
-                    ),
-                ])->save();
-
-                return response()->make(self::RESPONSE_OK);
-            }
-        } catch (ApiError $e) {
-        } catch (MalformedResponse $e) {
+        if ($confirmed) {
+            return response()->make(self::RESPONSE_OK);
         }
     }
 
@@ -290,7 +244,7 @@ class SubscriptionsController extends AbstractController
             new OAT\Parameter(ref: SubscriptionIdParam::class),
         ],
         responses: [
-            new OAT\Response(ref: Ok::class, response: 200),
+            new OAT\Response(response: 200, description: 'OK'),
             new OAT\Response(ref: Http401::class, response: 401),
             new OAT\Response(response: 404, description: 'Subscription not found'),
         ]
@@ -301,8 +255,11 @@ class SubscriptionsController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        $paddle = new PaddleClient();
-        $paddle->subscriptions()->cancel($subscription->paddle->paddle_id);
+        if ($subscription->payment_method === Subscription::PAYMENT_METHOD_STRIPE) {
+            (new StripeSubscriptionService())->cancel($subscription);
+        } else {
+            (new PaddleSubscriptionService())->cancel($subscription);
+        }
 
         return response()->make(self::RESPONSE_OK);
     }
@@ -325,36 +282,16 @@ class SubscriptionsController extends AbstractController
                                 new OAT\Property(
                                     property: 'plan',
                                     properties: [
-                                        new OAT\Property(
-                                            property: 'channels',
-                                            description: 'Channel limit for the plan',
-                                            type: 'integer',
-                                            example: 10
-                                        ),
-                                        new OAT\Property(
-                                            property: 'media',
-                                            description: 'Video limit for the plan',
-                                            type: 'integer',
-                                            example: 100
-                                        ),
+                                        new OAT\Property(property: 'channels', type: 'integer', example: 10),
+                                        new OAT\Property(property: 'media', type: 'integer', example: 100),
                                     ],
                                     type: 'object'
                                 ),
                                 new OAT\Property(
                                     property: 'usage',
                                     properties: [
-                                        new OAT\Property(
-                                            property: 'channels',
-                                            description: 'Number of subscribed RSS channels',
-                                            type: 'integer',
-                                            example: 3
-                                        ),
-                                        new OAT\Property(
-                                            property: 'media',
-                                            description: 'Number of videos added in the past 30 days',
-                                            type: 'integer',
-                                            example: 42
-                                        ),
+                                        new OAT\Property(property: 'channels', type: 'integer', example: 3),
+                                        new OAT\Property(property: 'media', type: 'integer', example: 42),
                                     ],
                                     type: 'object'
                                 ),
@@ -377,6 +314,7 @@ class SubscriptionsController extends AbstractController
         $plan = $subscriptionService->getUserSubscriptionPlan(
             $subscriptionService->getUserSubscription($request->user()->id)
         );
+
         return response()->json([
             'data' => [
                 'plan' => [

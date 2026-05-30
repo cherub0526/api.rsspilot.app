@@ -18,6 +18,7 @@ use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
+use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\Subscriptions\PlansController;
@@ -330,6 +331,14 @@ Route::group('/webhook', function () {
         [
             'as'   => 'paddle.store',
             'uses' => PaddleController::class . '@store',
+        ]
+    );
+
+    Route::post(
+        '/stripe',
+        [
+            'as'   => 'stripe.store',
+            'uses' => StripeController::class . '@store',
         ]
     );
 

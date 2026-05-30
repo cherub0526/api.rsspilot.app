@@ -175,8 +175,15 @@ class SubscriptionsControllerTest extends TestCase
             __('validators.controllers.subscription.price_not_in_plan')
         );
 
-        // Valid request for a new customer
-        $params = ['planId' => $this->basicPlan->id, 'priceId' => $this->basicMonthlyPrice->id];
+        // Invalid paymentMethod
+        $params = ['planId' => $this->basicPlan->id, 'priceId' => $this->basicMonthlyPrice->id, 'paymentMethod' => 'unknown'];
+        $this->json('POST', $uri, $params)->assertStatus(422)->assertJsonPath(
+            'messages.paymentMethod.0',
+            __('validators.subscription.paymentMethod.in')
+        );
+
+        // Valid request with explicit paymentMethod=paddle
+        $params = ['planId' => $this->basicPlan->id, 'priceId' => $this->basicMonthlyPrice->id, 'paymentMethod' => 'paddle'];
         $this->json('POST', $uri, $params)
             ->assertStatus(200)
             ->assertJsonStructure([
@@ -189,10 +196,11 @@ class SubscriptionsControllerTest extends TestCase
             ->assertJsonPath('customer.email', $user->email);
 
         $this->assertDatabaseHas('subscriptions', [
-            'user_id'  => $user->id,
-            'plan_id'  => $this->basicPlan->id,
-            'price_id' => $this->basicMonthlyPrice->id,
-            'status'   => Subscription::STATUS_PAYING,
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'status'         => Subscription::STATUS_PAYING,
         ]);
     }
 

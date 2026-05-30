@@ -105,6 +105,11 @@ class User extends Authenticatable
         return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
+    public function stripe(): Builder|HasOne
+    {
+        return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class, 'user_id', 'id');

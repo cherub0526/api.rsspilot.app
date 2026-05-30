@@ -127,6 +127,9 @@ return [
             'required' => '价格 ID 为必填。',
             'string'   => '价格 ID 必须是字符串。',
         ],
+        'paymentMethod' => [
+            'in' => '付款方式必须是 stripe 或 paddle。',
+        ],
     ],
     'user' => [
         'name' => [

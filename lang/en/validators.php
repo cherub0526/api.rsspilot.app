@@ -127,6 +127,9 @@ return [
             'required' => 'Price ID is required.',
             'string'   => 'Price ID must be a string.',
         ],
+        'paymentMethod' => [
+            'in' => 'Payment method must be stripe or paddle.',
+        ],
     ],
     'user' => [
         'name' => [
