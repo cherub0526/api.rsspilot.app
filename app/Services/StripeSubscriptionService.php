@@ -6,11 +6,13 @@ namespace App\Services;
 
 use Carbon\Carbon;
 use App\Models\Plan;
-use App\Models\Price;
 use App\Models\User;
-use App\Models\Subscription;
+use App\Models\Price;
+use RuntimeException;
+use App\Models\Stripe;
 use App\Models\Transaction;
-use Exception;
+use App\Models\Subscription;
+use App\Exceptions\NotFoundHttpException;
 
 class StripeSubscriptionService
 {
@@ -20,12 +22,17 @@ class StripeSubscriptionService
 
         $customerId = $this->resolveCustomer($stripe, $user);
 
+        $returnUrl = env('STRIPE_RETURN_URL');
+        if (!$returnUrl) {
+            throw new RuntimeException('STRIPE_RETURN_URL is not configured.');
+        }
+
         $session = $stripe->checkoutSessions()->create([
             'customer'   => $customerId,
-            'ui_mode'    => 'embedded',
+            'ui_mode'    => 'embedded_page',
             'mode'       => 'subscription',
             'line_items' => [['price' => $price->stripe->stripe_id, 'quantity' => 1]],
-            'return_url' => env('STRIPE_RETURN_URL') . '?session_id={CHECKOUT_SESSION_ID}',
+            'return_url' => $returnUrl . '?session_id={CHECKOUT_SESSION_ID}',
             'metadata'   => ['subscriptionId' => $subscription->id],
         ]);
 
@@ -51,32 +58,55 @@ class StripeSubscriptionService
 
     public function retrieveCheckoutSession(string $sessionId, string $userId): array
     {
-        $stripe  = new StripeClient();
-        $session = $stripe->checkoutSessions()->retrieve($sessionId);
+        $stripe = new StripeClient();
+        $session = $stripe->checkoutSessions()->retrieve($sessionId, [
+            'expand' => ['subscription', 'subscription.latest_invoice'],
+        ]);
 
         // 確認 session 屬於該 user 的訂閱，防止越權查詢
         $subscriptionId = $session->metadata['subscriptionId'] ?? null;
-        if (
-            !$subscriptionId
-            || !Subscription::query()
-                ->where('id', $subscriptionId)
-                ->where('user_id', $userId)
-                ->exists()
-        ) {
-            throw new \App\Exceptions\NotFoundHttpException();
+        $subscription = $subscriptionId
+            ? Subscription::query()->where('id', $subscriptionId)->where('user_id', $userId)->first()
+            : null;
+
+        if (!$subscription) {
+            throw new NotFoundHttpException();
+        }
+
+        $subscription->load(['plan']);
+        $subscription->plan->load([
+            'prices' => fn ($q) => $q->where('id', $subscription->price_id),
+        ]);
+
+        $billing = null;
+        if ($session->status === 'complete' && $session->subscription) {
+            $stripeSub = $session->subscription;
+            $invoice = $stripeSub->latest_invoice;
+            $billing = [
+                'period_start' => $stripeSub->items->data[0]->current_period_start
+                    ? Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_start)->toIso8601String()
+                    : null,
+                'period_end' => $stripeSub->items->data[0]->current_period_end
+                    ? Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_end)->toIso8601String()
+                    : null,
+                'amount'   => $invoice ? $invoice->amount_paid / 100 : null,
+                'currency' => $invoice ? strtoupper($invoice->currency) : null,
+            ];
         }
 
         return [
             'status'         => $session->status,
             'customer_email' => $session->customer_details?->email,
+            'plan'           => $subscription->plan,
+            'billing'        => $billing,
         ];
     }
 
     public function handleCheckoutSessionCompleted(array $event): void
     {
-        $session        = $event['data']['object'];
+        $session = $event['data']['object'];
         $subscriptionId = $session['metadata']['subscriptionId'] ?? null;
-        $stripeSubId    = $session['subscription'] ?? null;
+        $stripeSubId = $session['subscription'] ?? null;
 
         if (!$subscriptionId || !$stripeSubId) {
             return;
@@ -86,7 +116,7 @@ class StripeSubscriptionService
             return;
         }
 
-        $stripe    = new StripeClient();
+        $stripe = new StripeClient();
         $stripeSub = $stripe->subscriptions()->retrieve($stripeSubId);
 
         // 將 stripe 記錄從 Checkout Session ID 更新為 Stripe Subscription ID，
@@ -104,9 +134,9 @@ class StripeSubscriptionService
 
     public function handleInvoicePaid(array $event): void
     {
-        $invoice          = $event['data']['object'];
-        $stripeSubId      = $invoice['subscription'] ?? null;
-        $subscriptionId   = $invoice['metadata']['subscriptionId']
+        $invoice = $event['data']['object'];
+        $stripeSubId = $invoice['subscription'] ?? null;
+        $subscriptionId = $invoice['metadata']['subscriptionId']
             ?? $this->resolveSubscriptionIdFromStripeId($stripeSubId);
 
         if (!$subscriptionId) {
@@ -117,9 +147,9 @@ class StripeSubscriptionService
             return;
         }
 
-        $stripe            = new StripeClient();
-        $stripeSub         = $stripe->subscriptions()->retrieve($stripeSubId);
-        $currentPeriodEnd  = Carbon::createFromTimestamp($stripeSub->current_period_end);
+        $stripe = new StripeClient();
+        $stripeSub = $stripe->subscriptions()->retrieve($stripeSubId);
+        $currentPeriodEnd = Carbon::createFromTimestamp($stripeSub->current_period_end);
 
         $subscription->fill([
             'status'    => Subscription::STATUS_ACTIVE,
@@ -149,9 +179,9 @@ class StripeSubscriptionService
     public function handleSubscriptionDeleted(array $event): void
     {
         $stripeSub = $event['data']['object'];
-        $stripeId  = $stripeSub['id'];
+        $stripeId = $stripeSub['id'];
 
-        $stripeRecord = \App\Models\Stripe::query()
+        $stripeRecord = Stripe::query()
             ->where('stripe_id', $stripeId)
             ->where('foreign_type', Subscription::class)
             ->first();
@@ -165,14 +195,14 @@ class StripeSubscriptionService
 
     public function handleInvoicePaymentFailed(array $event): void
     {
-        $invoice     = $event['data']['object'];
+        $invoice = $event['data']['object'];
         $stripeSubId = $invoice['subscription'] ?? null;
 
         if (!$stripeSubId) {
             return;
         }
 
-        $stripeRecord = \App\Models\Stripe::query()
+        $stripeRecord = Stripe::query()
             ->where('stripe_id', $stripeSubId)
             ->where('foreign_type', Subscription::class)
             ->first();
@@ -210,7 +240,7 @@ class StripeSubscriptionService
             return null;
         }
 
-        $record = \App\Models\Stripe::query()
+        $record = Stripe::query()
             ->where('stripe_id', $stripeSubId)
             ->where('foreign_type', Subscription::class)
             ->first();

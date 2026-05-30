@@ -13,12 +13,12 @@ use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;
-use App\Services\PaddleSubscriptionService;
-use App\Services\StripeSubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
 use App\Exceptions\InvalidRequestException;
+use App\Services\PaddleSubscriptionService;
+use App\Services\StripeSubscriptionService;
 use App\Http\Controllers\AbstractController;
 use App\OpenApi\Schemas\PlanResource as PlanSchema;
 use App\OpenApi\Parameters\Path\SubscriptionId as SubscriptionIdParam;
@@ -43,7 +43,7 @@ class SubscriptionsController extends AbstractController
     public function index(Request $request, SubscriptionService $subscriptionService): PlanResource
     {
         $subscription = $subscriptionService->getUserSubscription($request->user()->id);
-        $plan         = $subscriptionService->getUserSubscriptionPlan($subscription);
+        $plan = $subscriptionService->getUserSubscriptionPlan($subscription);
 
         $plan->load([
             'prices' => function ($builder) use ($subscription) {
@@ -102,7 +102,12 @@ class SubscriptionsController extends AbstractController
                             property: 'stripe',
                             properties: [
                                 new OAT\Property(property: 'publishable_key', type: 'string', example: 'pk_live_...'),
-                                new OAT\Property(property: 'client_secret', description: 'Checkout Session client_secret for stripe.initEmbeddedCheckout()', type: 'string', example: 'cs_live_xxx_secret_xxx'),
+                                new OAT\Property(
+                                    property: 'client_secret',
+                                    description: 'Checkout Session client_secret for stripe.initEmbeddedCheckout()',
+                                    type: 'string',
+                                    example: 'cs_live_xxx_secret_xxx'
+                                ),
                             ],
                             type: 'object'
                         ),
@@ -151,11 +156,17 @@ class SubscriptionsController extends AbstractController
 
         if ($paymentMethod === Subscription::PAYMENT_METHOD_STRIPE) {
             $data = (new StripeSubscriptionService())->createCheckout(
-                $request->user(), $plan, $price, $subscription
+                $request->user(),
+                $plan,
+                $price,
+                $subscription
             );
         } else {
             $data = (new PaddleSubscriptionService())->createCheckout(
-                $request->user(), $plan, $price, $subscription
+                $request->user(),
+                $plan,
+                $price,
+                $subscription
             );
         }
 
@@ -303,11 +314,34 @@ class SubscriptionsController extends AbstractController
         responses: [
             new OAT\Response(
                 response: 200,
-                description: 'Session status',
+                description: 'Session status with subscribed plan and billing info',
                 content: new OAT\JsonContent(
                     properties: [
-                        new OAT\Property(property: 'status', type: 'string', enum: ['open', 'complete', 'expired'], example: 'complete'),
-                        new OAT\Property(property: 'customer_email', type: 'string', nullable: true, example: 'user@example.com'),
+                        new OAT\Property(
+                            property: 'status',
+                            type: 'string',
+                            enum: ['open', 'complete', 'expired'],
+                            example: 'complete'
+                        ),
+                        new OAT\Property(
+                            property: 'customer_email',
+                            type: 'string',
+                            nullable: true,
+                            example: 'user@example.com'
+                        ),
+                        new OAT\Property(property: 'plan', ref: PlanSchema::class),
+                        new OAT\Property(
+                            property: 'billing',
+                            type: 'object',
+                            nullable: true,
+                            description: 'Present only when status=complete',
+                            properties: [
+                                new OAT\Property(property: 'period_start', type: 'string', format: 'date-time', example: '2026-05-30T00:00:00+00:00'),
+                                new OAT\Property(property: 'period_end', type: 'string', format: 'date-time', example: '2026-06-30T00:00:00+00:00'),
+                                new OAT\Property(property: 'amount', type: 'number', format: 'float', nullable: true, example: 9.99),
+                                new OAT\Property(property: 'currency', type: 'string', nullable: true, example: 'USD'),
+                            ]
+                        ),
                     ]
                 )
             ),
@@ -320,7 +354,9 @@ class SubscriptionsController extends AbstractController
         $sessionId = (string) $request->input('session_id', '');
 
         if (!$sessionId) {
-            throw new InvalidRequestException(['session_id' => [__('validators.controllers.subscription.session_id_required')]]);
+            throw new InvalidRequestException(
+                ['session_id' => [__('validators.controllers.subscription.session_id_required')]]
+            );
         }
 
         $result = (new StripeSubscriptionService())->retrieveCheckoutSession(
@@ -328,7 +364,12 @@ class SubscriptionsController extends AbstractController
             $request->user()->id
         );
 
-        return response()->json($result);
+        return response()->json([
+            'status'         => $result['status'],
+            'customer_email' => $result['customer_email'],
+            'plan'           => new PlanResource($result['plan']),
+            'billing'        => $result['billing'],
+        ]);
     }
 
     public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface
