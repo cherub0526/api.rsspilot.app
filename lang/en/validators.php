@@ -16,8 +16,9 @@ return [
             'not_found'   => 'RSS not found.',
         ],
         'sources' => [
-            'invalid_url' => 'Invalid YouTube URL.',
-            'not_found'   => 'Source not found.',
+            'invalid_url'           => 'Invalid YouTube URL.',
+            'not_found'             => 'Source not found.',
+            'channel_limit_reached' => 'You have reached the channel subscription limit for your plan.',
         ],
         'subscription' => [
             'plan_not_found'       => 'Plan not found.',

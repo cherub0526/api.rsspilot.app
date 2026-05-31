@@ -140,8 +140,22 @@ class SourcesController extends AbstractController
         }
 
         $user = $request->user();
+        $alreadySubscribed = (bool) $user->sources()->find($source->id);
 
-        if ($user->sources()->find($source->id)) {
+        if (!$alreadySubscribed) {
+            $subscriptionService = app(SubscriptionService::class);
+            $plan = $subscriptionService->getUserSubscriptionPlan(
+                $subscriptionService->getUserSubscription($user->id)
+            );
+
+            if ($plan !== null && $plan->channel_limit > 0 && $user->sources()->count() >= $plan->channel_limit) {
+                throw new InvalidRequestException(
+                    ['source' => [__('validators.controllers.sources.channel_limit_reached')]]
+                );
+            }
+        }
+
+        if ($alreadySubscribed) {
             $user->sources()->updateExistingPivot($source->id, ['notify' => $notify]);
         } else {
             $user->sources()->attach($source->id, ['notify' => $notify]);

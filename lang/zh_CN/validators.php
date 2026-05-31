@@ -16,8 +16,9 @@ return [
             'not_found'   => '找不到指定的 RSS。',
         ],
         'sources' => [
-            'invalid_url' => '无效的 YouTube 网址。',
-            'not_found'   => '找不到指定的来源。',
+            'invalid_url'           => '无效的 YouTube 网址。',
+            'not_found'             => '找不到指定的来源。',
+            'channel_limit_reached' => '已达到方案允许的频道订阅上限。',
         ],
         'subscription' => [
             'plan_not_found'      => '找不到指定的方案。',

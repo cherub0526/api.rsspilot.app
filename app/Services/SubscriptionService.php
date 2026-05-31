@@ -53,7 +53,7 @@ class SubscriptionService
             ->count();
 
         $limit = null;
-        if ($plan->video_limit > 0) {
+        if ($plan !== null && $plan->video_limit > 0) {
             $remaining = $plan->video_limit - $usedCount;
             if ($remaining <= 0) {
                 return;

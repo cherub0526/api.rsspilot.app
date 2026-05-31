@@ -166,7 +166,10 @@ class ChatControllerTest extends TestCase
         $source = Source::factory()->create(['free' => false]);
         $media = Media::factory()->create(['source_id' => $source->id]);
 
+        // Subscribing a source + syncing its media into userables is what
+        // grants access. Direct attach alone (user_sources) is insufficient.
         $user->sources()->attach($source->id, ['notify' => true]);
+        $user->media()->syncWithoutDetaching([$media->id]);
         $this->createUserSetting($user);
         $this->fakeOpenRouter();
 

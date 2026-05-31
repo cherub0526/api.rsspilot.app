@@ -1,13 +1,17 @@
 <?php
+
 // tests/Feature/API/V1/SourcesControllerTest.php
 declare(strict_types=1);
 
 namespace Tests\Feature\API\V1;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
+use App\Models\Price;
 use App\Models\Source;
 use Mockery\MockInterface;
+use App\Models\Subscription;
 use App\Services\YoutubeService;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Foundation\Testing\RefreshDatabase;
@@ -217,6 +221,125 @@ class SourcesControllerTest extends TestCase
         ]);
     }
 
+    public function testStoreChannelLimitCheck(): void
+    {
+        $uri = route('api.v1.sources.store');
+
+        // Helper to fake a successful channel resolve
+        $fakeYoutube = function (string $channelId) {
+            $this->mock(YoutubeService::class, function (MockInterface $mock) use ($channelId) {
+                $mock->shouldReceive('getChannelIdFromUrl')->andReturn($channelId);
+                $mock->shouldReceive('getChannelThumbnail')->andReturn(null);
+                $mock->shouldReceive('getChannelStatistics')->andReturn([]);
+            });
+
+            Http::fake([
+                'www.youtube.com/feeds/videos.xml*' => Http::response(
+                    '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Channel</title></feed>',
+                    200
+                ),
+            ]);
+        };
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // Build a plan with channel_limit = 2 and subscribe the user to it
+        $plan = Plan::withoutEvents(fn () => Plan::factory()->create([
+            'channel_limit' => 2,
+            'video_limit'   => 0,
+        ]));
+        $price = Price::withoutEvents(fn () => Price::factory()->create([
+            'plan_id' => $plan->id,
+            'unit'    => Price::UNIT_MONTHLY,
+            'price'   => 9.99,
+        ]));
+        Subscription::factory()->create([
+            'user_id'    => $user->id,
+            'plan_id'    => $plan->id,
+            'price_id'   => $price->id,
+            'status'     => Subscription::STATUS_ACTIVE,
+            'start_date' => now()->subDay(),
+        ]);
+
+        // First source: under limit — succeed
+        $fakeYoutube('UC00000000000000000001');
+        $this->json('POST', $uri, ['url' => 'https://www.youtube.com/@ch1', 'type' => 'channel'])
+            ->assertStatus(201);
+
+        // Second source: at limit boundary — succeed (count goes 1 → 2)
+        $fakeYoutube('UC00000000000000000002');
+        $this->json('POST', $uri, ['url' => 'https://www.youtube.com/@ch2', 'type' => 'channel'])
+            ->assertStatus(201);
+
+        $this->assertEquals(2, $user->sources()->count());
+
+        // Third source: count (2) >= limit (2) — should fail
+        $fakeYoutube('UC00000000000000000003');
+        $this->json('POST', $uri, ['url' => 'https://www.youtube.com/@ch3', 'type' => 'channel'])
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'messages.source.0',
+                __('validators.controllers.sources.channel_limit_reached')
+            );
+
+        $this->assertEquals(2, $user->sources()->count());
+
+        // Re-subscribing an existing source at the limit is an update, not a
+        // new slot — should succeed without limit check
+        $fakeYoutube('UC00000000000000000001');
+        $this->json('POST', $uri, ['url' => 'https://www.youtube.com/@ch1', 'type' => 'channel', 'notify' => false])
+            ->assertStatus(201);
+
+        $this->assertEquals(2, $user->sources()->count());
+    }
+
+    public function testStoreChannelUnlimitedPlan(): void
+    {
+        $uri = route('api.v1.sources.store');
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // channel_limit = 0 means unlimited
+        $plan = Plan::withoutEvents(fn () => Plan::factory()->create([
+            'channel_limit' => 0,
+            'video_limit'   => 0,
+        ]));
+        $price = Price::withoutEvents(fn () => Price::factory()->create([
+            'plan_id' => $plan->id,
+            'unit'    => Price::UNIT_MONTHLY,
+            'price'   => 0,
+        ]));
+        Subscription::factory()->create([
+            'user_id'    => $user->id,
+            'plan_id'    => $plan->id,
+            'price_id'   => $price->id,
+            'status'     => Subscription::STATUS_ACTIVE,
+            'start_date' => now()->subDay(),
+        ]);
+
+        // Add 5 sources; all should succeed regardless of count
+        foreach (range(1, 5) as $i) {
+            $channelId = sprintf('UCunlimited%010d', $i);
+            $this->mock(YoutubeService::class, function (MockInterface $mock) use ($channelId) {
+                $mock->shouldReceive('getChannelIdFromUrl')->andReturn($channelId);
+                $mock->shouldReceive('getChannelThumbnail')->andReturn(null);
+                $mock->shouldReceive('getChannelStatistics')->andReturn([]);
+            });
+            Http::fake([
+                'www.youtube.com/feeds/videos.xml*' => Http::response(
+                    '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>CH</title></feed>',
+                    200
+                ),
+            ]);
+            $this->json('POST', $uri, ['url' => "https://www.youtube.com/@unlimited{$i}", 'type' => 'channel'])
+                ->assertStatus(201);
+        }
+
+        $this->assertEquals(5, $user->sources()->count());
+    }
+
     public function testUpdate(): void
     {
         // Need a source to build the URI — use a dummy one for the 401 check
@@ -225,7 +348,7 @@ class SourcesControllerTest extends TestCase
             ->assertStatus(401);
 
         /** @var User $user */
-        $user   = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $source = Source::factory()->create(['type' => Source::TYPE_YOUTUBE_CHANNEL]);
         $user->sources()->attach($source->id, ['notify' => true]);
 
@@ -254,7 +377,7 @@ class SourcesControllerTest extends TestCase
 
         // Cannot update a source the user is not subscribed to
         $otherSource = Source::factory()->create();
-        $otherUri    = route('api.v1.sources.update', ['sourceId' => $otherSource->id]);
+        $otherUri = route('api.v1.sources.update', ['sourceId' => $otherSource->id]);
 
         $this->json('PUT', $otherUri, ['notify' => false])->assertStatus(404);
     }
@@ -314,7 +437,7 @@ class SourcesControllerTest extends TestCase
     public function testDestroy(): void
     {
         $source = Source::factory()->create();
-        $uri    = route('api.v1.sources.destroy', ['sourceId' => $source->id]);
+        $uri = route('api.v1.sources.destroy', ['sourceId' => $source->id]);
 
         $this->json('DELETE', $uri)->assertStatus(401);
 
@@ -334,7 +457,7 @@ class SourcesControllerTest extends TestCase
 
         // Cannot delete a source the user is not subscribed to
         $otherSource = Source::factory()->create();
-        $otherUri    = route('api.v1.sources.destroy', ['sourceId' => $otherSource->id]);
+        $otherUri = route('api.v1.sources.destroy', ['sourceId' => $otherSource->id]);
 
         $this->json('DELETE', $otherUri)->assertStatus(404);
     }
