@@ -32,6 +32,8 @@ class Subscription extends Model
 
     public const string PAYMENT_METHOD_STRIPE = 'stripe';
 
+    public const string PAYMENT_METHOD_TRIAL = 'trial';
+
     public static array $statusMaps = [
         self::STATUS_PAYING   => '付款中',
         self::STATUS_TRIAL    => '試用中',
@@ -107,9 +109,17 @@ class Subscription extends Model
 
     public function scopeActive($query)
     {
-        return $query->whereIn('status', [
-            self::STATUS_TRIAL,
-            self::STATUS_ACTIVE,
-        ]);
+        $now = now();
+
+        return $query->where(function ($q) use ($now) {
+            $q->where('status', self::STATUS_ACTIVE)
+                ->orWhere(function ($sub) use ($now) {
+                    $sub->where('status', self::STATUS_TRIAL)
+                        ->where(function ($d) use ($now) {
+                            $d->whereNull('next_date')
+                                ->orWhere('next_date', '>=', $now);
+                        });
+                });
+        });
     }
 }

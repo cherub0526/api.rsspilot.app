@@ -121,13 +121,15 @@ class SubscriptionsControllerTest extends TestCase
         /** @var User $user */
         $user = $this->fakeLogin();
 
-        // User with no active subscription should get the free plan
+        // User with no active subscription should get the free plan; status null
         $this->json('GET', $uri)
             ->assertStatus(200)
             ->assertJsonPath('id', $this->freePlan->id)
-            ->assertJsonPath('prices.0.id', $this->freeMonthlyPrice->id);
+            ->assertJsonPath('prices.0.id', $this->freeMonthlyPrice->id)
+            ->assertJsonPath('status', null)
+            ->assertJsonPath('trial_ends_at', null);
 
-        // User with an active subscription
+        // User with an active paid subscription: status = 'active'
         $subscription = Subscription::factory()->create([
             'user_id'  => $user->id,
             'plan_id'  => $this->basicPlan->id,
@@ -138,7 +140,29 @@ class SubscriptionsControllerTest extends TestCase
         $this->json('GET', $uri)
             ->assertStatus(200)
             ->assertJsonPath('id', $this->basicPlan->id)
-            ->assertJsonPath('prices.0.id', $this->basicMonthlyPrice->id);
+            ->assertJsonPath('prices.0.id', $this->basicMonthlyPrice->id)
+            ->assertJsonPath('status', Subscription::STATUS_ACTIVE)
+            ->assertJsonPath('trial_ends_at', null);
+
+        // Expire the active subscription and create a trial: status = 'trial' + trial_ends_at set
+        $subscription->update(['status' => Subscription::STATUS_CANCELED]);
+
+        $trialEndsAt = now()->addDays(14);
+        Subscription::factory()->create([
+            'user_id'    => $user->id,
+            'plan_id'    => $this->basicPlan->id,
+            'price_id'   => $this->basicMonthlyPrice->id,
+            'status'     => Subscription::STATUS_TRIAL,
+            'start_date' => now(),
+            'next_date'  => $trialEndsAt,
+        ]);
+
+        $trialResponse = $this->json('GET', $uri)
+            ->assertStatus(200)
+            ->assertJsonPath('status', Subscription::STATUS_TRIAL)
+            ->assertJsonStructure(['trial_ends_at']);
+
+        $this->assertNotNull($trialResponse->json('trial_ends_at'));
     }
 
     public function testStore()

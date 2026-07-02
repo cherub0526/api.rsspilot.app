@@ -34,13 +34,37 @@ class SubscriptionsController extends AbstractController
         responses: [
             new OAT\Response(
                 response: 200,
-                description: 'Current subscription plan',
-                content: new OAT\JsonContent(ref: PlanSchema::class)
+                description: 'Current subscription plan with status',
+                content: new OAT\JsonContent(
+                    allOf: [
+                        new OAT\Schema(
+                            properties: [
+                                new OAT\Property(
+                                    property: 'status',
+                                    type: 'string',
+                                    nullable: true,
+                                    enum: ['trial', 'active'],
+                                    example: 'trial',
+                                    description: 'trial = on trial; active = paid; null = free plan'
+                                ),
+                                new OAT\Property(
+                                    property: 'trial_ends_at',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    nullable: true,
+                                    example: '2026-06-14T00:00:00+00:00',
+                                    description: 'Present only when status=trial'
+                                ),
+                            ]
+                        ),
+                        new OAT\Schema(ref: PlanSchema::class),
+                    ]
+                )
             ),
             new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
-    public function index(Request $request, SubscriptionService $subscriptionService): PlanResource
+    public function index(Request $request, SubscriptionService $subscriptionService): ResponseInterface
     {
         $subscription = $subscriptionService->getUserSubscription($request->user()->id);
         $plan = $subscriptionService->getUserSubscriptionPlan($subscription);
@@ -53,7 +77,16 @@ class SubscriptionsController extends AbstractController
             },
         ]);
 
-        return new PlanResource($plan);
+        $status = $subscription?->status;
+        $trialEndsAt = ($status === Subscription::STATUS_TRIAL)
+            ? $subscription->next_date?->toIso8601String()
+            : null;
+
+        return response()->json([
+            'status'        => $status,
+            'trial_ends_at' => $trialEndsAt,
+            ...(new PlanResource($plan))->toArray(),
+        ]);
     }
 
     /**
