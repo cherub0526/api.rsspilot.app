@@ -97,6 +97,17 @@ $template = TemplateFactory::create('analysis', [
 ]);
 ```
 
+#### FollowUpQuestionsTemplate
+
+用於根據上一輪問答產生 3 個延伸問題：
+
+```php
+$template = TemplateFactory::create('follow_up_questions', [
+    'user_question'   => 'What is a case interview?',
+    'previous_answer' => 'A case interview is ...',
+]);
+```
+
 ### 4. TemplateFactory
 
 工廠類別，負責建立和管理模板：
