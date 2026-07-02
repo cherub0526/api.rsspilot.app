@@ -45,7 +45,7 @@ class Caption extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'media_id'      => 'integer',
+        'media_id'      => 'string',
         'locale'        => 'string',
         'text'          => 'string',
         'segments'      => 'array',
