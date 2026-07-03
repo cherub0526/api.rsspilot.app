@@ -23,7 +23,7 @@ class PriceFactory extends Factory
         return [
             'id'      => strtolower(Str::ulid()->toString()),
             'plan_id' => strtolower(Str::ulid()->toString()),
-            'unit'    => fake()->randomElement(array_values(Price::$unitMaps)),
+            'unit'    => fake()->randomElement(array_keys(Price::$unitMaps)),
             'price'   => fake()->numberBetween(0, 1000),
         ];
     }

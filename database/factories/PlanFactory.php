@@ -28,7 +28,7 @@ class PlanFactory extends Factory
             'video_limit'   => fake()->numberBetween(3, 100),
             'chat_limit'    => 0,
             'sort'          => fake()->numberBetween(0, 5),
-            'status'        => fake()->randomElement(array_values(Plan::$statusMaps)),
+            'status'        => fake()->randomElement(array_keys(Plan::$statusMaps)),
         ];
     }
 }
