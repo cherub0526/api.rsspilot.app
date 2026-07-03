@@ -9,12 +9,15 @@ use Hypervel\Database\Eloquent\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
+use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class Transaction extends Model
 {
     use HasUlids;
 
     use SoftDeletes;
+
+    use HasFactory;
 
     protected ?string $table = 'transactions';
 
@@ -32,7 +35,7 @@ class Transaction extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'subscription_id' => 'integer',
+        'subscription_id' => 'string',
         'billing_date'    => 'datetime',
         'amount'          => 'float',
         'status'          => 'string',

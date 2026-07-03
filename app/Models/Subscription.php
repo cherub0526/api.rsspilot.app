@@ -68,7 +68,7 @@ class Subscription extends Model
      * The attributes that should be cast to native types.
      */
     protected array $casts = [
-        'user_id'           => 'integer',
+        'user_id'           => 'string',
         'plan_id'           => 'string',
         'price_id'          => 'string',
         'payment_method'    => 'string',

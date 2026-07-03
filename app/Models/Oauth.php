@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Hypervel\Database\Eloquent\Factories\HasFactory;
+
 class Oauth extends Model
 {
+    use HasFactory;
+
     public const PROVIDER_FACEBOOK = 'facebook';
 
     public const PROVIDER_GOOGLE = 'google';

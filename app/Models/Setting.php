@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Hyperf\Database\Model\Relations\BelongsTo;
+use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class Setting extends Model
 {
+    use HasFactory;
+
     protected ?string $table = 'settings';
     /**
      * The attributes that are mass assignable.

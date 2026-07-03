@@ -6,10 +6,13 @@ namespace App\Models;
 
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
+use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class Summary extends Model
 {
     use HasUlids;
+
+    use HasFactory;
 
     public const LOCALE_ZH_TW = 'zh_tw';
 

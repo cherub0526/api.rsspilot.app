@@ -7,12 +7,15 @@ namespace App\Models;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
+use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class Caption extends Model
 {
     use HasUlids;
 
     use SoftDeletes;
+
+    use HasFactory;
 
     public const LOCAL_ZH_TW = 'zh_tw';
 
