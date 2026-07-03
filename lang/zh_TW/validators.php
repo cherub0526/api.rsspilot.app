@@ -191,4 +191,62 @@ return [
             ],
         ],
     ],
+
+    'settings' => [
+        'ai' => [
+            'required' => 'ai 欄位為必填項。',
+            'language' => [
+                'required' => 'ai.language 欄位為必填項。',
+                'in'       => '所選的 ai.language 無效。',
+            ],
+        ],
+    ],
+
+    'youtube_mp3_downloader' => [
+        'status' => [
+            'required' => 'status 欄位為必填項。',
+            'in'       => '所選的 status 無效。',
+        ],
+        'data' => [
+            'status' => [
+                'required' => 'data.status 欄位為必填項。',
+                'in'       => '所選的 data.status 無效。',
+            ],
+            'link' => [
+                'required'   => 'data.link 欄位為必填項。',
+                'active_url' => 'data.link 不是有效的可存取網址。',
+            ],
+        ],
+    ],
+
+    'summary' => [
+        'locale' => [
+            'required' => 'locale 欄位為必填項。',
+            'string'   => 'locale 必須是字串。',
+        ],
+        'text' => [
+            'required'      => 'text 欄位為必填項。',
+            'array'         => 'text 必須是陣列。',
+            'short_summary' => [
+                'required' => 'text.short_summary 欄位為必填項。',
+                'string'   => 'text.short_summary 必須是字串。',
+            ],
+            'long_summary' => [
+                'required'   => 'text.long_summary 欄位為必填項。',
+                'array'      => 'text.long_summary 必須是陣列。',
+                'content'    => [
+                    'required' => 'text.long_summary.content 欄位為必填項。',
+                    'string'   => 'text.long_summary.content 必須是字串。',
+                ],
+                'key_points' => [
+                    'required' => 'text.long_summary.key_points 欄位為必填項。',
+                    'array'    => 'text.long_summary.key_points 必須是陣列。',
+                ],
+                'keywords' => [
+                    'required' => 'text.long_summary.keywords 欄位為必填項。',
+                    'array'    => 'text.long_summary.keywords 必須是陣列。',
+                ],
+            ],
+        ],
+    ],
 ];

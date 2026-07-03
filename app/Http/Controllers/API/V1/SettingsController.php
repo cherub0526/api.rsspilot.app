@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API\V1;
 
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
+use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Validators\SettingValidator;
@@ -45,7 +46,7 @@ class SettingsController extends AbstractController
         ),
         tags: ['Settings'],
         responses: [
-            new OAT\Response(ref: Ok::class, response: 200),
+            new OAT\Response(ref: HttpOk::class, response: 200),
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
         ]

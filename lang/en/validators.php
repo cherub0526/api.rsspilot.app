@@ -192,4 +192,62 @@ return [
             ],
         ],
     ],
+
+    'settings' => [
+        'ai' => [
+            'required' => 'The ai field is required.',
+            'language' => [
+                'required' => 'The ai.language field is required.',
+                'in'       => 'The selected ai.language is invalid.',
+            ],
+        ],
+    ],
+
+    'youtube_mp3_downloader' => [
+        'status' => [
+            'required' => 'The status field is required.',
+            'in'       => 'The selected status is invalid.',
+        ],
+        'data' => [
+            'status' => [
+                'required' => 'The data.status field is required.',
+                'in'       => 'The selected data.status is invalid.',
+            ],
+            'link' => [
+                'required'   => 'The data.link field is required.',
+                'active_url' => 'The data.link is not a valid active URL.',
+            ],
+        ],
+    ],
+
+    'summary' => [
+        'locale' => [
+            'required' => 'The locale field is required.',
+            'string'   => 'The locale must be a string.',
+        ],
+        'text' => [
+            'required'      => 'The text field is required.',
+            'array'         => 'The text must be an array.',
+            'short_summary' => [
+                'required' => 'The text.short_summary field is required.',
+                'string'   => 'The text.short_summary must be a string.',
+            ],
+            'long_summary' => [
+                'required'   => 'The text.long_summary field is required.',
+                'array'      => 'The text.long_summary must be an array.',
+                'content'    => [
+                    'required' => 'The text.long_summary.content field is required.',
+                    'string'   => 'The text.long_summary.content must be a string.',
+                ],
+                'key_points' => [
+                    'required' => 'The text.long_summary.key_points field is required.',
+                    'array'    => 'The text.long_summary.key_points must be an array.',
+                ],
+                'keywords' => [
+                    'required' => 'The text.long_summary.keywords field is required.',
+                    'array'    => 'The text.long_summary.keywords must be an array.',
+                ],
+            ],
+        ],
+    ],
 ];

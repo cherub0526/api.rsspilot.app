@@ -192,4 +192,62 @@ return [
             ],
         ],
     ],
+
+    'settings' => [
+        'ai' => [
+            'required' => 'ai 字段为必填项。',
+            'language' => [
+                'required' => 'ai.language 字段为必填项。',
+                'in'       => '所选的 ai.language 无效。',
+            ],
+        ],
+    ],
+
+    'youtube_mp3_downloader' => [
+        'status' => [
+            'required' => 'status 字段为必填项。',
+            'in'       => '所选的 status 无效。',
+        ],
+        'data' => [
+            'status' => [
+                'required' => 'data.status 字段为必填项。',
+                'in'       => '所选的 data.status 无效。',
+            ],
+            'link' => [
+                'required'   => 'data.link 字段为必填项。',
+                'active_url' => 'data.link 不是有效的可访问网址。',
+            ],
+        ],
+    ],
+
+    'summary' => [
+        'locale' => [
+            'required' => 'locale 字段为必填项。',
+            'string'   => 'locale 必须是字符串。',
+        ],
+        'text' => [
+            'required'      => 'text 字段为必填项。',
+            'array'         => 'text 必须是数组。',
+            'short_summary' => [
+                'required' => 'text.short_summary 字段为必填项。',
+                'string'   => 'text.short_summary 必须是字符串。',
+            ],
+            'long_summary' => [
+                'required'   => 'text.long_summary 字段为必填项。',
+                'array'      => 'text.long_summary 必须是数组。',
+                'content'    => [
+                    'required' => 'text.long_summary.content 字段为必填项。',
+                    'string'   => 'text.long_summary.content 必须是字符串。',
+                ],
+                'key_points' => [
+                    'required' => 'text.long_summary.key_points 字段为必填项。',
+                    'array'    => 'text.long_summary.key_points 必须是数组。',
+                ],
+                'keywords' => [
+                    'required' => 'text.long_summary.keywords 字段为必填项。',
+                    'array'    => 'text.long_summary.keywords 必须是数组。',
+                ],
+            ],
+        ],
+    ],
 ];

@@ -11,6 +11,7 @@ use App\OpenApi\Responses\Http401;
 use App\Http\Resources\SummaryResource;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\OpenApi\Parameters\Path\SummaryId;
+use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
 use App\OpenApi\Schemas\SummaryResource as SummarySchema;
 
@@ -69,7 +70,20 @@ class SummariesController
             new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
+    /**
+     * @throws InvalidRequestException
+     * @throws NotFoundHttpException
+     */
     public function show(Request $request, string $mediaId, string $summaryId)
     {
+        if (!$media = $request->user()->media()->find($mediaId)) {
+            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        }
+
+        if (!$summary = $media->summaries()->find($summaryId)) {
+            throw new NotFoundHttpException();
+        }
+
+        return new SummaryResource($summary);
     }
 }
