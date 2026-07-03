@@ -41,6 +41,7 @@ class User extends Authenticatable
         'email_verified_at',
         'password',
         'social_type',
+        'provider_id',
         'avatar',
     ];
 
