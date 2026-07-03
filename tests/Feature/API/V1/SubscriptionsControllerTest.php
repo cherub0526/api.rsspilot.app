@@ -10,10 +10,7 @@ use App\Models\User;
 use App\Models\Price;
 use App\Models\Paddle;
 use App\Models\Subscription;
-use Paddle\SDK\Entities\Shared\BillingCycle;
 use Hypervel\Foundation\Testing\RefreshDatabase;
-use Paddle\SDK\Entities\TransactionItem as PaddleTransactionItem;
-use Paddle\SDK\Resources\Transactions\Operations\Get\Price as PaddlePrice;
 
 /**
  * @internal
@@ -228,86 +225,79 @@ class SubscriptionsControllerTest extends TestCase
         ]);
     }
 
-    //    public function testUpdate()
-    //    {
-    //        /** @var User $user */
-    //        $user = $this->fakeLogin();
-    //        $subscription = Subscription::factory()->create([
-    //            'user_id'  => $user->id,
-    //            'plan_id'  => $this->proPlan->id,
-    //            'price_id' => $this->proMonthlyPrice->id,
-    //            'status'   => Subscription::STATUS_PAYING,
-    //        ]);
-    //
-    //        $uri = route('api.v1.subscriptions.update', ['id' => $subscription->id]);
-    //
-    //        // Mock PaddleClient
-    //        $paddleClientMock = Mockery::mock(PaddleClient::class);
-    //        $this->app->instance(PaddleClient::class, $paddleClientMock);
-    //
-    //        // Mock Paddle Transaction response
-    //        $paddleTransaction = new PaddleTransaction(
-    //            'txn_123',
-    //            'sub_123',
-    //            'completed',
-    //            'cus_123',
-    //            null,
-    //            null,
-    //            'USD',
-    //            [],
-    //            [],
-    //            new DateTime(),
-    //            new DateTime(),
-    //            null,
-    //            [
-    //                new PaddleTransactionItem(
-    //                    'txnitm_123',
-    //                    '10.00',
-    //                    '1',
-    //                    false,
-    //                    new PaddlePrice(
-    //                        'pri_pro_monthly',
-    //                        'Pro Plan',
-    //                        'Standard',
-    //                        new BillingCycle('month', 1),
-    //                        new TimePeriod('month', 1),
-    //                        'prod_123',
-    //                        'active',
-    //                        null,
-    //                        null,
-    //                        null,
-    //                        null,
-    //                        null
-    //                    ),
-    //                    [],
-    //                    null,
-    //                    null,
-    //                    null
-    //                ),
-    //            ],
-    //            null,
-    //            null,
-    //            null,
-    //            null,
-    //            null,
-    //            null,
-    //            null,
-    //            null,
-    //            null
-    //        );
-    //
-    //        $transactionsMock = Mockery::mock();
-    //        $transactionsMock->shouldReceive('get')->with('txn_123')->andReturn($paddleTransaction);
-    //        $paddleClientMock->shouldReceive('transactions')->andReturn($transactionsMock);
-    //
-    //        $params = ['transaction_id' => 'txn_123'];
-    //        $this->json('PUT', $uri, $params)->assertStatus(200);
-    //
-    //        $subscription->refresh();
-    //        $this->assertEquals(Subscription::STATUS_ACTIVE, $subscription->status);
-    //        $this->assertNotNull($subscription->start_date);
-    //        $this->assertNotNull($subscription->next_date);
-    //    }
+    /**
+     * Only the reachable-without-a-live-Paddle-call surface is covered here.
+     * PaddleSubscriptionService::confirm() always constructs a real
+     * Paddle\SDK\Client (`new PaddleClient()`, not container-resolved), so a
+     * genuine "confirmed" success path can't be exercised without a real
+     * network call to Paddle. Same constraint as PaddleControllerTest.
+     */
+    public function testUpdate()
+    {
+        // Unauthenticated
+        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => 'nonexistent']))
+            ->assertStatus(401);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // Subscription not found / not owned by the current user
+        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => 'nonexistent']), ['transaction_id' => 'txn_123'])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscriptionId.0', __('validators.controllers.subscription.not_found'));
+
+        $otherUser = User::factory()->create();
+        $subscription = Subscription::factory()->create([
+            'user_id'  => $otherUser->id,
+            'plan_id'  => $this->basicPlan->id,
+            'price_id' => $this->basicMonthlyPrice->id,
+            'status'   => Subscription::STATUS_PAYING,
+        ]);
+
+        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => $subscription->id]), ['transaction_id' => 'txn_123'])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscriptionId.0', __('validators.controllers.subscription.not_found'));
+    }
+
+    /**
+     * Only the reachable-without-a-live-payment-gateway-call surface is
+     * covered here. StripeSubscriptionService::cancel() and
+     * PaddleSubscriptionService::cancel() both always construct a real SDK
+     * client, so a genuine cancellation success path can't be exercised
+     * without a real network call.
+     */
+    public function testDestroy()
+    {
+        $uri = route('api.v1.subscriptions.destroy', ['subscriptionId' => 'nonexistent']);
+
+        // Unauthenticated
+        $this->json('DELETE', $uri)->assertStatus(401);
+
+        // No active subscription (defaults to the free plan) → 404
+        $this->fakeLogin();
+        $this->json('DELETE', $uri)->assertStatus(404);
+    }
+
+    /**
+     * Only the reachable-without-a-live-Stripe-call surface is covered here.
+     * StripeSubscriptionService::retrieveCheckoutSession() always constructs
+     * a real Stripe client, so the "complete" success path can't be
+     * exercised without a real network call.
+     */
+    public function testCheckoutSession()
+    {
+        $uri = route('api.v1.subscriptions.checkout-session');
+
+        // Unauthenticated
+        $this->json('GET', $uri)->assertStatus(401);
+
+        $this->fakeLogin();
+
+        // Missing session_id
+        $this->json('GET', $uri)
+            ->assertStatus(422)
+            ->assertJsonPath('messages.session_id.0', __('validators.controllers.subscription.session_id_required'));
+    }
 
     public function testUsage()
     {

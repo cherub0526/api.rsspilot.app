@@ -602,4 +602,103 @@ class ChatControllerTest extends TestCase
             ->assertJsonPath('messages.0.role', 'user')
             ->assertJsonPath('messages.1.role', 'ai');
     }
+
+    // ================================================================
+    // DELETE /v1/media/{mediaId}/chat/sessions/{sessionId}  (session destroy)
+    // ================================================================
+
+    /**
+     * 未登入 → 401.
+     */
+    public function testSessionDestroyRequiresAuth(): void
+    {
+        $media   = Media::factory()->create();
+        $user    = User::factory()->create();
+        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+
+        $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(401);
+    }
+
+    /**
+     * session 不屬於此 user → 404.
+     */
+    public function testSessionDestroyReturns404WhenNotOwned(): void
+    {
+        $this->fakeLogin();
+        $other   = User::factory()->create();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+
+        $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(404);
+    }
+
+    /**
+     * media 不可存取（非 free、未訂閱）→ 404.
+     */
+    public function testSessionDestroyReturns404WhenMediaNotAccessible(): void
+    {
+        /** @var User $user */
+        $user    = $this->fakeLogin();
+        $source  = Source::factory()->create(['free' => false]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+
+        $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(404);
+    }
+
+    /**
+     * 正常情境：刪除 session（soft delete），回應 200。
+     */
+    public function testSessionDestroySucceeds(): void
+    {
+        /** @var User $user */
+        $user    = $this->fakeLogin();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $session = \App\Models\ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'Test session',
+        ]);
+
+        $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
+            'mediaId'   => $media->id,
+            'sessionId' => $session->id,
+        ]))->assertStatus(200);
+
+        $this->assertSoftDeleted('chat_sessions', ['id' => $session->id]);
+    }
+
+    /**
+     * 刪除他人 session 不應受影響。
+     */
+    public function testSessionDestroyDoesNotAffectOtherUsersSessions(): void
+    {
+        /** @var User $user */
+        $user    = $this->fakeLogin();
+        $other   = User::factory()->create();
+        $source  = Source::factory()->create(['free' => true]);
+        $media   = Media::factory()->create(['source_id' => $source->id]);
+
+        $mySession    = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        $otherSession = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+
+        $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
+            'mediaId'   => $media->id,
+            'sessionId' => $mySession->id,
+        ]))->assertStatus(200);
+
+        $this->assertSoftDeleted('chat_sessions', ['id' => $mySession->id]);
+        $this->assertDatabaseHas('chat_sessions', ['id' => $otherSession->id, 'deleted_at' => null]);
+    }
 }
