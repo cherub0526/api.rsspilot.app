@@ -138,4 +138,9 @@ class Media extends Model
     {
         return $this->hasMany(Summary::class, 'media_id', 'id');
     }
+
+    public function videoTranscription(): HasOne
+    {
+        return $this->hasOne(VideoTranscription::class, 'media_id', 'id');
+    }
 }
