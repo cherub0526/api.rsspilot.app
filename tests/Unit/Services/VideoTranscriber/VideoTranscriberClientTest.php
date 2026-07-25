@@ -199,4 +199,49 @@ class VideoTranscriberClientTest extends TestCase
 
         $this->assertSame($data, $result);
     }
+
+    public function testGetTranscriptionSendsTheExpectedQueryParameter(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://videotranscriber.ai/api/v1/transcriptions?record_id=562a7c09-c6b4-4289-80e6-36a4921b571f'
+                && $request['record_id'] === '562a7c09-c6b4-4289-80e6-36a4921b571f';
+        });
+    }
+
+    public function testGetTranscriptionDoesNotSendACookieHeaderByDefault(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === []);
+    }
+
+    public function testGetTranscriptionReturnsTheDecodedJsonResponse(): void
+    {
+        $data = [
+            'code'    => 100000,
+            'message' => 'success',
+            'data'    => [
+                'record_id' => '562a7c09-c6b4-4289-80e6-36a4921b571f',
+                'status'    => 'completed',
+            ],
+        ];
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response($data, 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        $this->assertSame($data, $result);
+    }
 }

@@ -12,6 +12,8 @@ class VideoTranscriberClient
 
     protected string $urlInfoEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions/url-info';
 
+    protected string $transcriptionEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions';
+
     public function __construct(
         protected SignatureGenerator $signatureGenerator = new SignatureGenerator(),
         protected ?string $cookie = null,
@@ -45,6 +47,15 @@ class VideoTranscriberClient
             'url'    => $url,
             'type'   => $type,
             'action' => $action,
+        ]);
+
+        return $response->json();
+    }
+
+    public function getTranscription(string $recordId): array
+    {
+        $response = Http::withHeaders($this->headers())->get($this->transcriptionEndpoint, [
+            'record_id' => $recordId,
         ]);
 
         return $response->json();
