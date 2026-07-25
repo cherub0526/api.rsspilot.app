@@ -50,4 +50,8 @@ return [
     'rapidapi' => [
         'key' => env('RAPID_API_KEY'),
     ],
+
+    'videotranscriber' => [
+        'secret_key' => env('VIDEOTRANSCRIBER_SECRET_KEY'),
+    ],
 ];
