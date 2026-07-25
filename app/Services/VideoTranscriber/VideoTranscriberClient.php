@@ -13,7 +13,8 @@ class VideoTranscriberClient
     protected string $urlInfoEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions/url-info';
 
     public function __construct(
-        protected SignatureGenerator $signatureGenerator = new SignatureGenerator()
+        protected SignatureGenerator $signatureGenerator = new SignatureGenerator(),
+        protected ?string $cookie = null,
     ) {
     }
 
@@ -33,19 +34,24 @@ class VideoTranscriberClient
 
         $payload['sign'] = $this->signatureGenerator->generate($payload);
 
-        $response = Http::asJson()->post($this->endpoint, $payload);
+        $response = Http::asJson()->withHeaders($this->headers())->post($this->endpoint, $payload);
 
         return $response->json();
     }
 
     public function getUrlInfo(string $url, int $type = 3, string $action = 'transcribe'): array
     {
-        $response = Http::get($this->urlInfoEndpoint, [
+        $response = Http::withHeaders($this->headers())->get($this->urlInfoEndpoint, [
             'url'    => $url,
             'type'   => $type,
             'action' => $action,
         ]);
 
         return $response->json();
+    }
+
+    protected function headers(): array
+    {
+        return $this->cookie === null ? [] : ['Cookie' => $this->cookie];
     }
 }

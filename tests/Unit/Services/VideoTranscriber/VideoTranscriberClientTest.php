@@ -94,6 +94,45 @@ class VideoTranscriberClientTest extends TestCase
         $this->assertSame(['code' => 100000, 'message' => 'success'], $result);
     }
 
+    public function testStartTranscriptionSendsTheCookieHeaderWhenProvided(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient(cookie: 'session=abc123'))->startTranscription([
+            'path' => 'https://www.youtube.com/watch?v=eniH9csPEzc',
+            'type' => 3,
+        ]);
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === ['session=abc123']);
+    }
+
+    public function testStartTranscriptionOmitsTheCookieHeaderWhenNotProvided(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->startTranscription([
+            'path' => 'https://www.youtube.com/watch?v=eniH9csPEzc',
+            'type' => 3,
+        ]);
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === []);
+    }
+
+    public function testGetUrlInfoSendsTheCookieHeaderWhenProvided(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient(cookie: 'session=abc123'))->getUrlInfo('https://www.youtube.com/watch?v=uXHNRFHWDnM');
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === ['session=abc123']);
+    }
+
     public function testGetUrlInfoSendsTheExpectedQueryParameters(): void
     {
         Http::fake([
@@ -128,18 +167,18 @@ class VideoTranscriberClientTest extends TestCase
             'code'    => 100000,
             'message' => 'success',
             'data'    => [
-                'type'                => 3,
-                'title'               => '8 Functions you might not know about your Mercedes-Benz',
-                'audio_time'          => 139,
-                'thumbnail_url'       => 'https://i.ytimg.com/vi/uXHNRFHWDnM/hqdefault.jpg',
-                'videos'              => [],
-                'audios'              => [],
-                'youtube_video_data'  => [
+                'type'               => 3,
+                'title'              => '8 Functions you might not know about your Mercedes-Benz',
+                'audio_time'         => 139,
+                'thumbnail_url'      => 'https://i.ytimg.com/vi/uXHNRFHWDnM/hqdefault.jpg',
+                'videos'             => [],
+                'audios'             => [],
+                'youtube_video_data' => [
                     'videoId'   => 'uXHNRFHWDnM',
                     'videoInfo' => [
                         'name'         => '8 Functions you might not know about your Mercedes-Benz',
                         'thumbnailUrl' => [
-                            'hqdefault'    => 'https://i.ytimg.com/vi/uXHNRFHWDnM/hqdefault.jpg',
+                            'hqdefault'     => 'https://i.ytimg.com/vi/uXHNRFHWDnM/hqdefault.jpg',
                             'maxresdefault' => 'https://i.ytimg.com/vi_webp/uXHNRFHWDnM/maxresdefault.webp',
                         ],
                         'embedUrl'   => 'https://www.youtube.com/embed/uXHNRFHWDnM',
