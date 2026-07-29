@@ -53,5 +53,7 @@ return [
 
     'videotranscriber' => [
         'secret_key' => env('VIDEOTRANSCRIBER_SECRET_KEY'),
+        'email'      => env('VIDEOTRANSCRIBER_EMAIL'),
+        'password'   => env('VIDEOTRANSCRIBER_PASSWORD'),
     ],
 ];

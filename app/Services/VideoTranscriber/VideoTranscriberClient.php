@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\VideoTranscriber;
 
+use App\Models\Config;
 use Hypervel\Support\Facades\Http;
 
 class VideoTranscriberClient
@@ -14,10 +15,32 @@ class VideoTranscriberClient
 
     protected string $transcriptionEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions';
 
+    protected string $loginEndpoint = 'https://videotranscriber.ai/api/v1/auth/email/login';
+
     public function __construct(
         protected SignatureGenerator $signatureGenerator = new SignatureGenerator(),
         protected ?string $cookie = null,
     ) {
+    }
+
+    /**
+     * Log in with email/password and persist the returned credentials to
+     * the `videotranscriber` config so later requests can use its token.
+     */
+    public function login(string $email, string $password): array
+    {
+        $response = Http::asJson()->post($this->loginEndpoint, [
+            'email'    => $email,
+            'password' => $password,
+        ]);
+
+        $result = $response->json();
+
+        if (($result['code'] ?? null) === 100000) {
+            Config::setValue(Config::KEY_VIDEOTRANSCRIBER, $result['data'] ?? []);
+        }
+
+        return $result;
     }
 
     public function startTranscription(array $params): array
@@ -63,6 +86,18 @@ class VideoTranscriberClient
 
     protected function headers(): array
     {
-        return $this->cookie === null ? [] : ['Cookie' => $this->cookie];
+        $cookie = $this->cookie ?? $this->tokenCookie();
+
+        return $cookie === null ? [] : ['Cookie' => $cookie];
+    }
+
+    /**
+     * Build the `nc_token` cookie from the access token stored by login().
+     */
+    protected function tokenCookie(): ?string
+    {
+        $accessToken = Config::getValue(Config::KEY_VIDEOTRANSCRIBER)['access_token'] ?? null;
+
+        return $accessToken === null ? null : 'nc_token=' . $accessToken;
     }
 }

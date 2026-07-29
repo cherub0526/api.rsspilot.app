@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Unit\Services\VideoTranscriber;
 
 use Tests\TestCase;
+use App\Models\Config;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Services\VideoTranscriber\SignatureGenerator;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
 
@@ -15,6 +17,8 @@ use App\Services\VideoTranscriber\VideoTranscriberClient;
  */
 class VideoTranscriberClientTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected const SECRET_KEY = 'nc_c7202108-c6bd-11f0-83be-5b08326e553f';
 
     protected function setUp(): void
@@ -243,5 +247,92 @@ class VideoTranscriberClientTest extends TestCase
         $result = (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
 
         $this->assertSame($data, $result);
+    }
+
+    public function testLoginStoresTheResponseDataInConfigs(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => [
+                    'access_token' => 'kTg5_uMKq1w4-HAQPgY8lRx4MFP5dJNF4Y80HEswGxA',
+                    'token_type'   => 'bearer',
+                    'user_name'    => '黃麒錕',
+                    'email'        => 'cherub0526@gmail.com',
+                    'auth_type'    => 'google',
+                ],
+            ], 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->login('cherub0526@gmail.com', 'secret');
+
+        $this->assertSame(100000, $result['code']);
+
+        $config = Config::where('key', Config::KEY_VIDEOTRANSCRIBER)->first();
+        $this->assertNotNull($config);
+        $this->assertSame('kTg5_uMKq1w4-HAQPgY8lRx4MFP5dJNF4Y80HEswGxA', $config->value['access_token']);
+        $this->assertSame('黃麒錕', $config->value['user_name']);
+
+        Http::assertSent(function ($request) {
+            return $request->url() === 'https://videotranscriber.ai/api/v1/auth/email/login'
+                && $request['email'] === 'cherub0526@gmail.com'
+                && $request['password'] === 'secret';
+        });
+    }
+
+    public function testLoginDoesNotStoreAnythingWhenTheApiFails(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100001, 'message' => 'invalid credentials'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->login('cherub0526@gmail.com', 'wrong');
+
+        $this->assertNull(Config::where('key', Config::KEY_VIDEOTRANSCRIBER)->first());
+    }
+
+    public function testLoginOverwritesTheExistingConfig(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'old-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => ['access_token' => 'new-token'],
+            ], 200),
+        ]);
+
+        (new VideoTranscriberClient())->login('cherub0526@gmail.com', 'secret');
+
+        $this->assertSame(1, Config::where('key', Config::KEY_VIDEOTRANSCRIBER)->count());
+        $this->assertSame('new-token', Config::getValue(Config::KEY_VIDEOTRANSCRIBER)['access_token']);
+    }
+
+    public function testRequestsSendTheStoredAccessTokenAsTheNcTokenCookie(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'stored-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === ['nc_token=stored-token']);
+    }
+
+    public function testAnExplicitCookieTakesPrecedenceOverTheStoredAccessToken(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'stored-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        (new VideoTranscriberClient(cookie: 'session=abc123'))->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        Http::assertSent(fn ($request) => $request->header('Cookie') === ['session=abc123']);
     }
 }
