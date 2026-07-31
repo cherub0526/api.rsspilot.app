@@ -21,6 +21,17 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
 
     protected const RETRY_DELAY_SECONDS = 60;
 
+    protected const STATUS_READY = 'ready';
+
+    protected const STATUS_FAILED = 'failed';
+
+    /**
+     * Subtitle versions from best to worst. `ai_enhanced` is the only one
+     * with punctuation and corrected wording; `optimized` merely re-splits
+     * `original`'s text into finer segments.
+     */
+    protected const VERSION_PRIORITY = ['ai_enhanced', 'optimized', 'original'];
+
     public int $uniqueFor = 3600;
 
     protected Media $media;
@@ -74,10 +85,11 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             ['transcription' => $transcription]
         );
 
-        $original = $transcription['data']['versions']['original'] ?? [];
+        $versions = $transcription['data']['versions'] ?? [];
+        $version = $this->selectVersion($versions);
 
-        if (($original['status'] ?? null) !== 'ready') {
-            if ($this->attempts() >= self::MAX_ATTEMPTS) {
+        if ($version === null) {
+            if ($this->hasSettled($versions) || $this->attempts() >= self::MAX_ATTEMPTS) {
                 $this->markTranscribeFailed();
                 return;
             }
@@ -86,7 +98,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        [$text, $segments] = $this->buildCaptionContent($original['subtitles'] ?? []);
+        [$text, $segments] = $this->buildCaptionContent($version['subtitles']);
+
+        if (!$segments) {
+            $this->markTranscribeFailed();
+            return;
+        }
 
         Caption::updateOrCreate(
             [
@@ -105,8 +122,60 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Build the flat caption text and start/end-in-seconds segments from
-     * videotranscriber.ai's `versions.original.subtitles` payload.
+     * Pick the best usable version out of videotranscriber.ai's `versions`
+     * payload. Returns null while a better version is still being generated,
+     * so the job waits for `ai_enhanced` instead of settling for `original`.
+     *
+     * A version that is ready but carries no subtitles is skipped like a
+     * failed one — the API reports `ready` even when it transcribed nothing.
+     *
+     * @param array<string, array<string, mixed>> $versions
+     * @return null|array<string, mixed>
+     */
+    private function selectVersion(array $versions): ?array
+    {
+        foreach (self::VERSION_PRIORITY as $name) {
+            $version = $versions[$name] ?? null;
+            $status = $version['status'] ?? self::STATUS_FAILED;
+
+            if ($status === self::STATUS_FAILED) {
+                continue;
+            }
+
+            if ($status !== self::STATUS_READY) {
+                return null;
+            }
+
+            if ($version['subtitles'] ?? []) {
+                return $version;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * True once every version is ready or failed, meaning no amount of
+     * waiting will produce a better result.
+     *
+     * @param array<string, array<string, mixed>> $versions
+     */
+    private function hasSettled(array $versions): bool
+    {
+        foreach (self::VERSION_PRIORITY as $name) {
+            $status = $versions[$name]['status'] ?? self::STATUS_FAILED;
+
+            if ($status !== self::STATUS_READY && $status !== self::STATUS_FAILED) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Build the flat caption text and start/end-in-seconds segments from a
+     * version's `subtitles` payload.
      *
      * @param array<int, array<string, mixed>> $subtitles
      * @return array{string, array<int, array<string, mixed>>}
@@ -125,8 +194,8 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
 
             $textParts[] = $content;
             $segments[] = [
-                'start' => $this->timeToSeconds((string) ($subtitle['start'] ?? '00:00:00')),
-                'end'   => $this->timeToSeconds((string) ($subtitle['end'] ?? '00:00:00')),
+                'start' => $this->timeToSeconds($subtitle['start'] ?? 0),
+                'end'   => $this->timeToSeconds($subtitle['end'] ?? 0),
                 'text'  => $content,
             ];
         }
@@ -135,19 +204,24 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Convert a "HH:MM:SS" timestamp into seconds.
+     * Convert a timestamp into seconds. `original` uses "HH:MM:SS" strings
+     * while `optimized` and `ai_enhanced` use fractional seconds.
      */
-    private function timeToSeconds(string $time): float
+    private function timeToSeconds(mixed $time): float
     {
-        $parts = array_map('intval', explode(':', $time));
+        if (is_numeric($time)) {
+            return (float) $time;
+        }
+
+        $parts = array_map('floatval', explode(':', (string) $time));
 
         while (count($parts) < 3) {
-            array_unshift($parts, 0);
+            array_unshift($parts, 0.0);
         }
 
         [$hours, $minutes, $seconds] = $parts;
 
-        return (float) ($hours * 3600 + $minutes * 60 + $seconds);
+        return $hours * 3600 + $minutes * 60 + $seconds;
     }
 
     private function markTranscribeFailed(): void
