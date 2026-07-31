@@ -24,3 +24,4 @@
 .spectra/
 openspec/.vector-search.db*
 storage/framework/testing/*
+storage/temp/*
