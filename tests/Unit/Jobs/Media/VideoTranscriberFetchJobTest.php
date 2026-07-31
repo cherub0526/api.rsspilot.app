@@ -11,6 +11,7 @@ use Hypervel\Queue\Jobs\FakeJob;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
 use App\Jobs\Media\VideoTranscriberFetchJob;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
 
@@ -377,6 +378,109 @@ class VideoTranscriberFetchJobTest extends TestCase
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
         $this->assertNull(Caption::where('media_id', $media->id)->first());
+    }
+
+    #[DataProvider('detectedLanguageProvider')]
+    public function testStoresTheCaptionUnderTheDetectedLanguage(string $detected, string $expected): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'status'   => 'success',
+                    'versions' => [
+                        'original' => [
+                            'status'       => 'ready',
+                            'subtitle_url' => 'https://cdn.ng-resource.com/origin.txt',
+                            'subtitles'    => [['start' => '00:00:01', 'end' => '00:00:09', 'text' => 'hello']],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'cdn.ng-resource.com/*' => Http::response(['detected_language' => $detected], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $caption = Caption::where('media_id', $media->id)->first();
+        $this->assertSame($expected, $caption->locale);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function detectedLanguageProvider(): array
+    {
+        return [
+            'traditional chinese' => ['zh', Caption::LOCAL_ZH_TW],
+            'chinese with region' => ['zh-TW', Caption::LOCAL_ZH_TW],
+            'english'             => ['en', Caption::LOCAL_EN],
+            'anything else'       => ['ja', 'ja'],
+        ];
+    }
+
+    public function testFallsBackToEnglishWhenTheLanguageCannotBeRead(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'status'   => 'success',
+                    'versions' => [
+                        'original' => [
+                            'status'       => 'ready',
+                            'subtitle_url' => 'https://cdn.ng-resource.com/origin.txt',
+                            'subtitles'    => [['start' => '00:00:01', 'end' => '00:00:09', 'text' => 'hello']],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'cdn.ng-resource.com/*' => Http::failedConnection(),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
+        $this->assertSame(Caption::LOCAL_EN, Caption::where('media_id', $media->id)->first()->locale);
+    }
+
+    public function testTakesTheLanguageFromTheOriginalVersionEvenWhenAiEnhancedIsUsed(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'status'   => 'success',
+                    'versions' => [
+                        'original' => [
+                            'status'       => 'ready',
+                            'subtitle_url' => 'https://cdn.ng-resource.com/origin.txt',
+                            'subtitles'    => [['start' => '00:00:01', 'end' => '00:00:09', 'text' => '沒有標點']],
+                        ],
+                        'ai_enhanced' => [
+                            'status'       => 'ready',
+                            'subtitle_url' => 'https://cdn.ng-resource.com/enhanced.txt',
+                            'subtitles'    => [['start' => 1.249, 'end' => 9.092, 'text' => '有標點。']],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'cdn.ng-resource.com/origin.txt'   => Http::response(['detected_language' => 'zh'], 200),
+            'cdn.ng-resource.com/enhanced.txt' => Http::response(['subtitles' => []], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $caption = Caption::where('media_id', $media->id)->first();
+        $this->assertSame(Caption::LOCAL_ZH_TW, $caption->locale);
+        $this->assertSame('有標點。', $caption->text);
     }
 
     public function testUniqueIdIsScopedToTheMedia(): void

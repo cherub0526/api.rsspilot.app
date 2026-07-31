@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Jobs\Media;
 
 use Exception;
+use Throwable;
 use App\Models\Media;
 use App\Models\Caption;
 use Hypervel\Queue\Queueable;
 use App\Models\VideoTranscription;
+use Hypervel\Support\Facades\Http;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
@@ -115,7 +117,7 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         Caption::updateOrCreate(
             [
                 'media_id' => $this->media->id,
-                'locale'   => Caption::LOCAL_EN,
+                'locale'   => $this->detectLocale($data['versions']['original']['subtitle_url'] ?? null),
             ],
             [
                 'primary'       => true,
@@ -184,6 +186,41 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         }
 
         return true;
+    }
+
+    /**
+     * Resolve the caption locale from the language videotranscriber.ai
+     * detected. The API response itself always leaves `asr_lang_code`
+     * empty — the language only appears inside the file the `original`
+     * version's `subtitle_url` points at, so this costs one extra request.
+     * Anything unreadable falls back to English.
+     */
+    private function detectLocale(?string $subtitleUrl): string
+    {
+        if (!$subtitleUrl) {
+            return Caption::LOCAL_EN;
+        }
+
+        try {
+            $langCode = (string) (Http::get($subtitleUrl)->json()['detected_language'] ?? '');
+        } catch (Throwable) {
+            return Caption::LOCAL_EN;
+        }
+
+        return $langCode === '' ? Caption::LOCAL_EN : $this->mapLocale($langCode);
+    }
+
+    /**
+     * Map an ISO 639-1 code onto the locales captions are stored under,
+     * matching what the YouTube caption jobs already do.
+     */
+    private function mapLocale(string $langCode): string
+    {
+        return match (true) {
+            str_starts_with($langCode, 'zh') => Caption::LOCAL_ZH_TW,
+            str_starts_with($langCode, 'en') => Caption::LOCAL_EN,
+            default                          => $langCode,
+        };
     }
 
     /**
