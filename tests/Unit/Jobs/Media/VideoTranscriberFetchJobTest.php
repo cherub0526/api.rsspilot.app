@@ -297,12 +297,40 @@ class VideoTranscriberFetchJobTest extends TestCase
         $this->assertNull(Caption::where('media_id', $media->id)->first());
     }
 
+    public function testReleasesForRetryWhileTheRecordIsStillProcessing(): void
+    {
+        // A processing record carries no `versions` key at all.
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'record_id' => 'audio-1',
+                    'status'    => 'processing',
+                ],
+            ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        $job = new VideoTranscriberFetchJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
+        $this->assertTrue($job->job->isReleased());
+        $this->assertSame(60, $job->job->releaseDelay);
+    }
+
     public function testMarksTranscribeFailedWhenEveryVersionIsReadyButEmpty(): void
     {
         Http::fake([
             'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
                 'code' => 100000,
                 'data' => [
+                    'status'   => 'success',
                     'versions' => [
                         'original'    => ['status' => 'ready', 'subtitles' => []],
                         'optimized'   => ['status' => 'ready', 'subtitles' => []],

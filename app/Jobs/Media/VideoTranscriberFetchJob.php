@@ -32,6 +32,13 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
      */
     protected const VERSION_PRIORITY = ['ai_enhanced', 'optimized', 'original'];
 
+    /**
+     * Record-level statuses that mean the service is done with this audio.
+     * While it is still working the response carries no `versions` key at
+     * all, so the versions alone cannot tell waiting from failure.
+     */
+    protected const RECORD_SETTLED_STATUSES = ['success', 'failed'];
+
     public int $uniqueFor = 3600;
 
     protected Media $media;
@@ -85,11 +92,11 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             ['transcription' => $transcription]
         );
 
-        $versions = $transcription['data']['versions'] ?? [];
-        $version = $this->selectVersion($versions);
+        $data = $transcription['data'] ?? [];
+        $version = $this->selectVersion($data['versions'] ?? []);
 
         if ($version === null) {
-            if ($this->hasSettled($versions) || $this->attempts() >= self::MAX_ATTEMPTS) {
+            if ($this->hasSettled($data) || $this->attempts() >= self::MAX_ATTEMPTS) {
                 $this->markTranscribeFailed();
                 return;
             }
@@ -155,15 +162,21 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * True once every version is ready or failed, meaning no amount of
-     * waiting will produce a better result.
+     * True once the record and every version it carries are ready or failed,
+     * meaning no amount of waiting will produce a better result. A record
+     * that is still processing has no `versions` key yet, so it must be
+     * checked first — otherwise the missing versions read as failures.
      *
-     * @param array<string, array<string, mixed>> $versions
+     * @param array<string, mixed> $data
      */
-    private function hasSettled(array $versions): bool
+    private function hasSettled(array $data): bool
     {
+        if (!in_array($data['status'] ?? null, self::RECORD_SETTLED_STATUSES, true)) {
+            return false;
+        }
+
         foreach (self::VERSION_PRIORITY as $name) {
-            $status = $versions[$name]['status'] ?? self::STATUS_FAILED;
+            $status = $data['versions'][$name]['status'] ?? self::STATUS_FAILED;
 
             if ($status !== self::STATUS_READY && $status !== self::STATUS_FAILED) {
                 return false;
