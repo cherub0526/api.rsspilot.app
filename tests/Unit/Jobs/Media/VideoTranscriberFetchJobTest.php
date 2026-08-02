@@ -483,6 +483,94 @@ class VideoTranscriberFetchJobTest extends TestCase
         $this->assertSame('有標點。', $caption->text);
     }
 
+    public function testCarriesOnAfterTheExpiredTokenIsRefreshedAutomatically(): void
+    {
+        config()->set('services.videotranscriber.email', 'cherub0526@gmail.com');
+        config()->set('services.videotranscriber.password', 'secret');
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response([
+                'code' => 100000,
+                'data' => ['access_token' => 'fresh-token'],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::sequence()
+                ->push(['message' => 'unauthorized'], 401)
+                ->push([
+                    'code'    => 100000,
+                    'message' => 'success',
+                    'data'    => [
+                        'versions' => [
+                            'original' => [
+                                'status'    => 'ready',
+                                'subtitles' => [
+                                    ['start' => '00:00:00', 'end' => '00:00:22', 'text' => 'hello'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        $job = new VideoTranscriberFetchJob($media);
+        $job->job = new FakeJob();
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
+        $this->assertFalse($job->job->isReleased());
+        $this->assertSame('hello', Caption::where('media_id', $media->id)->first()->text);
+    }
+
+    public function testReleasesForRetryWhenTheTokenCannotBeRefreshed(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response(
+                ['code' => 100001, 'message' => 'invalid credentials'],
+                200
+            ),
+            'videotranscriber.ai/*' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        $job = new VideoTranscriberFetchJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
+        $this->assertTrue($job->job->isReleased());
+        $this->assertSame(300, $job->job->releaseDelay);
+    }
+
+    public function testMarksTranscribeFailedOnceTheAuthRetriesAreExhausted(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response(
+                ['code' => 100001, 'message' => 'invalid credentials'],
+                200
+            ),
+            'videotranscriber.ai/*' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        $job = new VideoTranscriberFetchJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 60;
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
+        $this->assertFalse($job->job->isReleased());
+    }
+
     public function testUniqueIdIsScopedToTheMedia(): void
     {
         $media = $this->createMediaWithAudioId();

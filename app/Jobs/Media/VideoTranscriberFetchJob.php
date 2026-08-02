@@ -13,6 +13,7 @@ use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
+use App\Exceptions\VideoTranscriberAuthException;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
 
 class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
@@ -22,6 +23,13 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     protected const MAX_ATTEMPTS = 60;
 
     protected const RETRY_DELAY_SECONDS = 60;
+
+    /**
+     * Longer than RETRY_DELAY_SECONDS: waiting on the transcription is normal
+     * and quick to recheck, whereas an unusable account needs someone to fix
+     * the credentials first.
+     */
+    protected const AUTH_RETRY_DELAY_SECONDS = 300;
 
     protected const STATUS_READY = 'ready';
 
@@ -40,6 +48,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
      * all, so the versions alone cannot tell waiting from failure.
      */
     protected const RECORD_SETTLED_STATUSES = ['success', 'failed'];
+
+    /**
+     * Must cover every release() this job can make, otherwise the worker fails
+     * the job on the second attempt instead of letting it retry.
+     */
+    public int $tries = self::MAX_ATTEMPTS;
 
     public int $uniqueFor = 3600;
 
@@ -79,6 +93,9 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
 
         try {
             $transcription = $client->getTranscription($audioId);
+        } catch (VideoTranscriberAuthException) {
+            $this->releaseForAuthRetry();
+            return;
         } catch (Exception) {
             $this->markTranscribeFailed();
             return;
@@ -272,6 +289,21 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         [$hours, $minutes, $seconds] = $parts;
 
         return $hours * 3600 + $minutes * 60 + $seconds;
+    }
+
+    /**
+     * Back off after the token could not be refreshed. The media keeps its
+     * current status so it resumes by itself once the account works again,
+     * instead of a credential problem burning every queued media.
+     */
+    private function releaseForAuthRetry(): void
+    {
+        if ($this->attempts() >= self::MAX_ATTEMPTS) {
+            $this->markTranscribeFailed();
+            return;
+        }
+
+        $this->release(self::AUTH_RETRY_DELAY_SECONDS);
     }
 
     private function markTranscribeFailed(): void

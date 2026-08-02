@@ -8,6 +8,7 @@ use Tests\TestCase;
 use App\Models\Config;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Foundation\Testing\RefreshDatabase;
+use App\Exceptions\VideoTranscriberAuthException;
 use App\Services\VideoTranscriber\SignatureGenerator;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
 
@@ -26,6 +27,9 @@ class VideoTranscriberClientTest extends TestCase
         parent::setUp();
 
         config()->set('services.videotranscriber.secret_key', self::SECRET_KEY);
+        config()->set('services.videotranscriber.email', 'cherub0526@gmail.com');
+        config()->set('services.videotranscriber.password', 'secret');
+        config()->set('services.videotranscriber.unauthorized_codes', []);
     }
 
     public function testStartTranscriptionSendsACorrectlySignedRequest(): void
@@ -334,5 +338,143 @@ class VideoTranscriberClientTest extends TestCase
         (new VideoTranscriberClient(cookie: 'session=abc123'))->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
 
         Http::assertSent(fn ($request) => $request->header('Cookie') === ['session=abc123']);
+    }
+
+    public function testLogsInAgainAndReplaysTheRequestWhenTheTokenIsRejected(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'expired-token']);
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response([
+                'code' => 100000,
+                'data' => ['access_token' => 'fresh-token'],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::sequence()
+                ->push(['message' => 'unauthorized'], 401)
+                ->push(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        $this->assertSame(100000, $result['code']);
+        $this->assertSame('fresh-token', Config::getValue(Config::KEY_VIDEOTRANSCRIBER)['access_token']);
+
+        Http::assertSentCount(3);
+        Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://videotranscriber.ai/api/v1/transcriptions')
+            && $request->header('Cookie') === ['nc_token=fresh-token']);
+    }
+
+    public function testTreatsAConfiguredBusinessCodeAsAnExpiredToken(): void
+    {
+        config()->set('services.videotranscriber.unauthorized_codes', [100003]);
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'expired-token']);
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response([
+                'code' => 100000,
+                'data' => ['access_token' => 'fresh-token'],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/url-info?*' => Http::sequence()
+                ->push(['code' => 100003, 'message' => 'please login'], 200)
+                ->push(['code' => 100000, 'message' => 'success'], 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->getUrlInfo('https://www.youtube.com/watch?v=uXHNRFHWDnM');
+
+        $this->assertSame(100000, $result['code']);
+        $this->assertSame('fresh-token', Config::getValue(Config::KEY_VIDEOTRANSCRIBER)['access_token']);
+    }
+
+    public function testDoesNotRetryABusinessCodeThatIsNotConfiguredAsUnauthorized(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'stored-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100003, 'message' => 'please login'], 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->getUrlInfo('https://www.youtube.com/watch?v=uXHNRFHWDnM');
+
+        $this->assertSame(100003, $result['code']);
+        Http::assertSentCount(1);
+    }
+
+    public function testThrowsWhenTheReloginIsRejected(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'expired-token']);
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/auth/email/login' => Http::response(
+                ['code' => 100001, 'message' => 'invalid credentials'],
+                200
+            ),
+            'videotranscriber.ai/*' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+
+        $this->expectException(VideoTranscriberAuthException::class);
+
+        (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+    }
+
+    public function testThrowsWithoutCallingLoginWhenNoCredentialsAreConfigured(): void
+    {
+        config()->set('services.videotranscriber.email', null);
+        config()->set('services.videotranscriber.password', null);
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'expired-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+
+        try {
+            (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+            $this->fail('Expected a VideoTranscriberAuthException.');
+        } catch (VideoTranscriberAuthException) {
+            Http::assertNotSent(
+                fn ($request) => $request->url() === 'https://videotranscriber.ai/api/v1/auth/email/login'
+            );
+        }
+    }
+
+    public function testReplaysWithTheTokenAnotherWorkerRefreshedInsteadOfLoggingInAgain(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'expired-token']);
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => function () {
+                // Stands in for a concurrent worker that refreshed the token
+                // while this request was still in flight.
+                if (Config::getValue(Config::KEY_VIDEOTRANSCRIBER)['access_token'] === 'expired-token') {
+                    Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'someone-elses-token']);
+
+                    return Http::response(['message' => 'unauthorized'], 401);
+                }
+
+                return Http::response(['code' => 100000, 'message' => 'success'], 200);
+            },
+        ]);
+
+        $result = (new VideoTranscriberClient())->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        $this->assertSame(100000, $result['code']);
+        Http::assertNotSent(
+            fn ($request) => $request->url() === 'https://videotranscriber.ai/api/v1/auth/email/login'
+        );
+        Http::assertSent(fn ($request) => $request->header('Cookie') === ['nc_token=someone-elses-token']);
+    }
+
+    public function testDoesNotReloginWhenAnExplicitCookieWasInjected(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'stored-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['message' => 'unauthorized'], 401),
+        ]);
+
+        $result = (new VideoTranscriberClient(cookie: 'session=abc123'))
+            ->getTranscription('562a7c09-c6b4-4289-80e6-36a4921b571f');
+
+        $this->assertSame(['message' => 'unauthorized'], $result);
+        Http::assertSentCount(1);
     }
 }

@@ -55,5 +55,13 @@ return [
         'secret_key' => env('VIDEOTRANSCRIBER_SECRET_KEY'),
         'email'      => env('VIDEOTRANSCRIBER_EMAIL'),
         'password'   => env('VIDEOTRANSCRIBER_PASSWORD'),
+
+        // Business `code` values that mean the session expired. The API answers
+        // 200 with a code rather than 401, so the real value can only be filled
+        // in once observed; 401/403 are always treated as expired regardless.
+        'unauthorized_codes' => array_values(array_filter(
+            array_map('trim', explode(',', (string) env('VIDEOTRANSCRIBER_UNAUTHORIZED_CODES', ''))),
+            fn (string $code) => $code !== ''
+        )),
     ],
 ];
