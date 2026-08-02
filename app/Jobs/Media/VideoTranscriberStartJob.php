@@ -85,6 +85,8 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
         $data = $urlInfo['data'] ?? [];
 
+        $this->syncDuration($data);
+
         try {
             $startTranscription = $client->startTranscription([
                 'path'       => $url,
@@ -111,6 +113,24 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         );
 
         $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save();
+    }
+
+    /**
+     * Persist the video length returned by url-info onto the media row.
+     */
+    private function syncDuration(array $data): void
+    {
+        $duration = (int) ($data['youtube_video_data']['videoInfo']['duration'] ?? 0);
+
+        if ($duration <= 0) {
+            $duration = (int) ($data['audio_time'] ?? 0);
+        }
+
+        if ($duration <= 0 || $this->media->duration === $duration) {
+            return;
+        }
+
+        $this->media->fill(['duration' => $duration])->save();
     }
 
     /**

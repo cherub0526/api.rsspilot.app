@@ -58,6 +58,92 @@ class VideoTranscriberStartJobTest extends TestCase
         $this->assertSame('audio-1', $record->start_transcription['data']['audio_id']);
     }
 
+    public function testUpdatesMediaDurationFromUrlInfo(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => [
+                    'type'               => 3,
+                    'title'              => 'Test Video',
+                    'audio_time'         => 2950,
+                    'youtube_video_data' => [
+                        'videoInfo' => ['duration' => 139],
+                    ],
+                ],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => ['event_id' => 'event-1', 'audio_id' => 'audio-1'],
+            ], 200),
+        ]);
+
+        $media = $this->createMedia();
+        $media->fill(['duration' => 0])->save();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(139, $media->duration);
+    }
+
+    public function testFallsBackToAudioTimeWhenVideoInfoDurationIsZeroOrMissing(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => [
+                    'type'               => 3,
+                    'title'              => 'Test Video',
+                    'audio_time'         => 139,
+                    'youtube_video_data' => [
+                        'videoInfo' => ['duration' => 0],
+                    ],
+                ],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => ['event_id' => 'event-1', 'audio_id' => 'audio-1'],
+            ], 200),
+        ]);
+
+        $media = $this->createMedia();
+        $media->fill(['duration' => 0])->save();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(139, $media->duration);
+    }
+
+    public function testKeepsExistingDurationWhenUrlInfoHasNone(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => ['type' => 3, 'title' => 'Test Video'],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code'    => 100000,
+                'message' => 'success',
+                'data'    => ['event_id' => 'event-1', 'audio_id' => 'audio-1'],
+            ], 200),
+        ]);
+
+        $media = $this->createMedia();
+        $media->fill(['duration' => 300])->save();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(300, $media->duration);
+    }
+
     public function testStartTranscriptionUsesUrlInfoDataAsPayload(): void
     {
         Http::fake([
