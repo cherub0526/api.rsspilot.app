@@ -17,6 +17,10 @@ for YouTube content, with Paddle subscription management.
 - Paddle subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
 
+## Project Lore
+
+Project lore lives in `docs/lore/` — consult it before planning or bug-fixing, and capture implicit knowledge into it.
+
 ## Development Environment
 
 This project runs in a **Docker Compose** environment. All commands must be executed inside the Docker container.
