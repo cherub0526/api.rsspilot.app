@@ -13,7 +13,7 @@
   "description": "A Laravel-style PHP framework with native coroutine support for ultra-high performance.",
   "license": "MIT",
   "require": {
-    "php": ">=8.2",
+    "php": ">=8.3",
     "ext-simplexml": "*",
     "barryvdh/laravel-ide-helper": "^3.6",
     "friendsofhyperf/tinker": "~3.1.0",
