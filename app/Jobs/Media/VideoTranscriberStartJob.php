@@ -97,22 +97,37 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         } catch (VideoTranscriberAuthException) {
             $this->releaseForAuthRetry();
             return;
-        } catch (Exception) {
+        } catch (Exception $e) {
+            // No response body to keep, so record why the call never produced
+            // one — otherwise a transport failure leaves the column empty and
+            // indistinguishable from a media that was never started.
+            $this->saveStartTranscription(['error' => $e->getMessage()]);
             $this->markTranscribeFailed();
             return;
         }
+
+        // Stored before the code is checked: a rejection explains why this
+        // media stops here, and that is exactly what has to survive for
+        // someone reading the row later.
+        $this->saveStartTranscription($startTranscription);
 
         if (($startTranscription['code'] ?? null) !== 100000) {
             $this->markTranscribeFailed();
             return;
         }
 
+        $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save();
+    }
+
+    /**
+     * Persist the start-transcription outcome, successful or not.
+     */
+    private function saveStartTranscription(array $startTranscription): void
+    {
         VideoTranscription::updateOrCreate(
             ['media_id' => $this->media->id],
             ['start_transcription' => $startTranscription]
         );
-
-        $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save();
     }
 
     /**
