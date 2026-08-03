@@ -22,9 +22,9 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
      * account turns out to be unusable. Long enough that a broken password can
      * be fixed by hand before the attempts run out.
      */
-    protected const AUTH_RETRY_DELAY_SECONDS = 300;
+    protected const int AUTH_RETRY_DELAY_SECONDS = 300;
 
-    protected const MAX_ATTEMPTS = 12;
+    protected const int MAX_ATTEMPTS = 12;
 
     /**
      * Must cover every release() this job can make, otherwise the worker fails
