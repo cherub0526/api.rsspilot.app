@@ -47,6 +47,18 @@ class StartTest extends TestCase
         Queue::assertPushed(fn (VideoTranscriberStartJob $job) => $job->uniqueId() === $target->id);
     }
 
+    public function testIdOptionIgnoresTheMediaStatus(): void
+    {
+        Queue::fake();
+
+        $failed = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBE_FAILED]);
+
+        $this->artisan('videotranscriber:start', ['--id' => $failed->id])->run();
+
+        Queue::assertPushed(VideoTranscriberStartJob::class, 1);
+        Queue::assertPushed(fn (VideoTranscriberStartJob $job) => $job->uniqueId() === $failed->id);
+    }
+
     public function testDoesNothingWhenNoMediaIsCreated(): void
     {
         Queue::fake();

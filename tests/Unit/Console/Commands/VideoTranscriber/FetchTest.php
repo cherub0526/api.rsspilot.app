@@ -47,6 +47,18 @@ class FetchTest extends TestCase
         Queue::assertPushed(fn (VideoTranscriberFetchJob $job) => $job->uniqueId() === $target->id);
     }
 
+    public function testIdOptionIgnoresTheMediaStatus(): void
+    {
+        Queue::fake();
+
+        $failed = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBE_FAILED]);
+
+        $this->artisan('videotranscriber:fetch', ['--id' => $failed->id])->run();
+
+        Queue::assertPushed(VideoTranscriberFetchJob::class, 1);
+        Queue::assertPushed(fn (VideoTranscriberFetchJob $job) => $job->uniqueId() === $failed->id);
+    }
+
     public function testDoesNothingWhenNoMediaIsTranscribing(): void
     {
         Queue::fake();
