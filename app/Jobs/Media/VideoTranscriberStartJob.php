@@ -68,20 +68,18 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         } catch (VideoTranscriberAuthException) {
             $this->releaseForAuthRetry();
             return;
-        } catch (Exception) {
+        } catch (Exception $e) {
+            $this->saveTranscription(['url_info' => ['error' => $e->getMessage()]]);
             $this->markTranscribeFailed();
             return;
         }
+
+        $this->saveTranscription(['url_info' => $urlInfo]);
 
         if (($urlInfo['code'] ?? null) !== 100000) {
             $this->markTranscribeFailed();
             return;
         }
-
-        VideoTranscription::updateOrCreate(
-            ['media_id' => $this->media->id],
-            ['url_info' => $urlInfo]
-        );
 
         $data = $urlInfo['data'] ?? [];
 
@@ -98,18 +96,12 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
             $this->releaseForAuthRetry();
             return;
         } catch (Exception $e) {
-            // No response body to keep, so record why the call never produced
-            // one — otherwise a transport failure leaves the column empty and
-            // indistinguishable from a media that was never started.
-            $this->saveStartTranscription(['error' => $e->getMessage()]);
+            $this->saveTranscription(['start_transcription' => ['error' => $e->getMessage()]]);
             $this->markTranscribeFailed();
             return;
         }
 
-        // Stored before the code is checked: a rejection explains why this
-        // media stops here, and that is exactly what has to survive for
-        // someone reading the row later.
-        $this->saveStartTranscription($startTranscription);
+        $this->saveTranscription(['start_transcription' => $startTranscription]);
 
         if (($startTranscription['code'] ?? null) !== 100000) {
             $this->markTranscribeFailed();
@@ -120,13 +112,22 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Persist the start-transcription outcome, successful or not.
+     * Persist an endpoint's outcome, successful or not.
+     *
+     * Both columns are written before their `code` is inspected: a rejection is
+     * the only explanation for why a media stops where it does, and an `error`
+     * key stands in when the call failed before any response body existed.
+     * Without it a failure is indistinguishable from a media never started.
+     *
+     * The auth path deliberately writes nothing — it releases for a retry, so
+     * it has no outcome yet and would only overwrite what the next attempt
+     * stores.
      */
-    private function saveStartTranscription(array $startTranscription): void
+    private function saveTranscription(array $attributes): void
     {
         VideoTranscription::updateOrCreate(
             ['media_id' => $this->media->id],
-            ['start_transcription' => $startTranscription]
+            $attributes
         );
     }
 
