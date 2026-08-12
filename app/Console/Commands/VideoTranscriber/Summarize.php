@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\VideoTranscriber;
 
-use Throwable;
 use App\Models\Media;
-use App\Models\Caption;
-use App\Models\Summary;
+use Hypervel\Bus\UniqueLock;
 use Hypervel\Console\Command;
-use App\Services\VideoTranscriber\VideoTranscriberClient;
+use App\Jobs\Media\VideoTranscriberSmartSummaryJob;
+use Hypervel\Cache\Contracts\Factory as CacheFactory;
 use App\Services\VideoTranscriber\Prompts\SmartSummaryTemplate;
 
 class Summarize extends Command
@@ -19,124 +18,59 @@ class Summarize extends Command
      */
     protected ?string $signature = 'videotranscriber:summary
         {--id= : Summarise a specific media by ID, whatever its status}
-        {--language=English : The language the summary must be written in}';
+        {--language= : The language the summary must be written in}
+        {--force : Release the unique job lock before dispatching}';
 
     /**
      * The console command description.
      */
-    protected string $description = 'Summarise transcribed media through videotranscriber.ai and store the result';
+    protected string $description = 'Queue videotranscriber.ai smart summaries for transcribed media';
 
     /**
      * Execute the console command.
-     *
-     * Unlike the start/fetch commands this does the work inline rather than
-     * dispatching a job: the summary arrives in a single request, so there is
-     * no polling to hand off to a worker.
      */
-    public function handle(VideoTranscriberClient $client): void
+    public function handle(): void
     {
         $query = Media::query();
 
-        // Naming a media is an explicit manual override, so it is summarised
-        // regardless of status — the only way to redo one that already left
-        // `transcribed`, e.g. one stuck on `summarize_failed`.
+        // Naming a media is an explicit manual override, so it is dispatched
+        // regardless of status — that is the only way to re-summarise a media
+        // that already left `transcribed`, e.g. one stuck on
+        // `summarize_failed`.
         if ($id = $this->option('id')) {
             $query->where('id', $id);
         } else {
             $query->where('status', Media::STATUS_TRANSCRIBED);
         }
 
-        $template = new SmartSummaryTemplate((string) $this->option('language'));
+        $force = (bool) $this->option('force');
+        $language = (string) ($this->option('language') ?: SmartSummaryTemplate::DEFAULT_LANGUAGE);
 
-        $query->chunkById(100, function ($medias) use ($client, $template) {
+        $query->chunkById(100, function ($medias) use ($force, $language) {
             foreach ($medias as $media) {
-                $this->summarize($client, $template, $media);
+                $job = new VideoTranscriberSmartSummaryJob($media, $language);
+
+                if ($force) {
+                    $this->releaseUniqueLock($job);
+                }
+
+                $this->info('Queueing summary: ' . $media->title . ' (' . $media->id . ')');
+
+                dispatch($job);
             }
         });
     }
 
     /**
-     * Summarise one media, leaving it on a terminal status either way.
+     * Drop the job's unique lock so the dispatch below is not silently skipped.
      *
-     * Failures are caught per media so one bad response cannot abandon the
-     * rest of the batch half-processed.
+     * The lock is only released once the job finishes or fails for good, so a
+     * worker that dies mid-run leaves it behind for a whole `uniqueFor` window.
+     * While it lingers every dispatch is discarded without a word, and this is
+     * the only way to requeue the media before it expires.
      */
-    private function summarize(
-        VideoTranscriberClient $client,
-        SmartSummaryTemplate $template,
-        Media $media
-    ): void {
-        /** @var null|Caption $caption */
-        $caption = $media->captions()->where('primary', true)->first();
-
-        if (!$caption) {
-            $this->error('No primary caption: ' . $media->id);
-            $this->markFailed($media);
-
-            return;
-        }
-
-        $this->info('Summarizing: ' . $media->title . ' (' . $media->id . ')');
-
-        $media->fill(['status' => Media::STATUS_SUMMARIZING])->save();
-
-        /** @var Summary $summary */
-        $summary = $media->summaries()->firstOrCreate(['locale' => $caption->locale]);
-
-        try {
-            $markdown = $client->summaryCompletions($template->build($caption->text));
-        } catch (Throwable $e) {
-            $this->error('Request failed: ' . $e->getMessage());
-            $this->markFailed($media, $summary);
-
-            return;
-        }
-
-        // An empty result is a failure, not an empty summary: the endpoint
-        // answers occasional 502s with a plain-text body that carries no SSE
-        // frames at all, which parses down to nothing.
-        if (trim($markdown) === '') {
-            $this->error('Empty summary returned: ' . $media->id);
-            $this->markFailed($media, $summary);
-
-            return;
-        }
-
-        $summary->fill([
-            'text'     => $this->wrap($markdown),
-            'status'   => Summary::STATUS_COMPLETED,
-            'ai_model' => VideoTranscriberClient::SUMMARY_MODEL,
-        ])->save();
-
-        $media->fill(['status' => Media::STATUS_SUMMARIZED])->save();
-    }
-
-    /**
-     * Fit the Markdown into the structure the OpenAI-backed summaries already
-     * use, so `SummaryResource` consumers keep reading one shape.
-     *
-     * Smart Summary produces a single Markdown document rather than the split
-     * short/long form, so the sibling fields stay empty; `ai_model` is what
-     * tells the two kinds of row apart.
-     *
-     * @return array<string, mixed>
-     */
-    private function wrap(string $markdown): array
+    private function releaseUniqueLock(VideoTranscriberSmartSummaryJob $job): void
     {
-        return [
-            'short_summary' => '',
-            'long_summary'  => [
-                'content'    => $markdown,
-                'key_points' => [],
-                'keywords'   => [],
-            ],
-        ];
-    }
-
-    private function markFailed(Media $media, ?Summary $summary = null): void
-    {
-        $summary?->fill(['status' => Summary::STATUS_FAILED])->save();
-
-        $media->fill(['status' => Media::STATUS_SUMMARIZE_FAILED])->save();
+        (new UniqueLock(app(CacheFactory::class)))->release($job);
     }
 }
