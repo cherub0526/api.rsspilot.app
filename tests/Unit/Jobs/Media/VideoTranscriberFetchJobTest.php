@@ -272,8 +272,10 @@ class VideoTranscriberFetchJobTest extends TestCase
         $this->assertSame([['start' => 1.5, 'end' => 9.25, 'text' => 'optimized text']], $caption->segments);
     }
 
-    public function testSkipsAReadyVersionThatCarriesNoSubtitles(): void
+    public function testTakesAReadyVersionEvenWhenItCarriesNoSubtitles(): void
     {
+        // `ready` with nothing in it is no longer treated as a failure, so the
+        // empty ai_enhanced wins over the original that does have subtitles.
         Http::fake([
             'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
                 'code' => 100000,
@@ -294,11 +296,12 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
 
-        $caption = Caption::where('media_id', $media->id)->first();
-        $this->assertSame('original text', $caption->text);
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
+        $this->assertNull(Caption::where('media_id', $media->id)->first());
     }
 
-    public function testWaitsForTheAiEnhancedVersionWhileItIsStillProcessing(): void
+    public function testDoesNotWaitForAiEnhancedWhenALowerVersionIsReady(): void
     {
         Http::fake([
             'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
@@ -309,7 +312,10 @@ class VideoTranscriberFetchJobTest extends TestCase
                             'status'    => 'ready',
                             'subtitles' => [['start' => '00:00:01', 'end' => '00:00:09', 'text' => 'original text']],
                         ],
-                        'optimized'   => ['status' => 'ready', 'subtitles' => []],
+                        'optimized' => [
+                            'status'    => 'ready',
+                            'subtitles' => [['start' => 1.5, 'end' => 9.25, 'text' => 'optimized text']],
+                        ],
                         'ai_enhanced' => ['status' => 'processing', 'subtitles' => []],
                     ],
                 ],
@@ -325,9 +331,9 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->handle(new VideoTranscriberClient());
 
         $media->refresh();
-        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
-        $this->assertTrue($job->job->isReleased());
-        $this->assertNull(Caption::where('media_id', $media->id)->first());
+        $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
+        $this->assertFalse($job->job->isReleased());
+        $this->assertSame('optimized text', Caption::where('media_id', $media->id)->first()->text);
     }
 
     public function testReleasesForRetryWhileTheRecordIsStillProcessing(): void

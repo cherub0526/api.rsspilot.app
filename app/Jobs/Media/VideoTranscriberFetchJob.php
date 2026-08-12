@@ -169,12 +169,13 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Pick the best usable version out of videotranscriber.ai's `versions`
-     * payload. Returns null while a better version is still being generated,
-     * so the job waits for `ai_enhanced` instead of settling for `original`.
+     * Take the highest-priority version the service reports as ready.
      *
-     * A version that is ready but carries no subtitles is skipped like a
-     * failed one — the API reports `ready` even when it transcribed nothing.
+     * Only `status` is consulted: a ready version is accepted even when its
+     * `subtitles` are empty, and a version still being generated is not waited
+     * for — whatever is ready first wins. Both are deliberate, and both hand
+     * the outcome to `buildCaptionContent()`, which fails the media when the
+     * chosen version yields no usable segments.
      *
      * @param array<string, array<string, mixed>> $versions
      * @return null|array<string, mixed>
@@ -185,15 +186,7 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             $version = $versions[$name] ?? null;
             $status = $version['status'] ?? self::STATUS_FAILED;
 
-            if ($status === self::STATUS_FAILED) {
-                continue;
-            }
-
-            if ($status !== self::STATUS_READY) {
-                return null;
-            }
-
-            if ($version['subtitles'] ?? []) {
+            if ($status === self::STATUS_READY) {
                 return $version;
             }
         }
