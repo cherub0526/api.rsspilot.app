@@ -189,7 +189,14 @@ class VideoTranscriberStartJobTest extends TestCase
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
-        $this->assertDatabaseCount('video_transcriptions', 0);
+
+        // No response body ever existed, so an `error` key stands in for it —
+        // without it the failure is indistinguishable from a media never started.
+        $record = VideoTranscription::where('media_id', $media->id)->first();
+        $this->assertNotNull($record);
+        $this->assertArrayHasKey('error', $record->url_info);
+        $this->assertNotSame('', $record->url_info['error']);
+        $this->assertNull($record->start_transcription);
     }
 
     public function testMarksMediaAsTranscribeFailedWhenGetUrlInfoReturnsNonSuccessCode(): void
@@ -208,7 +215,11 @@ class VideoTranscriberStartJobTest extends TestCase
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
-        $this->assertDatabaseCount('video_transcriptions', 0);
+
+        $record = VideoTranscription::where('media_id', $media->id)->first();
+        $this->assertNotNull($record);
+        $this->assertSame(164001, $record->url_info['code']);
+        $this->assertNull($record->start_transcription);
     }
 
     public function testKeepsSavedUrlInfoWhenStartTranscriptionFails(): void
@@ -233,10 +244,12 @@ class VideoTranscriberStartJobTest extends TestCase
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
 
+        // The second updateOrCreate must add the rejection alongside the
+        // url_info the first one stored, not replace the whole row.
         $record = VideoTranscription::where('media_id', $media->id)->first();
         $this->assertNotNull($record);
         $this->assertSame(100000, $record->url_info['code']);
-        $this->assertNull($record->start_transcription);
+        $this->assertSame(164016, $record->start_transcription['code']);
     }
 
     public function testCarriesOnAfterTheExpiredTokenIsRefreshedAutomatically(): void
