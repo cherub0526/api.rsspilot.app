@@ -6,6 +6,7 @@ namespace Tests\Unit\Jobs\Media;
 
 use Tests\TestCase;
 use App\Models\Media;
+use RuntimeException;
 use App\Models\Caption;
 use App\Models\Summary;
 use Hypervel\Queue\Jobs\FakeJob;
@@ -197,6 +198,34 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
         $this->assertSame(Media::STATUS_SUMMARIZE_FAILED, $media->refresh()->status);
         $this->assertSame(0, $media->summaries()->count());
+    }
+
+    public function testFailedHookSettlesTheMediaWhenTheJobDiesOutsideHandle(): void
+    {
+        // Stands in for anything handle() cannot catch — a save the column
+        // rejects, an Error, the DB dropping out. Without the hook the media
+        // would sit on `summarizing` while the job is already in failed_jobs.
+        $media = $this->transcribedMediaWithCaption();
+        $media->fill(['status' => Media::STATUS_SUMMARIZING])->save();
+
+        $summary = $media->summaries()->create([
+            'locale' => Caption::LOCAL_EN,
+            'status' => Summary::STATUS_CREATED,
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->failed(new RuntimeException('boom'));
+
+        $this->assertSame(Media::STATUS_SUMMARIZE_FAILED, $media->refresh()->status);
+        $this->assertSame(Summary::STATUS_FAILED, $summary->refresh()->status);
+    }
+
+    public function testFailedHookStillSettlesTheMediaWithoutACaption(): void
+    {
+        $media = Media::factory()->create(['status' => Media::STATUS_SUMMARIZING]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->failed(new RuntimeException('boom'));
+
+        $this->assertSame(Media::STATUS_SUMMARIZE_FAILED, $media->refresh()->status);
     }
 
     public function testUniqueIdIsScopedToTheMedia(): void

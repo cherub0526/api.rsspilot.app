@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs\Media;
 
 use Exception;
+use Throwable;
 use App\Models\Media;
 use App\Models\Caption;
 use App\Models\Summary;
@@ -112,6 +113,28 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         ])->save();
 
         $this->media->fill(['status' => Media::STATUS_SUMMARIZED])->save();
+    }
+
+    /**
+     * The queue's last word once the job has failed for good.
+     *
+     * handle() only guards the API call, so anything else that throws — a save
+     * that the column cannot hold, an `Error` the `catch (Exception)` above
+     * does not cover, the DB being unreachable — bypasses markFailed()
+     * entirely. Without this hook the job would land in `failed_jobs` while
+     * the media sat on `summarizing` for good, looking like it was still
+     * being worked on.
+     */
+    public function failed(?Throwable $e): void
+    {
+        $locale = $this->media->captions()->where('primary', true)->value('locale');
+
+        /** @var null|Summary $summary */
+        $summary = $locale
+            ? $this->media->summaries()->where('locale', $locale)->first()
+            : null;
+
+        $this->markFailed($summary);
     }
 
     /**
