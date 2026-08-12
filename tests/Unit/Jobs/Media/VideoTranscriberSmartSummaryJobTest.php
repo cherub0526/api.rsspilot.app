@@ -24,9 +24,9 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Fake prod-config plus a summary stream that yields $markdown.
+     * Fake prod-config plus a summary stream that yields $body verbatim.
      */
-    private function fakeStream(string $markdown): void
+    private function fakeStream(string $body): void
     {
         Http::fake([
             'videotranscriber.ai/api/v1/prod-config*' => Http::response(
@@ -35,10 +35,25 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
             ),
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response(
                 'data: {"summary_id": "abc"}' . "\n\n"
-                . 'data: ' . json_encode(['message' => $markdown]) . "\n\n"
+                . 'data: ' . json_encode(['message' => $body]) . "\n\n"
                 . 'data: [DONE]' . "\n\n",
                 200
             ),
+        ]);
+    }
+
+    /**
+     * The JSON body the prompt asks the model for.
+     */
+    private function summaryJson(string $content, string $short = 'the short one'): string
+    {
+        return (string) json_encode([
+            'short_summary' => $short,
+            'long_summary'  => [
+                'content'    => $content,
+                'key_points' => ['point one', 'point two'],
+                'keywords'   => ['alpha', 'beta'],
+            ],
         ]);
     }
 
@@ -58,7 +73,7 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
     public function testStoresTheSummaryAndMarksTheMediaSummarized(): void
     {
-        $this->fakeStream('# Title');
+        $this->fakeStream($this->summaryJson('# Title'));
 
         $media = $this->transcribedMediaWithCaption();
 
@@ -71,13 +86,62 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
         $this->assertSame(Caption::LOCAL_EN, $summary->locale);
         $this->assertSame(Summary::STATUS_COMPLETED, $summary->status);
         $this->assertSame(VideoTranscriberClient::SUMMARY_MODEL, $summary->ai_model);
+        $this->assertSame('the short one', $summary->text['short_summary']);
         $this->assertSame('# Title', $summary->text['long_summary']['content']);
-        $this->assertSame('', $summary->text['short_summary']);
+        $this->assertSame(['point one', 'point two'], $summary->text['long_summary']['key_points']);
+        $this->assertSame(['alpha', 'beta'], $summary->text['long_summary']['keywords']);
+    }
+
+    public function testAcceptsJsonThatArrivesWrappedInACodeFence(): void
+    {
+        // The prompt forbids fences, but models add them anyway; discarding an
+        // otherwise-good summary over one would be the wrong trade.
+        $this->fakeStream("```json\n" . $this->summaryJson('# Fenced') . "\n```");
+
+        $media = $this->transcribedMediaWithCaption();
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $this->assertSame(Media::STATUS_SUMMARIZED, $media->refresh()->status);
+        $this->assertSame('# Fenced', $media->summaries()->first()->text['long_summary']['content']);
+    }
+
+    public function testFillsInTheOptionalArraysWhenTheModelOmitsThem(): void
+    {
+        $this->fakeStream((string) json_encode(['long_summary' => ['content' => '# Bare']]));
+
+        $media = $this->transcribedMediaWithCaption();
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $text = $media->summaries()->first()->text;
+        $this->assertSame('# Bare', $text['long_summary']['content']);
+        $this->assertSame('', $text['short_summary']);
+        $this->assertSame([], $text['long_summary']['key_points']);
+        $this->assertSame([], $text['long_summary']['keywords']);
+    }
+
+    public function testReleasesForRetryWhenTheResponseIsNotTheRequestedJson(): void
+    {
+        // Plain Markdown instead of the JSON contract — retryable, because a
+        // model ignoring the output format usually complies on another go.
+        $this->fakeStream('# Just markdown, no JSON');
+
+        $media = $this->transcribedMediaWithCaption();
+
+        $job = new VideoTranscriberSmartSummaryJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle(new VideoTranscriberClient());
+
+        $this->assertTrue($job->job->isReleased());
+        $this->assertNull($media->summaries()->first()->text);
     }
 
     public function testSendsTheSmartSummaryPromptWrappedAroundTheCaption(): void
     {
-        $this->fakeStream('# Title');
+        $this->fakeStream($this->summaryJson('# Title'));
 
         (new VideoTranscriberSmartSummaryJob($this->transcribedMediaWithCaption()))
             ->handle(new VideoTranscriberClient());
@@ -97,7 +161,7 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
     public function testTheLanguageArgumentReachesThePrompt(): void
     {
-        $this->fakeStream('# Title');
+        $this->fakeStream($this->summaryJson('# Title'));
 
         (new VideoTranscriberSmartSummaryJob($this->transcribedMediaWithCaption(), 'Traditional Chinese'))
             ->handle(new VideoTranscriberClient());
@@ -108,7 +172,7 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
     public function testOverwritesTheExistingSummaryForTheSameLocale(): void
     {
-        $this->fakeStream('# Fresh');
+        $this->fakeStream($this->summaryJson('# Fresh'));
 
         $media = $this->transcribedMediaWithCaption();
         $existing = $media->summaries()->create([
@@ -190,7 +254,7 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
     public function testMarksFailedWhenThereIsNoPrimaryCaption(): void
     {
-        $this->fakeStream('# Title');
+        $this->fakeStream($this->summaryJson('# Title'));
 
         $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
 

@@ -88,7 +88,7 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         $template = new SmartSummaryTemplate($this->language);
 
         try {
-            $markdown = $client->summaryCompletions($template->build($caption->text));
+            $response = $client->summaryCompletions($template->build($caption->text));
         } catch (VideoTranscriberAuthException) {
             $this->releaseOrFail($summary, self::AUTH_RETRY_DELAY_SECONDS);
             return;
@@ -97,17 +97,20 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        // An empty result is a failure, not an empty summary: the endpoint
-        // answers occasional 502s with a plain-text body carrying no SSE
-        // frames at all, which parses down to nothing. Those clear on their
-        // own, so it is worth another attempt rather than giving up.
-        if (trim($markdown) === '') {
+        // Covers both an empty body and one that is not the JSON the prompt
+        // asked for. The endpoint answers occasional 502s with a plain-text
+        // body carrying no SSE frames at all, and a model can always ignore
+        // the output format — both clear on a retry, so it is worth another
+        // attempt rather than storing something unusable.
+        $text = $this->decode($response);
+
+        if ($text === null) {
             $this->releaseOrFail($summary, self::RETRY_DELAY_SECONDS);
             return;
         }
 
         $summary->fill([
-            'text'     => $this->wrap($markdown),
+            'text'     => $text,
             'status'   => Summary::STATUS_COMPLETED,
             'ai_model' => VideoTranscriberClient::SUMMARY_MODEL,
         ])->save();
@@ -138,25 +141,49 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Fit the Markdown into the structure the OpenAI-backed summaries already
-     * use, so `SummaryResource` consumers keep reading one shape.
+     * Decode the JSON the prompt asks for, or null when the response cannot be
+     * used.
      *
-     * Smart Summary produces a single Markdown document rather than the split
-     * short/long form, so the sibling fields stay empty; `ai_model` is what
-     * tells the two kinds of row apart.
+     * `long_summary.content` is the one field worth failing over — the rest is
+     * normalised so a model that omits an optional array does not cost a whole
+     * summary. The fenced-block tolerance is deliberate: the prompt forbids
+     * code fences, but models add them anyway often enough that discarding an
+     * otherwise-good summary over one would be the wrong trade.
      *
-     * @return array<string, mixed>
+     * @return null|array<string, mixed>
      */
-    private function wrap(string $markdown): array
+    private function decode(string $response): ?array
     {
+        $decoded = json_decode($this->stripCodeFence(trim($response)), true);
+
+        if (!is_array($decoded) || !is_string($decoded['long_summary']['content'] ?? null)) {
+            return null;
+        }
+
         return [
-            'short_summary' => '',
+            'short_summary' => (string) ($decoded['short_summary'] ?? ''),
             'long_summary'  => [
-                'content'    => $markdown,
-                'key_points' => [],
-                'keywords'   => [],
+                'content'    => $decoded['long_summary']['content'],
+                'key_points' => array_values((array) ($decoded['long_summary']['key_points'] ?? [])),
+                'keywords'   => array_values((array) ($decoded['long_summary']['keywords'] ?? [])),
             ],
         ];
+    }
+
+    /**
+     * Unwrap a ```json … ``` block, leaving anything else untouched.
+     */
+    private function stripCodeFence(string $response): string
+    {
+        if (!str_starts_with($response, '```')) {
+            return $response;
+        }
+
+        // Drop the opening fence with its optional language tag, then the
+        // closing one.
+        $response = (string) preg_replace('/^```[a-zA-Z]*\R?/', '', $response);
+
+        return rtrim((string) preg_replace('/\R?```$/', '', $response));
     }
 
     /**

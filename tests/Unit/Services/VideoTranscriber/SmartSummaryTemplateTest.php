@@ -37,7 +37,7 @@ class SmartSummaryTemplateTest extends TestCase
         // A heredoc would have interpolated these away into empty strings.
         $this->assertStringContainsString('Use $...$ for inline variables and simple expressions.', $text);
         $this->assertStringContainsString('Use $$...$$ for complex or standalone equations.', $text);
-        $this->assertStringContainsString('code fences such as ```markdown or ```', $text);
+        $this->assertStringContainsString('code fences such as ```json or ```', $text);
     }
 
     public function testStripsTheSourceIndentationButKeepsTheMarkdownNesting(): void
@@ -53,6 +53,19 @@ class SmartSummaryTemplateTest extends TestCase
             'The nested bullet list must keep its two-space indent'
         );
         $this->assertStringNotContainsString("\n            You are an expert", $text);
+    }
+
+    public function testAsksForTheSummaryJsonSchema(): void
+    {
+        $text = (new SmartSummaryTemplate())->build('transcript');
+
+        // The schema is a contract with Summary::text and every
+        // SummaryResource consumer, not just prompt wording.
+        $this->assertStringContainsString('"short_summary": "Short summary content"', $text);
+        $this->assertStringContainsString('"content": "Long summary with paragraphs and subheadings"', $text);
+        $this->assertStringContainsString('"key_points": [', $text);
+        $this->assertStringContainsString('"keywords": [', $text);
+        $this->assertStringContainsString('Reply with strictly valid JSON and nothing else.', $text);
     }
 
     public function testDefaultsToEnglishAndAcceptsAnotherLanguage(): void

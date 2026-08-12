@@ -17,6 +17,11 @@ namespace App\Services\VideoTranscriber\Prompts;
  * sends: instructions first, the transcript after the `Transcript Content:`
  * marker, and the language directive last. Reordering these changes the
  * output, so keep the assembly in `build()` as it is.
+ *
+ * The prompt asks for JSON in the same shape the OpenAI-backed
+ * `App\Services\Prompts\SummaryTemplate` produces, so both kinds of summary
+ * land in `Summary::text` under one contract. Changing the schema here means
+ * changing what every `SummaryResource` consumer reads.
  */
 class SmartSummaryTemplate
 {
@@ -59,9 +64,7 @@ class SmartSummaryTemplate
               * Meeting: Meeting Summary, Key Decisions, Action Items, Next Steps
               * Tutorial: Overview, Step-by-Step Guide, Key Tips, Common Issues
 
-            Use the identified video type and planned module titles only to guide the final summary structure. Do not explicitly state the video type, category, workflow, reasoning process, or module-planning result unless this information is directly supported by the transcript and naturally belongs in the summary.
-            The first line of the final output must be a concise, content-specific level-1 Markdown heading (`# Title`) that summarizes the central topic or main takeaway.
-
+            Use the identified video type and planned module titles only to guide the structure of `long_summary.content`. Do not explicitly state the video type, category, workflow, reasoning process, or module-planning result unless this information is directly supported by the transcript and naturally belongs in the summary.
 
             **Summary Settings:**
             Depth: Provide balanced detail with key context and useful takeaways.
@@ -69,11 +72,34 @@ class SmartSummaryTemplate
             Timestamp: Include timestamps for important points when available.
 
             Only include content supported by the transcript; do not fabricate details. Mark uncertain or missing information as *Not specified/Uncertain*.
-            Use Markdown. Use tables for timelines, comparisons, definitions, decisions, or action items when helpful. Bold key insights, terms, and conclusions.
-            Do not include separators such as --- or additional text outside of the task results.
-            Do not wrap the response in code fences such as ```markdown or ```.
             Timestamps format: Use one timestamp format consistently throughout the output: either [hh:mm:ss] or [mm:ss]. Do not mix both formats. Follow the timestamp style used in the provided Transcript Content as the reference
             Please organize the summary sections strictly according to the chronological order and logical flow of the Transcript Content, ensuring a coherent structure while avoiding topic jumps, disordered sections, repetitive summarization, or reversed cause-and-effect relationships.
+
+            **Output Format (CRITICAL):**
+            Reply with strictly valid JSON and nothing else. Do not wrap it in code fences such as ```json or ```, and do not write any text before or after the JSON.
+
+            {
+              "short_summary": "Short summary content",
+              "long_summary": {
+                "content": "Long summary with paragraphs and subheadings",
+                "key_points": [
+                  "Key point 1",
+                  "Key point 2",
+                  "..."
+                ],
+                "keywords": [
+                  "Keyword 1",
+                  "Keyword 2",
+                  "..."
+                ]
+              }
+            }
+
+            Field rules:
+            - `short_summary`: one highly condensed paragraph covering the core points, as plain text with no Markdown headings.
+            - `long_summary.content`: the full summary as Markdown, beginning with a concise, content-specific level-1 heading (`# Title`) that names the central topic or main takeaway. Use subheadings, and use tables for timelines, comparisons, definitions, decisions, or action items when helpful. Bold key insights, terms, and conclusions. Do not include separators such as ---.
+            - `long_summary.key_points`: the main takeaways, one per array entry.
+            - `long_summary.keywords`: the significant terms, one per array entry.
 
             ## Mathematical Formatting (CRITICAL)
             - Every mathematical variable, symbol, or formula must be wrapped in LaTeX delimiters.
