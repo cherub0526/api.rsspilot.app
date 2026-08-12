@@ -95,6 +95,11 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
+
+        // No response body ever existed, so an `error` key stands in for it.
+        $record = VideoTranscription::where('media_id', $media->id)->first();
+        $this->assertArrayHasKey('error', $record->transcription);
+        $this->assertNotSame('', $record->transcription['error']);
     }
 
     public function testMarksTranscribeFailedWhenGetTranscriptionReturnsNonSuccessCode(): void

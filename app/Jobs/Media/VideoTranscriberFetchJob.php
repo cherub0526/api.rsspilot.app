@@ -96,7 +96,8 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         } catch (VideoTranscriberAuthException) {
             $this->releaseForAuthRetry();
             return;
-        } catch (Exception) {
+        } catch (Exception $e) {
+            $this->saveTranscription(['error' => $e->getMessage()]);
             $this->markTranscribeFailed();
             return;
         }
@@ -144,13 +145,14 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Persist a rejected getTranscription response so the failure can be
-     * explained afterwards — otherwise a `transcribe_failed` media carries no
-     * trace of why it stopped here.
+     * Persist why getTranscription did not yield a usable result — either the
+     * rejected response itself, or an `error` key standing in for it when the
+     * call failed before any response body existed. Without it a
+     * `transcribe_failed` media carries no trace of why it stopped here.
      *
-     * Only rejections are stored, and deliberately so: a successful response
+     * Only failures are stored, and deliberately so: a successful response
      * embeds every subtitle of the recording and routinely outgrows the
-     * MEDIUMTEXT column, whereas a rejection is a few hundred bytes. Nothing
+     * MEDIUMTEXT column, whereas a failure is a few hundred bytes. Nothing
      * downstream reads the column back, so skipping the successful payload
      * costs only the audit trail. Restore the unconditional write once the
      * column has been widened to LONGTEXT.
