@@ -102,14 +102,10 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         }
 
         if (($transcription['code'] ?? null) !== 100000) {
+            $this->saveTranscription($transcription);
             $this->markTranscribeFailed();
             return;
         }
-
-        VideoTranscription::updateOrCreate(
-            ['media_id' => $this->media->id],
-            ['transcription' => $transcription]
-        );
 
         $data = $transcription['data'] ?? [];
         $version = $this->selectVersion($data['versions'] ?? []);
@@ -145,6 +141,29 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         );
 
         $this->media->fill(['status' => Media::STATUS_TRANSCRIBED])->save();
+    }
+
+    /**
+     * Persist a rejected getTranscription response so the failure can be
+     * explained afterwards — otherwise a `transcribe_failed` media carries no
+     * trace of why it stopped here.
+     *
+     * Only rejections are stored, and deliberately so: a successful response
+     * embeds every subtitle of the recording and routinely outgrows the
+     * MEDIUMTEXT column, whereas a rejection is a few hundred bytes. Nothing
+     * downstream reads the column back, so skipping the successful payload
+     * costs only the audit trail. Restore the unconditional write once the
+     * column has been widened to LONGTEXT.
+     *
+     * The auth path writes nothing either — it releases for a retry, so it has
+     * no outcome yet and would only overwrite what the next attempt stores.
+     */
+    private function saveTranscription(array $transcription): void
+    {
+        VideoTranscription::updateOrCreate(
+            ['media_id' => $this->media->id],
+            ['transcription' => $transcription]
+        );
     }
 
     /**

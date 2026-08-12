@@ -64,8 +64,10 @@ class VideoTranscriberFetchJobTest extends TestCase
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
 
+        // The successful payload is deliberately not persisted while the
+        // column is still MEDIUMTEXT — only rejections are kept.
         $record = VideoTranscription::where('media_id', $media->id)->first();
-        $this->assertSame('ready', $record->transcription['data']['versions']['original']['status']);
+        $this->assertNull($record->transcription);
 
         $caption = Caption::where('media_id', $media->id)->first();
         $this->assertNotNull($caption);
@@ -113,6 +115,31 @@ class VideoTranscriberFetchJobTest extends TestCase
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
     }
 
+    public function testKeepsTheRejectedResponseSoTheFailureCanBeExplained(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code'    => 164016,
+                'message' => "You've reached the daily limit. Please login and try again.",
+                'data'    => null,
+            ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
+
+        $record = VideoTranscription::where('media_id', $media->id)->first();
+        $this->assertSame(164016, $record->transcription['code']);
+        $this->assertNull($record->transcription['data']);
+        // The audio_id the job was dispatched with must survive the overwrite,
+        // otherwise a retry loses the only handle it has on the recording.
+        $this->assertSame('audio-1', $record->start_transcription['data']['audio_id']);
+    }
+
     public function testMarksTranscribeFailedWhenNoAudioIdIsSaved(): void
     {
         $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBING]);
@@ -151,7 +178,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $this->assertSame(60, $job->job->releaseDelay);
 
         $record = VideoTranscription::where('media_id', $media->id)->first();
-        $this->assertSame('processing', $record->transcription['data']['versions']['original']['status']);
+        $this->assertNull($record->transcription);
     }
 
     public function testMarksTranscribeFailedAfterExhaustingRetryLimit(): void
