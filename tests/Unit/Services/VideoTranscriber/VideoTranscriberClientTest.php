@@ -253,6 +253,44 @@ class VideoTranscriberClientTest extends TestCase
         $this->assertSame($data, $result);
     }
 
+    public function testGetProdConfigSendsTheStoredAccessTokenAsTheNcTokenCookie(): void
+    {
+        Config::setValue(Config::KEY_VIDEOTRANSCRIBER, ['access_token' => 'stored-token']);
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response(['code' => 100000, 'message' => 'Success'], 200),
+        ]);
+
+        (new VideoTranscriberClient())->getProdConfig();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://videotranscriber.ai/api/v1/prod-config'
+            && $request->header('Cookie') === ['nc_token=stored-token']);
+    }
+
+    public function testGetProdConfigReturnsTheDecodedJsonResponseUntouched(): void
+    {
+        $data = [
+            'code'    => 100000,
+            'message' => 'Success',
+            'data'    => [
+                't'          => 1786547869,
+                'nonce'      => '00000000-0000-4000-8000-000000000000',
+                'sign'       => 'FAKE-SIGN',
+                'secret_key' => 'FAKE-KEY',
+                'app_id'     => 'ng_yt_app',
+            ],
+        ];
+
+        Http::fake([
+            'videotranscriber.ai/*' => Http::response($data, 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->getProdConfig();
+
+        // Handed back verbatim — callers consume these values as-is.
+        $this->assertSame($data, $result);
+    }
+
     public function testLoginStoresTheResponseDataInConfigs(): void
     {
         Http::fake([

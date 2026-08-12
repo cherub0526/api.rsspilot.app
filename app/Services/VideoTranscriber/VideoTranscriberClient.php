@@ -30,6 +30,8 @@ class VideoTranscriberClient
 
     protected string $transcriptionEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions';
 
+    protected string $prodConfigEndpoint = 'https://videotranscriber.ai/api/v1/prod-config';
+
     protected string $loginEndpoint = 'https://videotranscriber.ai/api/v1/auth/email/login';
 
     public function __construct(
@@ -89,6 +91,18 @@ class VideoTranscriberClient
             'type'   => $type,
             'action' => $action,
         ]));
+    }
+
+    /**
+     * Fetch the per-session values videotranscriber.ai issues for signing
+     * subsequent requests — `t`, `nonce`, `sign`, `secret_key` and `app_id`.
+     *
+     * Returned as-is: the values are meant to be passed straight through to
+     * whatever needs them, with no decoding step of their own.
+     */
+    public function getProdConfig(): array
+    {
+        return $this->authenticated(fn () => Http::withHeaders($this->headers())->get($this->prodConfigEndpoint));
     }
 
     public function getTranscription(string $recordId): array
