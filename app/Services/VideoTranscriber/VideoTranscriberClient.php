@@ -14,6 +14,12 @@ use App\Exceptions\VideoTranscriberAuthException;
 class VideoTranscriberClient
 {
     /**
+     * The model `summary/completions` is called with when the caller does not
+     * pick one — the same value the service's own web client sends.
+     */
+    public const SUMMARY_MODEL = 'gpt-4.1-mini';
+
+    /**
      * The `code` videotranscriber.ai answers with on success. Everything else
      * is an error whose meaning depends on the endpoint.
      */
@@ -24,6 +30,15 @@ class VideoTranscriberClient
      */
     protected const UNAUTHORIZED_STATUSES = [401, 403];
 
+    /**
+     * How long `summary/completions` may take. The whole summary streams back
+     * within one request, and a full-length transcript measured 22–31s against
+     * production — straddling the client's 30s default, which would fail
+     * intermittently. Generous on purpose: the cost of waiting is far lower
+     * than re-running the summary.
+     */
+    protected const SUMMARY_TIMEOUT_SECONDS = 300;
+
     protected string $endpoint = 'https://videotranscriber.ai/api/v1/transcriptions/start';
 
     protected string $urlInfoEndpoint = 'https://videotranscriber.ai/api/v1/transcriptions/url-info';
@@ -32,11 +47,14 @@ class VideoTranscriberClient
 
     protected string $prodConfigEndpoint = 'https://videotranscriber.ai/api/v1/prod-config';
 
+    protected string $summaryEndpoint = 'https://videotranscriber.ai/api/v1/summary/completions';
+
     protected string $loginEndpoint = 'https://videotranscriber.ai/api/v1/auth/email/login';
 
     public function __construct(
         protected SignatureGenerator $signatureGenerator = new SignatureGenerator(),
         protected ?string $cookie = null,
+        protected SummaryStreamParser $summaryStreamParser = new SummaryStreamParser(),
     ) {
     }
 
@@ -105,6 +123,45 @@ class VideoTranscriberClient
         return $this->authenticated(fn () => Http::withHeaders($this->headers())->get($this->prodConfigEndpoint));
     }
 
+    /**
+     * Summarise a transcript through videotranscriber.ai.
+     *
+     * Every call fetches a fresh prod-config first and passes its `data` block
+     * through as the query string — the values are single-use, so they cannot
+     * be cached between calls. The whole block is forwarded rather than five
+     * named fields, so a field the service adds later still reaches it.
+     *
+     * The body is sent with `streaming: true`, matching the web client, so the
+     * answer arrives as SSE chunks and is reassembled into the finished summary
+     * before being returned.
+     */
+    public function summaryCompletions(string $text, ?string $model = null): string
+    {
+        return $this->summaryStreamParser->parse($this->summaryStream($text, $model));
+    }
+
+    /**
+     * The untouched SSE body behind summaryCompletions(), for callers that need
+     * to stream it onward rather than wait for the whole summary.
+     */
+    public function summaryStream(string $text, ?string $model = null): string
+    {
+        $query = $this->getProdConfig()['data'] ?? [];
+
+        // Deliberately no Accept override: the endpoint answers with
+        // `text/event-stream`, but asking for it outright gets a 406 —
+        // it only accepts the `application/json` asJson() sends.
+        return $this->authenticatedResponse(fn () => Http::asJson()
+            ->withHeaders($this->headers())
+            ->timeout(self::SUMMARY_TIMEOUT_SECONDS)
+            ->post($this->summaryEndpoint . '?' . http_build_query($query), [
+                'text'      => $text,
+                'end_flag'  => true,
+                'streaming' => true,
+                'model'     => $model ?? self::SUMMARY_MODEL,
+            ]))->body();
+    }
+
     public function getTranscription(string $recordId): array
     {
         return $this->authenticated(fn () => Http::withHeaders($this->headers())->get($this->transcriptionEndpoint, [
@@ -122,13 +179,26 @@ class VideoTranscriberClient
      */
     protected function authenticated(Closure $request): array
     {
+        return $this->authenticatedResponse($request)->json();
+    }
+
+    /**
+     * The same retry-on-expired-token behaviour as authenticated(), but handing
+     * back the response itself. Needed by endpoints whose body is not JSON —
+     * `summary/completions` streams, so decoding it here would lose it.
+     *
+     * @param Closure(): Response $request
+     * @throws VideoTranscriberAuthException when no working token can be obtained
+     */
+    protected function authenticatedResponse(Closure $request): Response
+    {
         $tokenBefore = $this->tokenCookie();
         $response = $request();
 
         // An explicitly injected cookie is the caller's to manage: re-logging
         // in would not change what headers() sends, so replaying is pointless.
         if ($this->cookie !== null || !$this->isUnauthorized($response)) {
-            return $response->json();
+            return $response;
         }
 
         // Another worker may have refreshed the token while this request was
@@ -138,7 +208,7 @@ class VideoTranscriberClient
             throw new VideoTranscriberAuthException('Unable to refresh the videotranscriber.ai access token.');
         }
 
-        return $request()->json();
+        return $request();
     }
 
     /**
@@ -147,11 +217,19 @@ class VideoTranscriberClient
      * videotranscriber.ai mostly answers 200 with a business `code`, so the
      * codes that stand for an expired session are configurable and can be
      * added once observed in production, without touching this class.
+     *
+     * The body is only inspected when it actually decodes to an array:
+     * `summary/completions` streams, and Response::json() throws a TypeError
+     * rather than returning null when the body is not a JSON object.
      */
     protected function isUnauthorized(Response $response): bool
     {
         if (in_array($response->status(), self::UNAUTHORIZED_STATUSES, true)) {
             return true;
+        }
+
+        if (!is_array(json_decode($response->body(), true))) {
+            return false;
         }
 
         $code = $response->json('code');

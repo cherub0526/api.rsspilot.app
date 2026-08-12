@@ -291,6 +291,108 @@ class VideoTranscriberClientTest extends TestCase
         $this->assertSame($data, $result);
     }
 
+    public function testSummaryCompletionsFetchesProdConfigFirstAndPassesItAsTheQuery(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/prod-config*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    't'          => 1786566264,
+                    'nonce'      => '00000000-0000-4000-8000-000000000000',
+                    'sign'       => 'sign+needs/encoding==',
+                    'secret_key' => 'key+needs/encoding==',
+                    'app_id'     => 'ng_yt_app',
+                ],
+            ], 200),
+            'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
+        ]);
+
+        (new VideoTranscriberClient())->summaryCompletions('the prompt');
+
+        Http::assertSent(function ($request) {
+            if (!str_starts_with($request->url(), 'https://videotranscriber.ai/api/v1/summary/completions?')) {
+                return false;
+            }
+
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $query['t'] === '1786566264'
+                && $query['nonce'] === '00000000-0000-4000-8000-000000000000'
+                // Round-tripping through parse_str proves the values were
+                // percent-encoded on the way out.
+                && $query['sign'] === 'sign+needs/encoding=='
+                && $query['secret_key'] === 'key+needs/encoding=='
+                && $query['app_id'] === 'ng_yt_app';
+        });
+    }
+
+    public function testSummaryCompletionsSendsTheExpectedBody(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/prod-config*'         => Http::response(['code' => 100000, 'data' => []], 200),
+            'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
+        ]);
+
+        (new VideoTranscriberClient())->summaryCompletions('the prompt', 'gpt-4.1');
+
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), '/summary/completions')) {
+                return false;
+            }
+
+            $body = $request->data();
+
+            return $body['text'] === 'the prompt'
+                && $body['end_flag'] === true
+                && $body['streaming'] === true
+                && $body['model'] === 'gpt-4.1';
+        });
+    }
+
+    public function testSummaryCompletionsDefaultsToTheWebClientModel(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/prod-config*'         => Http::response(['code' => 100000, 'data' => []], 200),
+            'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
+        ]);
+
+        (new VideoTranscriberClient())->summaryCompletions('the prompt');
+
+        Http::assertSent(fn ($request) => !str_contains($request->url(), '/summary/completions')
+            || $request->data()['model'] === 'gpt-4.1-mini');
+    }
+
+    public function testSummaryCompletionsReassemblesTheStreamedSummary(): void
+    {
+        $stream = implode("\n\n", [
+            'data: {"summary_id": "06a7c902cf667ad8800055ccaa380cd4"}',
+            'data: {"message": "# Title", "conversation_id": ""}',
+            'data: {"message": "\n\nBody.", "conversation_id": ""}',
+            '',
+        ]);
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/prod-config*'         => Http::response(['code' => 100000, 'data' => []], 200),
+            'videotranscriber.ai/api/v1/summary/completions*' => Http::response($stream, 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->summaryCompletions('the prompt');
+
+        $this->assertSame("# Title\n\nBody.", $result);
+    }
+
+    public function testSummaryStreamHandsBackTheUntouchedBody(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/prod-config*'         => Http::response(['code' => 100000, 'data' => []], 200),
+            'videotranscriber.ai/api/v1/summary/completions*' => Http::response("data: {\"a\":1}\n\ndata: [DONE]\n\n", 200),
+        ]);
+
+        $result = (new VideoTranscriberClient())->summaryStream('the prompt');
+
+        $this->assertSame("data: {\"a\":1}\n\ndata: [DONE]\n\n", $result);
+    }
+
     public function testLoginStoresTheResponseDataInConfigs(): void
     {
         Http::fake([
