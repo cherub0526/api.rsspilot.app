@@ -9,7 +9,6 @@ use App\Models\Summary;
 use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
-use App\Utils\AI\Completion;
 use OpenApi\Attributes as OAT;
 use App\Validators\ChatValidator;
 use App\Events\Chat\ChatDoneEvent;
@@ -19,17 +18,21 @@ use App\OpenApi\Responses\Http404;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
+use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
-use App\Services\Prompts\TemplateCompletionManager;
 use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
 
 class ChatController
 {
     use ResolvesMedia;
+
+    public function __construct(private ChatStreamerInterface $streamer)
+    {
+    }
 
     /**
      * POST /v1/media/{mediaId}/chat.
@@ -126,7 +129,7 @@ class ChatController
         $buffer = '';
         $saved = false;
 
-        // 最後一句由 completeStream() 以 $userMessage 帶入結尾，這裡要去掉以免重複。
+        // 最後一句稍後單獨接在訊息陣列結尾，這裡去掉以免重複。
         $history = $params['messages'];
         array_pop($history);
 
@@ -137,63 +140,24 @@ class ChatController
             ->where('status', Summary::STATUS_COMPLETED)
             ->orderByDesc('created_at')
             ->first()?->text ?? [];
-
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $summaryText['long_summary']['content'] ?? '',
-            'messages'         => $history,
             'respond_language' => $request->user()->aiLanguageName(),
         ]);
 
-        $manager = new TemplateCompletionManager(Completion::make(), $template);
-        $psrResponse = $manager->completeStream($userMessage);
-
         try {
-            $body = $psrResponse->getBody();
-            $chunkBuffer = '';
+            $stream = $this->streamer->stream(
+                $template->getSystemPrompt(),
+                $this->buildMessages($history, $userMessage)
+            );
 
-            while (!$body->eof()) {
-                $chunk = $body->read(1024);
-
-                if ($chunk === '') {
-                    break;
-                }
-
-                $chunkBuffer .= $chunk;
-                $lines = explode("\n", $chunkBuffer);
-                $chunkBuffer = array_pop($lines) ?: '';
-
-                foreach ($lines as $line) {
-                    $line = trim($line);
-
-                    if ($line === '' || !str_starts_with($line, 'data: ')) {
-                        continue;
-                    }
-
-                    $data = substr($line, 6);
-
-                    if ($data === '[DONE]') {
-                        $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
-                        $saved = true;
-                        Event::dispatch(new ChatDoneEvent($userId, $mediaId));
-
-                        return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
-                    }
-
-                    $json = json_decode($data, true);
-                    $token = $json['choices'][0]['delta']['content'] ?? null;
-
-                    if ($token !== null) {
-                        $buffer .= $token;
-                        Event::dispatch(new ChatTokenEvent($token, $userId, $mediaId));
-                    }
-                }
+            foreach ($stream as $token) {
+                $buffer .= $token;
+                Event::dispatch(new ChatTokenEvent($token, $userId, $mediaId));
             }
 
-            // @phpstan-ignore-next-line Condition is false if [DONE] was processed
-            if (!$saved) {
-                $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
-                $saved = true;
-            }
+            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+            $saved = true;
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
             if (!$saved) {
@@ -204,6 +168,52 @@ class ChatController
         }
 
         return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
+    }
+
+    /**
+     * 組出送去推論的訊息陣列：先前輪次接上本次提問。
+     *
+     * 推論層要求訊息以 user 開頭並嚴格 user / assistant 交替，違反就整個請求失敗。
+     * 但 ChatValidator 並不限制客戶端送來的順序（role 只驗 in:user,assistant,system），
+     * 所以這裡必須正規化，否則合法的請求會變成 500：
+     *
+     * 1. system 併入 user —— 系統提示詞由 instructions 帶入，這裡不另開 system 角色
+     * 2. 連續同角色合併成一則，內容以空行相接
+     * 3. 丟掉開頭的 assistant —— 沒有對應提問的回應，留著只會讓序列不合法
+     *
+     * @param array<int, array{role: string, content: string}> $history
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function buildMessages(array $history, string $userMessage): array
+    {
+        // role / content 由 ChatValidator 保證必填，這裡不需再防禦性檢查。
+        $messages = array_map(
+            fn (array $message): array => [
+                'role'    => $message['role'] === 'assistant' ? 'assistant' : 'user',
+                'content' => $message['content'],
+            ],
+            $history
+        );
+        $messages[] = ['role' => 'user', 'content' => $userMessage];
+
+        $normalised = [];
+
+        foreach ($messages as $message) {
+            if ($normalised === [] && $message['role'] !== 'user') {
+                continue;
+            }
+
+            $last = array_key_last($normalised);
+
+            if ($last !== null && $normalised[$last]['role'] === $message['role']) {
+                $normalised[$last]['content'] .= "\n\n" . $message['content'];
+                continue;
+            }
+
+            $normalised[] = $message;
+        }
+
+        return $normalised;
     }
 
     /**

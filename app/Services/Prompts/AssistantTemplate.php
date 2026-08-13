@@ -12,11 +12,18 @@ class AssistantTemplate extends BaseTemplate implements TemplateInterface
 {
     protected string $type = 'assistant';
 
+    /**
+     * 系統提示詞，並把參考資料一併帶入。
+     *
+     * 參考資料放在系統提示詞而不是獨立的 user 訊息：推論層要求 user / assistant
+     * 嚴格交替，多插一則 user 訊息會讓整個序列不合法。
+     */
     public function getSystemPrompt(): string
     {
         $language = $this->parameters['respond_language'] ?? null;
+        $reference = trim((string) ($this->parameters['user_prompt'] ?? ''));
 
-        return <<<PROMPT
+        $prompt = <<<PROMPT
 You are a helpful assistant. Based on the provided reference material, answer the user's question in detail.
 
 IMPORTANT LANGUAGE RULE:
@@ -38,6 +45,12 @@ STYLE RULES:
 - The answer must be detailed and no fewer than 300 characters.
 - Focus on understanding the user's intent and providing the most useful information.
 PROMPT;
+
+        if ($reference === '') {
+            return $prompt;
+        }
+
+        return $prompt . "\n\nREFERENCE MATERIAL:\n" . $reference;
     }
 
     public function getUserPrompt(): string

@@ -13,9 +13,10 @@ use App\Models\Setting;
 use App\Models\Summary;
 use App\Models\ChatSession;
 use App\Events\Chat\ChatDoneEvent;
-use Hypervel\Support\Facades\Http;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
+use Tests\Support\FakeChatStreamer;
+use App\Utils\AI\ChatStreamerInterface;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -30,17 +31,25 @@ class ChatControllerTest extends TestCase
     // Shared helpers
     // ────────────────────────────────────────────────────────────────
 
-    /** Stub OpenRouter to emit one token "Hello" then [DONE]. */
-    private function fakeOpenRouter(string $token = 'Hello'): void
-    {
-        $escapedToken = json_encode($token, JSON_UNESCAPED_UNICODE);
+    private ?FakeChatStreamer $streamer = null;
 
-        Http::fake([
-            'openrouter.ai/*' => Http::response(
-                "data: {\"choices\":[{\"delta\":{\"content\":{$escapedToken}}}]}\n\ndata: [DONE]\n\n",
-                200
-            ),
-        ]);
+    /**
+     * 綁定假的推論通道並回傳它，供斷言送出的 instructions / messages。
+     *
+     * 不用 Http::fake()：NeuronAI 走自己建立的 Guzzle client，攔不到。
+     */
+    private function fakeStreamer(string ...$tokens): FakeChatStreamer
+    {
+        $this->streamer = new FakeChatStreamer($tokens === [] ? ['Hello'] : $tokens);
+        $this->app->instance(ChatStreamerInterface::class, $this->streamer);
+
+        return $this->streamer;
+    }
+
+    /** 舊名保留，讓既有測試維持可讀性：語意就是「備妥一個會回應的 AI」。 */
+    private function fakeOpenRouter(string $token = 'Hello'): FakeChatStreamer
+    {
+        return $this->fakeStreamer($token);
     }
 
     /** Persist user AI-language setting (required by AssistantTemplate). */
@@ -233,32 +242,28 @@ class ChatControllerTest extends TestCase
         ]);
 
         $this->createUserSetting($user);
-        $this->fakeOpenRouter();
+        $streamer = $this->fakeOpenRouter();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
         ])->assertStatus(200);
 
-        Http::assertSent(function ($request) {
-            $contents = collect($request->data()['messages'])->pluck('content');
+        // 參考資料放在系統提示詞裡（推論層要求 user / assistant 嚴格交替，
+        // 不能為了參考資料多插一則 user 訊息）
+        $this->assertStringContainsString(
+            "# 影片重點\n\n這是長摘要內文。",
+            (string) $streamer->instructions,
+            'long_summary.content 必須原樣送進系統提示詞'
+        );
 
-            $this->assertTrue(
-                $contents->contains("# 影片重點\n\n這是長摘要內文。"),
-                'long_summary.content 必須原樣送進 prompt'
-            );
+        $this->assertStringNotContainsString('逐字稿', (string) $streamer->instructions, '逐字稿不該再被送出');
+        $this->assertStringNotContainsString('短摘要', (string) $streamer->instructions, '只取 long_summary.content');
 
-            $this->assertFalse(
-                $contents->contains(fn ($c) => str_contains($c, '逐字稿')),
-                '逐字稿不該再被送出'
-            );
-
-            $this->assertFalse(
-                $contents->contains(fn ($c) => str_contains($c, '短摘要')),
-                '只取 long_summary.content，不含 short_summary'
-            );
-
-            return true;
-        });
+        $this->assertSame(
+            ['這部影片在講什麼？'],
+            $streamer->contents(),
+            '訊息陣列只該有本次提問'
+        );
     }
 
     /**
@@ -292,20 +297,14 @@ class ChatControllerTest extends TestCase
         $makeSummary(Summary::STATUS_CREATED, null, '2026-03-01 00:00:00');
 
         $this->createUserSetting($user);
-        $this->fakeOpenRouter();
+        $streamer = $this->fakeOpenRouter();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => '重點是什麼？']],
         ])->assertStatus(200);
 
-        Http::assertSent(function ($request) {
-            $contents = collect($request->data()['messages'])->pluck('content');
-
-            $this->assertTrue($contents->contains('新的已完成摘要'), '應取最新的已完成摘要');
-            $this->assertFalse($contents->contains('舊的已完成摘要'), '不該取到較舊的那份');
-
-            return true;
-        });
+        $this->assertStringContainsString('新的已完成摘要', (string) $streamer->instructions, '應取最新的已完成摘要');
+        $this->assertStringNotContainsString('舊的已完成摘要', (string) $streamer->instructions, '不該取到較舊的那份');
     }
 
     /**
@@ -327,7 +326,7 @@ class ChatControllerTest extends TestCase
         ]);
 
         $this->createUserSetting($user);
-        $this->fakeOpenRouter();
+        $streamer = $this->fakeOpenRouter();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
@@ -335,22 +334,18 @@ class ChatControllerTest extends TestCase
             ->assertStatus(200)
             ->assertJson(['status' => 'done']);
 
-        Http::assertSent(function ($request) {
-            $messages = collect($request->data()['messages']);
+        $this->assertStringNotContainsString(
+            '逐字稿',
+            (string) $streamer->instructions,
+            '沒有摘要時不該退回逐字稿'
+        );
+        $this->assertStringNotContainsString(
+            'REFERENCE MATERIAL',
+            (string) $streamer->instructions,
+            '沒有摘要時不該出現空的參考資料區塊'
+        );
 
-            $this->assertFalse(
-                $messages->pluck('content')->contains(fn ($c) => str_contains($c, '逐字稿')),
-                '沒有摘要時不該退回逐字稿'
-            );
-
-            // 參考資料為空時 buildMessages 只會送出使用者的問題本身
-            $this->assertSame(
-                ['這部影片在講什麼？'],
-                $messages->where('role', 'user')->pluck('content')->all()
-            );
-
-            return true;
-        });
+        $this->assertSame(['這部影片在講什麼？'], $streamer->contents());
     }
 
     /**
@@ -432,12 +427,7 @@ class ChatControllerTest extends TestCase
 
         Event::fake([ChatTokenEvent::class, ChatDoneEvent::class]);
 
-        Http::fake([
-            'openrouter.ai/*' => Http::response(
-                "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: [DONE]\n\n",
-                200
-            ),
-        ]);
+        $this->fakeStreamer('Hi');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [['role' => 'user', 'content' => 'Hello?']],
@@ -497,7 +487,7 @@ class ChatControllerTest extends TestCase
         $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
-        $this->fakeOpenRouter('回答在此');
+        $streamer = $this->fakeOpenRouter('回答在此');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
@@ -507,32 +497,72 @@ class ChatControllerTest extends TestCase
             ],
         ])->assertStatus(200);
 
-        Http::assertSent(function ($request) {
-            $sent = collect($request->data()['messages']);
+        $sent = collect($streamer->messages);
 
-            $this->assertSame(
-                [['user', '第一句話'], ['assistant', '第一回應']],
-                $sent->filter(fn ($m) => in_array($m['content'], ['第一句話', '第一回應'], true))
-                    ->map(fn ($m) => [$m['role'], $m['content']])
-                    ->values()
-                    ->all(),
-                '先前的對話輪次必須原封不動送進 prompt'
-            );
+        $this->assertSame(
+            [['user', '第一句話'], ['assistant', '第一回應']],
+            $sent->filter(fn ($m) => in_array($m['content'], ['第一句話', '第一回應'], true))
+                ->map(fn ($m) => [$m['role'], $m['content']])
+                ->values()
+                ->all(),
+            '先前的對話輪次必須原封不動送進 prompt'
+        );
 
-            $this->assertSame(
-                1,
-                $sent->where('content', '第二句話')->count(),
-                '最後一則 user 訊息不可重複出現'
-            );
+        $this->assertSame(
+            1,
+            $sent->where('content', '第二句話')->count(),
+            '最後一則 user 訊息不可重複出現'
+        );
 
-            $this->assertSame(
-                ['user', '第二句話'],
-                [$sent->last()['role'], $sent->last()['content']],
-                '最後一則 user 訊息必須落在訊息陣列結尾'
-            );
+        $this->assertSame(
+            ['user', '第二句話'],
+            [$sent->last()['role'], $sent->last()['content']],
+            '最後一則 user 訊息必須落在訊息陣列結尾'
+        );
+    }
 
-            return true;
-        });
+    /**
+     * 9-2. 送出的訊息必須以 user 開頭且 user / assistant 嚴格交替。
+     *
+     * ChatValidator 不限制客戶端送來的順序，但推論層會因為序列不合法而整個失敗，
+     * 所以連續同角色要合併、開頭的 assistant 要丟掉。
+     */
+    public function testStoreNormalisesMessagesIntoStrictAlternation(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'assistant', 'content' => '開場白'],   // 開頭的 assistant → 丟掉
+                ['role' => 'user', 'content' => '第一句'],
+                ['role' => 'system', 'content' => '補充設定'],     // system 併入 user
+                ['role' => 'assistant', 'content' => '回應一'],
+                ['role' => 'assistant', 'content' => '回應二'],   // 連續 assistant → 合併
+                ['role' => 'user', 'content' => '最後提問'],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            [
+                ['role' => 'user', 'content' => "第一句\n\n補充設定"],
+                ['role' => 'assistant', 'content' => "回應一\n\n回應二"],
+                ['role' => 'user', 'content' => '最後提問'],
+            ],
+            $streamer->messages
+        );
+
+        // 正規化後仍必須是 user 開頭、嚴格交替
+        $roles = array_column($streamer->messages, 'role');
+        $this->assertSame('user', $roles[0]);
+        foreach ($roles as $i => $role) {
+            $this->assertSame($i % 2 === 0 ? 'user' : 'assistant', $role);
+        }
     }
 
     /**
