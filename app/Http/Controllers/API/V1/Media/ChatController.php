@@ -125,9 +125,13 @@ class ChatController
         $buffer = '';
         $saved = false;
 
+        // 最後一句由 completeStream() 以 $userMessage 帶入結尾，這裡要去掉以免重複。
+        $history = $params['messages'];
+        array_pop($history);
+
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
-            'messages'         => array_pop($params['messages']),
+            'messages'         => $history,
             'respond_language' => $request->user()->aiLanguageName(),
         ]);
 

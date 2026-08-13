@@ -69,12 +69,21 @@ abstract class BaseTemplate implements TemplateInterface
             ];
         }
 
-        if (isset($additionalParams['messages']) && is_array($additionalParams['messages'])) {
-            foreach ($additionalParams['messages'] as $history) {
-                if (isset($history['role'], $history['content'])) {
+        // 對話歷史。優先取呼叫端當下傳入的，其次取模板自身的參數。
+        //
+        // 走參數這條路的原因：TemplateCompletionManager::complete() 會把
+        // $additionalParams 同時當成 buildMessages 的參數「與」OpenRouter 的 options，
+        // 而 Completion::completions() 是 array_merge(['messages' => $messages], $options)，
+        // 所以 additionalParams 裡的 messages 反而會覆蓋掉這裡組好的訊息陣列。
+        // completeStream() 更是完全不轉交 $additionalParams。
+        $history = $additionalParams['messages'] ?? $this->parameters['messages'] ?? null;
+
+        if (is_array($history)) {
+            foreach ($history as $message) {
+                if (isset($message['role'], $message['content'])) {
                     $messages[] = [
-                        'role'    => $history['role'],
-                        'content' => $history['content'],
+                        'role'    => $message['role'],
+                        'content' => $message['content'],
                     ];
                 }
             }

@@ -333,6 +333,56 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * 9-1. 送往 OpenRouter 的 payload 必須帶上先前的對話輪次，
+     *      且最後一則 user 訊息只能出現一次（它由 completeStream 帶入結尾）。
+     */
+    public function testStoreSendsConversationHistoryToOpenRouter(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter('回答在此');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '第一句話'],
+                ['role' => 'assistant', 'content' => '第一回應'],
+                ['role' => 'user', 'content' => '第二句話'],
+            ],
+        ])->assertStatus(200);
+
+        Http::assertSent(function ($request) {
+            $sent = collect($request->data()['messages']);
+
+            $this->assertSame(
+                [['user', '第一句話'], ['assistant', '第一回應']],
+                $sent->filter(fn ($m) => in_array($m['content'], ['第一句話', '第一回應'], true))
+                    ->map(fn ($m) => [$m['role'], $m['content']])
+                    ->values()
+                    ->all(),
+                '先前的對話輪次必須原封不動送進 prompt'
+            );
+
+            $this->assertSame(
+                1,
+                $sent->where('content', '第二句話')->count(),
+                '最後一則 user 訊息不可重複出現'
+            );
+
+            $this->assertSame(
+                ['user', '第二句話'],
+                [$sent->last()['role'], $sent->last()['content']],
+                '最後一則 user 訊息必須落在訊息陣列結尾'
+            );
+
+            return true;
+        });
+    }
+
+    /**
      * 不傳 session_id → 自動建立 ChatSession，保存 user 與 AI 訊息。
      */
     public function testStoreCreatesSessionAndSavesMessages(): void
