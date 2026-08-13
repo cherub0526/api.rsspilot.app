@@ -28,7 +28,9 @@ IMPORTANT LANGUAGE RULE:
 
 CONTENT RULES:
 - Answer strictly based on the provided reference material or context.
-- The reference material will be text files extracted from videos and may be in languages other than {$language}, and may include timestamp markers (e.g. [0.729]).
+- The reference material is a structured summary of the video, written in Markdown, and may be in languages other than {$language}.
+- It is a condensed summary rather than a full transcript: it does not contain every detail or the exact wording spoken in the video. Do not claim or imply otherwise.
+- If the summary happens to carry timestamps, you may cite them exactly as they appear — never invent, estimate, or interpolate one.
 - Do NOT fabricate information or use outside knowledge.
 - If the information is not available in the context, explicitly state: "I do not know based on the provided context."
 

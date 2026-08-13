@@ -8,7 +8,9 @@ use Tests\TestCase;
 use App\Models\User;
 use App\Models\Media;
 use App\Models\Source;
+use App\Models\Caption;
 use App\Models\Setting;
+use App\Models\Summary;
 use App\Models\ChatSession;
 use App\Events\Chat\ChatDoneEvent;
 use Hypervel\Support\Facades\Http;
@@ -198,6 +200,157 @@ class ChatControllerTest extends TestCase
         ])
             ->assertStatus(200)
             ->assertJson(['status' => 'done']);
+    }
+
+    /**
+     * 6-0. 參考資料是摘要的 long_summary.content，不是逐字稿。
+     */
+    public function testStoreSendsLongSummaryContentToOpenRouter(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        Caption::create([
+            'media_id' => $media->id,
+            'locale'   => Caption::LOCAL_ZH_TW,
+            'primary'  => true,
+            'text'     => '這是逐字稿不該被送出',
+            'segments' => [['start' => 0.0, 'end' => 1.0, 'text' => '這是逐字稿不該被送出']],
+        ]);
+        Summary::create([
+            'media_id' => $media->id,
+            'locale'   => Summary::LOCALE_ZH_TW,
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => [
+                'short_summary' => '短摘要不該被送出',
+                'long_summary'  => [
+                    'content'    => "# 影片重點\n\n這是長摘要內文。",
+                    'key_points' => ['重點一'],
+                ],
+            ],
+        ]);
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
+        ])->assertStatus(200);
+
+        Http::assertSent(function ($request) {
+            $contents = collect($request->data()['messages'])->pluck('content');
+
+            $this->assertTrue(
+                $contents->contains("# 影片重點\n\n這是長摘要內文。"),
+                'long_summary.content 必須原樣送進 prompt'
+            );
+
+            $this->assertFalse(
+                $contents->contains(fn ($c) => str_contains($c, '逐字稿')),
+                '逐字稿不該再被送出'
+            );
+
+            $this->assertFalse(
+                $contents->contains(fn ($c) => str_contains($c, '短摘要')),
+                '只取 long_summary.content，不含 short_summary'
+            );
+
+            return true;
+        });
+    }
+
+    /**
+     * 6-0-1. 只認 status=completed 的摘要，且取最新的那一份。
+     *
+     * 重跑摘要會先建一筆 status=created、text 還是空的資料列；若只依時間排序，
+     * 那筆會蓋掉先前可用的摘要，讓參考資料變成空的。
+     */
+    public function testStoreIgnoresUncompletedSummaryAndUsesLatestCompletedOne(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        // created_at 不在 Summary::$fillable，mass assignment 會被忽略，
+        // 必須事後直接指派才能造出可辨識的時間順序。
+        $makeSummary = function (string $status, ?array $text, string $createdAt) use ($media): void {
+            $summary = Summary::create([
+                'media_id' => $media->id,
+                'locale'   => Summary::LOCALE_ZH_TW,
+                'status'   => $status,
+                'text'     => $text,
+            ]);
+            $summary->created_at = $createdAt;
+            $summary->save();
+        };
+
+        $makeSummary(Summary::STATUS_COMPLETED, ['long_summary' => ['content' => '舊的已完成摘要']], '2026-01-01 00:00:00');
+        $makeSummary(Summary::STATUS_COMPLETED, ['long_summary' => ['content' => '新的已完成摘要']], '2026-02-01 00:00:00');
+        $makeSummary(Summary::STATUS_CREATED, null, '2026-03-01 00:00:00');
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '重點是什麼？']],
+        ])->assertStatus(200);
+
+        Http::assertSent(function ($request) {
+            $contents = collect($request->data()['messages'])->pluck('content');
+
+            $this->assertTrue($contents->contains('新的已完成摘要'), '應取最新的已完成摘要');
+            $this->assertFalse($contents->contains('舊的已完成摘要'), '不該取到較舊的那份');
+
+            return true;
+        });
+    }
+
+    /**
+     * 6-0-2. 沒有可用摘要時參考資料為空 —— 不退回逐字稿，且仍要正常回 200。
+     */
+    public function testStoreSendsNoReferenceWhenMediaHasNoCompletedSummary(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        Caption::create([
+            'media_id' => $media->id,
+            'locale'   => Caption::LOCAL_ZH_TW,
+            'primary'  => true,
+            'text'     => '這是逐字稿不該被送出',
+            'segments' => [['start' => 0.0, 'end' => 1.0, 'text' => '這是逐字稿不該被送出']],
+        ]);
+
+        $this->createUserSetting($user);
+        $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
+        ])
+            ->assertStatus(200)
+            ->assertJson(['status' => 'done']);
+
+        Http::assertSent(function ($request) {
+            $messages = collect($request->data()['messages']);
+
+            $this->assertFalse(
+                $messages->pluck('content')->contains(fn ($c) => str_contains($c, '逐字稿')),
+                '沒有摘要時不該退回逐字稿'
+            );
+
+            // 參考資料為空時 buildMessages 只會送出使用者的問題本身
+            $this->assertSame(
+                ['這部影片在講什麼？'],
+                $messages->where('role', 'user')->pluck('content')->all()
+            );
+
+            return true;
+        });
     }
 
     /**

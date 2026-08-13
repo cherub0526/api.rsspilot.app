@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Media;
 
 use Throwable;
+use App\Models\Summary;
 use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
@@ -129,8 +130,16 @@ class ChatController
         $history = $params['messages'];
         array_pop($history);
 
+        // 參考資料取最新一份「已完成」的摘要。不能只取最新一筆：重跑摘要時會先建一筆
+        // status=created、text 還是空的資料列，只看時間排序會被那筆蓋掉先前可用的摘要。
+        // 沒有可用摘要時就給空字串，不退回逐字稿。
+        $summaryText = $media->summaries()
+            ->where('status', Summary::STATUS_COMPLETED)
+            ->orderByDesc('created_at')
+            ->first()?->text ?? [];
+
         $template = TemplateFactory::create('assistant', [
-            'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
+            'user_prompt'      => $summaryText['long_summary']['content'] ?? '',
             'messages'         => $history,
             'respond_language' => $request->user()->aiLanguageName(),
         ]);
