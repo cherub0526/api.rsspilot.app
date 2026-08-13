@@ -21,6 +21,17 @@ for YouTube content, with Paddle subscription management.
 
 Project lore lives in `docs/lore/` — consult it before planning or bug-fixing, and capture implicit knowledge into it.
 
+## Before Building Something That May Already Exist
+
+Search the codebase before implementing a requested feature. If something similar already exists — a util, a service, a constant table, a template, a job — **stop before writing code** and:
+
+1. Name what already exists and where it lives.
+2. List the concrete differences between it and what was asked for.
+3. Ask whether to **replace** the existing one, **extend** it, or let the two **coexist**.
+4. Only start once the answer comes back.
+
+Building a parallel implementation and asking afterwards costs a review cycle and leaves two things that drift apart. This applies even when the existing code is an imperfect fit — say so and let the decision be made rather than routing around it.
+
 ## Development Environment
 
 This project runs in a **Docker Compose** environment. All commands must be executed inside the Docker container.
