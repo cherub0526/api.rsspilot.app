@@ -25,7 +25,7 @@ fix: 自訂表單新增/編輯頁面，修正離開頁面提醒邏輯
 
 issue #1335
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -49,7 +49,7 @@ feat: message 信件通知功能
 
 issue #863
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -74,7 +74,7 @@ BREAKING CHANGE: 所有已登入使用者需重新登入；第三方整合若
 
 issue #2045
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -88,7 +88,7 @@ revert: feat(openapi): 安裝 swagger-php 並建立文件產生機制 (回覆版
 原 commit 於 staging 環境觸發 autoload 衝突，先行回退以
 解除阻塞。待 vendor 衝突釐清後會重新引入。
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -99,7 +99,7 @@ EOF
 git commit -m "$(cat <<'EOF'
 docs: 補充 CLAUDE.md OpenAPI 使用說明
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -119,7 +119,7 @@ chore(deps): 升級 zircote/swagger-php 至 6.0
 - 既有 Controller attribute 全部保留不變
 - PHPStan 無新增 error
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -144,7 +144,7 @@ Lecturer 與 Tag，大量資料下造成 ~300 次 query。
 
 issue #2108
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -160,7 +160,7 @@ test(auth): 補 LoginController 失敗路徑測試
 - 帳號不存在
 - 超過每分鐘 5 次嘗試
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -177,7 +177,7 @@ git add composer.json composer.lock
 git commit -m "$(cat <<'EOF'
 chore(deps): 安裝 zircote/swagger-php
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 
@@ -189,7 +189,7 @@ feat(openapi): 建立 OpenAPI 元件目錄與首頁端點文件
 - 新增 app/OpenApi/{Schemas,Responses} 元件庫
 - IndexController 加入 OAT attribute
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 
@@ -198,7 +198,7 @@ git add CLAUDE.md
 git commit -m "$(cat <<'EOF'
 docs: 補充 OpenAPI 使用說明與目錄結構
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```

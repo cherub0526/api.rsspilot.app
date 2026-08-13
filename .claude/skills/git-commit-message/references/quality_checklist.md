@@ -19,7 +19,7 @@
 - [ ] Header 與 body 之間**空一行**
 - [ ] Body 每行 ≤ 72 顯示欄寬
 - [ ] Body 與 footer 之間**空一行**
-- [ ] 末段含 `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+- [ ] 末段含 `Co-Authored-By: <當前模型> <noreply@anthropic.com>`（模型名依當下實際版本填寫）
 - [ ] `scripts/validate_commit_message.py` 退出碼 0
 
 ## 要求/規範確認（semantic）

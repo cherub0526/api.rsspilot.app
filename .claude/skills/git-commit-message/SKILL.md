@@ -26,7 +26,8 @@ metadata: {"author": "Ethan"}
 - **subject**（必填）：≤ 50 欄寬；動詞開頭；**結尾不加句號**
 - **body**（可選但建議）：每行 ≤ 72 欄寬；推薦結構「問題 / 原因 / 調整項目」
 - **footer**（可選）：`issue #xxxx`、`BREAKING CHANGE: ...`
-- **末段固定保留** `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`
+- **末段固定保留** `Co-Authored-By: <當前模型> <noreply@anthropic.com>`，模型名依當下實際使用的
+  版本填寫（本文件範例為 `Claude Opus 5 (1M context)`）；不確定就照 `git log` 最近一則的寫法
 
 > 中文全形字佔 2 欄寬；validator 依東亞寬度計算，不是 byte 數。
 
@@ -157,7 +158,7 @@ fix(course): 修正課程列表分頁 N+1 query
 
 issue #2108
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -169,7 +170,7 @@ git add composer.json composer.lock
 git commit -m "$(cat <<'EOF'
 chore(deps): 安裝 zircote/swagger-php
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 
@@ -177,7 +178,7 @@ git add app/OpenApi/ app/Controller/IndexController.php
 git commit -m "$(cat <<'EOF'
 feat(openapi): 建立 OpenAPI 元件目錄與首頁端點文件
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 
@@ -185,7 +186,7 @@ git add CLAUDE.md
 git commit -m "$(cat <<'EOF'
 docs: 補充 OpenAPI 使用說明
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
