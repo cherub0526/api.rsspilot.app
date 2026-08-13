@@ -11,6 +11,7 @@ use App\Models\Source;
 use App\Models\Caption;
 use App\Models\Setting;
 use App\Models\Summary;
+use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Events\Chat\ChatDoneEvent;
 use App\Events\Chat\ChatTokenEvent;
@@ -449,6 +450,42 @@ class ChatControllerTest extends TestCase
                     && $event->mediaId === $media->id;
             }
         );
+    }
+
+    /**
+     * 8-1. 空的 token 不該廣播出去。
+     *
+     * NeuronAI 在串流尾端會送出內容為空的 chunk，照送會讓 SSE 前端做無意義的重繪。
+     * 過濾後串接結果必須不變。
+     */
+    public function testStoreSkipsEmptyTokens(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        Event::fake([ChatTokenEvent::class, ChatDoneEvent::class]);
+
+        $this->fakeStreamer('這部', '', '影片', '', '');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
+        ])->assertStatus(200);
+
+        Event::assertDispatchedTimes(ChatTokenEvent::class, 2);
+        Event::assertNotDispatched(
+            ChatTokenEvent::class,
+            fn (ChatTokenEvent $event): bool => $event->token === ''
+        );
+
+        // 過濾不能影響存下來的完整內容
+        $this->assertDatabaseHas('chat_messages', [
+            'role'    => ChatMessage::ROLE_AI,
+            'content' => '這部影片',
+        ]);
     }
 
     /**

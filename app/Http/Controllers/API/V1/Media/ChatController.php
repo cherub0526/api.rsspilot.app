@@ -152,6 +152,12 @@ class ChatController
             );
 
             foreach ($stream as $token) {
+                // NeuronAI 在串流尾端會送出內容為空的 chunk。串接結果不受影響，
+                // 但每一則都會變成一次 ChatTokenEvent，讓 SSE 前端做無意義的重繪。
+                if ($token === '') {
+                    continue;
+                }
+
                 $buffer .= $token;
                 Event::dispatch(new ChatTokenEvent($token, $userId, $mediaId));
             }
