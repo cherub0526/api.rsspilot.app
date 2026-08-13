@@ -18,7 +18,7 @@ class Summarize extends Command
      */
     protected ?string $signature = 'videotranscriber:summary
         {--id= : Summarise a specific media by ID, whatever its status}
-        {--language= : The language the summary must be written in}
+        {--language= : ISO 639-1 code the summary must be written in, e.g. en or zh-TW}
         {--force : Release the unique job lock before dispatching}';
 
     /**
@@ -44,7 +44,7 @@ class Summarize extends Command
         }
 
         $force = (bool) $this->option('force');
-        $language = (string) ($this->option('language') ?: SmartSummaryTemplate::DEFAULT_LANGUAGE);
+        $language = (string) ($this->option('language') ?: SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE);
 
         $query->chunkById(100, function ($medias) use ($force, $language) {
             foreach ($medias as $media) {

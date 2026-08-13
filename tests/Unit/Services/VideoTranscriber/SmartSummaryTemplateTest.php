@@ -68,7 +68,7 @@ class SmartSummaryTemplateTest extends TestCase
         $this->assertStringContainsString('Reply with strictly valid JSON and nothing else.', $text);
     }
 
-    public function testDefaultsToEnglishAndAcceptsAnotherLanguage(): void
+    public function testDefaultsToEnglishAndResolvesTheTagToItsName(): void
     {
         $this->assertStringContainsString(
             'written exclusively in English,',
@@ -77,7 +77,7 @@ class SmartSummaryTemplateTest extends TestCase
 
         $this->assertStringContainsString(
             'written exclusively in Traditional Chinese,',
-            (new SmartSummaryTemplate('Traditional Chinese'))->build('transcript')
+            (new SmartSummaryTemplate('zh-TW'))->build('transcript')
         );
     }
 }

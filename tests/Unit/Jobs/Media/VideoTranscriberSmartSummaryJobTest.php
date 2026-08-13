@@ -159,11 +159,11 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
         });
     }
 
-    public function testTheLanguageArgumentReachesThePrompt(): void
+    public function testTheLanguageCodeIsResolvedIntoThePrompt(): void
     {
         $this->fakeStream($this->summaryJson('# Title'));
 
-        (new VideoTranscriberSmartSummaryJob($this->transcribedMediaWithCaption(), 'Traditional Chinese'))
+        (new VideoTranscriberSmartSummaryJob($this->transcribedMediaWithCaption(), 'zh-TW'))
             ->handle(new VideoTranscriberClient());
 
         Http::assertSent(fn ($request) => !str_contains($request->url(), '/summary/completions')

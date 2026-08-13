@@ -124,7 +124,11 @@ class VideoTranscriberClient
     }
 
     /**
-     * Summarise a transcript through videotranscriber.ai.
+     * Run a prompt through videotranscriber.ai's completion endpoint.
+     *
+     * Despite the `summary/completions` path this is a general completion:
+     * summarising and translating both go through it, differing only in the
+     * prompt they send. Keep the name endpoint-shaped rather than task-shaped.
      *
      * Every call fetches a fresh prod-config first and passes its `data` block
      * through as the query string — the values are single-use, so they cannot
@@ -132,19 +136,18 @@ class VideoTranscriberClient
      * named fields, so a field the service adds later still reaches it.
      *
      * The body is sent with `streaming: true`, matching the web client, so the
-     * answer arrives as SSE chunks and is reassembled into the finished summary
-     * before being returned.
+     * answer arrives as SSE chunks and is reassembled before being returned.
      */
-    public function summaryCompletions(string $text, ?string $model = null): string
+    public function completions(string $text, ?string $model = null): string
     {
-        return $this->summaryStreamParser->parse($this->summaryStream($text, $model));
+        return $this->summaryStreamParser->parse($this->completionsStream($text, $model));
     }
 
     /**
-     * The untouched SSE body behind summaryCompletions(), for callers that need
-     * to stream it onward rather than wait for the whole summary.
+     * The untouched SSE body behind completions(), for callers that need
+     * to stream it onward rather than wait for the whole answer.
      */
-    public function summaryStream(string $text, ?string $model = null): string
+    public function completionsStream(string $text, ?string $model = null): string
     {
         $query = $this->getProdConfig()['data'] ?? [];
 

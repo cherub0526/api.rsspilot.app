@@ -45,15 +45,15 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
 
     protected Media $media;
 
-    protected string $language;
+    protected string $languageCode;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Media $media, string $language = SmartSummaryTemplate::DEFAULT_LANGUAGE)
+    public function __construct(Media $media, string $languageCode = SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE)
     {
         $this->media = $media;
-        $this->language = $language;
+        $this->languageCode = $languageCode;
 
         $this->queue = 'videotranscriber.smart-summary';
     }
@@ -85,10 +85,10 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         /** @var Summary $summary */
         $summary = $this->media->summaries()->firstOrCreate(['locale' => $caption->locale]);
 
-        $template = new SmartSummaryTemplate($this->language);
+        $template = new SmartSummaryTemplate($this->languageCode);
 
         try {
-            $response = $client->summaryCompletions($template->build($caption->text));
+            $response = $client->completions($template->build($caption->text));
         } catch (VideoTranscriberAuthException) {
             $this->releaseOrFail($summary, self::AUTH_RETRY_DELAY_SECONDS);
             return;

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\VideoTranscriber\Prompts;
 
+use App\Utils\Const\ISO6391;
+
 /**
  * The prompt videotranscriber.ai's `summary/completions` endpoint expects as
  * its flat `text` field.
@@ -25,10 +27,13 @@ namespace App\Services\VideoTranscriber\Prompts;
  */
 class SmartSummaryTemplate
 {
-    public const DEFAULT_LANGUAGE = 'English';
+    /**
+     * The ISO6391 code used when a caller does not pick one.
+     */
+    public const DEFAULT_LANGUAGE_CODE = 'en';
 
     public function __construct(
-        protected string $language = self::DEFAULT_LANGUAGE,
+        protected string $languageCode = self::DEFAULT_LANGUAGE_CODE,
     ) {
     }
 
@@ -113,8 +118,24 @@ class SmartSummaryTemplate
 
     protected function languageDirective(): string
     {
-        return "Language: The entire output must be written exclusively in {$this->language}, "
+        return 'Language: The entire output must be written exclusively in '
+            . $this->languageName() . ', '
             . 'including all headings, labels, tables, bullet points, annotations, and explanatory '
             . 'text, with no mixed-language content unless explicitly present in the original transcript.';
+    }
+
+    /**
+     * Resolve the code into the language name the prompt states.
+     *
+     * `ISO6391::getNameByCode()` is an `array_search`, so an unregistered code
+     * yields `false`. The code stands in for the name in that case rather than
+     * leaving the directive naming no language at all, which would let the
+     * model answer in whatever it liked.
+     */
+    protected function languageName(): string
+    {
+        $name = ISO6391::getNameByCode($this->languageCode);
+
+        return is_string($name) ? $name : $this->languageCode;
     }
 }

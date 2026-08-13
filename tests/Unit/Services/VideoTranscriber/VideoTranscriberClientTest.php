@@ -307,7 +307,7 @@ class VideoTranscriberClientTest extends TestCase
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
         ]);
 
-        (new VideoTranscriberClient())->summaryCompletions('the prompt');
+        (new VideoTranscriberClient())->completions('the prompt');
 
         Http::assertSent(function ($request) {
             if (!str_starts_with($request->url(), 'https://videotranscriber.ai/api/v1/summary/completions?')) {
@@ -333,7 +333,7 @@ class VideoTranscriberClientTest extends TestCase
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
         ]);
 
-        (new VideoTranscriberClient())->summaryCompletions('the prompt', 'gpt-4.1');
+        (new VideoTranscriberClient())->completions('the prompt', 'gpt-4.1');
 
         Http::assertSent(function ($request) {
             if (!str_contains($request->url(), '/summary/completions')) {
@@ -356,7 +356,7 @@ class VideoTranscriberClientTest extends TestCase
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response('streamed summary', 200),
         ]);
 
-        (new VideoTranscriberClient())->summaryCompletions('the prompt');
+        (new VideoTranscriberClient())->completions('the prompt');
 
         Http::assertSent(fn ($request) => !str_contains($request->url(), '/summary/completions')
             || $request->data()['model'] === 'gpt-4.1-mini');
@@ -376,7 +376,7 @@ class VideoTranscriberClientTest extends TestCase
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response($stream, 200),
         ]);
 
-        $result = (new VideoTranscriberClient())->summaryCompletions('the prompt');
+        $result = (new VideoTranscriberClient())->completions('the prompt');
 
         $this->assertSame("# Title\n\nBody.", $result);
     }
@@ -388,7 +388,7 @@ class VideoTranscriberClientTest extends TestCase
             'videotranscriber.ai/api/v1/summary/completions*' => Http::response("data: {\"a\":1}\n\ndata: [DONE]\n\n", 200),
         ]);
 
-        $result = (new VideoTranscriberClient())->summaryStream('the prompt');
+        $result = (new VideoTranscriberClient())->completionsStream('the prompt');
 
         $this->assertSame("data: {\"a\":1}\n\ndata: [DONE]\n\n", $result);
     }
