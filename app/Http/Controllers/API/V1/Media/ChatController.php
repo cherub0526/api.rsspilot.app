@@ -9,7 +9,6 @@ use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Utils\AI\Completion;
-use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
 use App\Validators\ChatValidator;
 use App\Events\Chat\ChatDoneEvent;
@@ -129,7 +128,7 @@ class ChatController
         $template = TemplateFactory::create('assistant', [
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
             'messages'         => array_pop($params['messages']),
-            'respond_language' => ISO6391::getNameByCode($request->user()->setting()->first()->data['ai']['language']),
+            'respond_language' => $request->user()->aiLanguageName(),
         ]);
 
         $manager = new TemplateCompletionManager(Completion::make(), $template);

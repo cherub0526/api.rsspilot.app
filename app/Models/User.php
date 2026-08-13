@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Utils\Const\ISO6391;
 use Hyperf\Database\Model\Builder;
 use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
@@ -26,6 +27,11 @@ class User extends Authenticatable
     public const string SOCIAL_TYPE_FACEBOOK = 'facebook';
 
     public const string SOCIAL_TYPE_GOOGLE = 'google';
+
+    /**
+     * 使用者未設定 AI 回應語言時採用的語言代碼，與 config('app.locale') 的預設值一致。
+     */
+    public const string DEFAULT_AI_LANGUAGE = 'en';
 
     protected array $with = ['paddle'];
 
@@ -119,6 +125,26 @@ class User extends Authenticatable
     public function setting(): HasOne
     {
         return $this->hasOne(Setting::class, 'user_id', 'id');
+    }
+
+    /**
+     * AI 回應語言的名稱，供 prompt 直接引用。
+     *
+     * settings 資料列要等使用者第一次更新設定才會建立（見 SettingsController::update），
+     * data 內也不保證有 ai.language，所以這裡兩層都不能假設存在——
+     * 直接讀取會觸發 warning，而 Hyperf 的 ErrorExceptionHandler 會把 warning 轉成
+     * ErrorException，讓整個請求變成 500。
+     *
+     * `ISO6391::getNameByCode()` 是 array_search，未登錄的代碼會回傳 false，
+     * 此時以代碼本身頂替，避免 prompt 裡的語言指示變成空字串。
+     */
+    public function aiLanguageName(): string
+    {
+        $data = $this->setting()->first()?->data ?? [];
+        $code = $data['ai']['language'] ?? self::DEFAULT_AI_LANGUAGE;
+        $name = ISO6391::getNameByCode($code);
+
+        return is_string($name) ? $name : $code;
     }
 
     public function avatars(): HasMany

@@ -6,7 +6,6 @@ namespace App\Http\Controllers\API\V1\Media;
 
 use Hypervel\Http\Request;
 use App\Utils\AI\Completion;
-use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Responses\Http400;
@@ -77,7 +76,7 @@ class CustomPromptController
         $template = TemplateFactory::create('customPrompt', [
             'system_prompt'    => $params['prompt'],
             'user_prompt'      => $media->captions()->orderByDesc('primary')->first()->text ?? '',
-            'respond_language' => ISO6391::getNameByCode($request->user()->setting()->first()->data['ai']['language']),
+            'respond_language' => $request->user()->aiLanguageName(),
         ]);
 
         $openai = new TemplateCompletionManager(Completion::make(), $template);

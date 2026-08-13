@@ -201,6 +201,50 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * 6-1. 使用者從未更新過設定（無 settings 資料列）→ 仍為 200。
+     *      讀取 ai.language 時若不容忍缺漏，warning 會被 Hyperf 轉成
+     *      ErrorException，整個請求變成 500。
+     */
+    public function testStoreSucceedsWhenUserHasNoSetting(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->assertNull($user->setting()->first());
+        $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => 'What is this video about?']],
+        ])
+            ->assertStatus(200)
+            ->assertJson(['status' => 'done']);
+    }
+
+    /**
+     * 6-2. settings 資料列存在但 data 內沒有 ai.language → 仍為 200。
+     *      SettingsController::update 會以 `['data' => []]` firstOrCreate，
+     *      所以這個狀態是真的會出現的。
+     */
+    public function testStoreSucceedsWhenSettingHasNoAiLanguage(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        Setting::create(['user_id' => $user->id, 'data' => []]);
+        $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => 'What is this video about?']],
+        ])
+            ->assertStatus(200)
+            ->assertJson(['status' => 'done']);
+    }
+
+    /**
      * 7. 使用者透過 userables 直接擁有 media（無 source）→ 200.
      */
     public function testStoreSucceedsForDirectlyOwnedMedia(): void
