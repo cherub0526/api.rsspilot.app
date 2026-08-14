@@ -20,12 +20,13 @@ class VideoTranscriberFollowUpQuestions implements FollowUpQuestionsGeneratorInt
     public function __construct(
         protected VideoTranscriberClient $client,
         protected FollowUpQuestionsTemplate $template = new FollowUpQuestionsTemplate(),
+        protected FollowUpQuestionsParser $parser = new FollowUpQuestionsParser(),
     ) {
     }
 
     public function generate(string $answers): array
     {
-        return $this->template->parse(
+        return $this->parser->parse(
             $this->client->completions(
                 text: $this->template->build($answers),
                 selectedTexts: [],

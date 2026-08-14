@@ -27,6 +27,7 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
     public function __construct(
         protected ?AIProviderInterface $provider = null,
         protected FollowUpQuestionsTemplate $template = new FollowUpQuestionsTemplate(),
+        protected FollowUpQuestionsParser $parser = new FollowUpQuestionsParser(),
     ) {
     }
 
@@ -37,7 +38,7 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
             ->chat(new UserMessage($this->template->build($answers)))
             ->getMessage();
 
-        return $this->template->parse($message->getContent());
+        return $this->parser->parse($message->getContent());
     }
 
     protected function defaultProvider(): AIProviderInterface

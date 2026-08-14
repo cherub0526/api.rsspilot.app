@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace App\Services\FollowUpQuestions;
 
 /**
- * 依前一輪的回答產生 3 個延伸問題的提示詞，以及對回應的解析。
- *
- * 提示詞與解析放在一起是刻意的：`### 1.` 這個輸出格式是由提示詞規定的，
- * 兩者是同一份契約的兩面，分開放很容易改了一邊忘了另一邊。
+ * 依前一輪的回答產生 3 個延伸問題的提示詞。
  *
  * 兩個後端（videotranscriber、NeuronAI）共用這個模板，送出的提示詞逐字相同，
  * 才有辦法比較兩者的產出差異。
  *
- * 注意 `App\Services\Prompts\FollowUpQuestionsTemplate` 是另一個同名類別，
- * 走 BaseTemplate / OpenRouter 那條路且目前無人使用，與這裡無關。
+ * 輸出格式的解析在 FollowUpQuestionsParser —— 它同時服務這裡與
+ * `App\Services\Prompts\FollowUpQuestionsTemplate`（同名但吃 question + answer
+ * 的另一個模板），兩者的 `### N.` 格式相同，解析只該有一份。
  */
 class FollowUpQuestionsTemplate
 {
@@ -27,26 +25,6 @@ class FollowUpQuestionsTemplate
     public function build(string $answers): string
     {
         return $this->instructions() . "\n" . $answers . "\n";
-    }
-
-    /**
-     * 從回應中取出各個問題。
-     *
-     * 模型不保證乖乖給滿 3 題，也可能在前後多寫幾句，所以逐行比對格式而不是
-     * 整串硬切；解析到幾題就回幾題，由呼叫端決定不足時要怎麼辦。
-     *
-     * @return string[]
-     */
-    public function parse(string $response): array
-    {
-        if (preg_match_all('/^\s*#{1,6}\s*\d+\.\s*(.+?)\s*$/mu', $response, $matches) === 0) {
-            return [];
-        }
-
-        return array_values(array_filter(
-            array_map(trim(...), $matches[1]),
-            static fn (string $question): bool => $question !== ''
-        ));
     }
 
     /**
