@@ -138,18 +138,39 @@ class VideoTranscriberClient
      * The body is sent with `streaming: true`, matching the web client, so the
      * answer arrives as SSE chunks and is reassembled before being returned.
      */
-    public function completions(string $text, ?string $model = null): string
+    /**
+     * @param null|array<int, mixed> $selectedTexts see completionsStream()
+     */
+    public function completions(string $text, ?string $model = null, ?array $selectedTexts = null): string
     {
-        return $this->summaryStreamParser->parse($this->completionsStream($text, $model));
+        return $this->summaryStreamParser->parse($this->completionsStream($text, $model, $selectedTexts));
     }
 
     /**
      * The untouched SSE body behind completions(), for callers that need
      * to stream it onward rather than wait for the whole answer.
+     *
+     * `selectedTexts` is omitted from the body unless a caller passes one. The
+     * web client sends `selected_texts` on every request, but summarising and
+     * translating have always worked without it, so it stays opt-in rather than
+     * silently changing what those two send.
+     *
+     * @param null|array<int, mixed> $selectedTexts
      */
-    public function completionsStream(string $text, ?string $model = null): string
+    public function completionsStream(string $text, ?string $model = null, ?array $selectedTexts = null): string
     {
         $query = $this->getProdConfig()['data'] ?? [];
+
+        $payload = [
+            'text'      => $text,
+            'end_flag'  => true,
+            'streaming' => true,
+            'model'     => $model ?? self::SUMMARY_MODEL,
+        ];
+
+        if ($selectedTexts !== null) {
+            $payload['selected_texts'] = $selectedTexts;
+        }
 
         // Deliberately no Accept override: the endpoint answers with
         // `text/event-stream`, but asking for it outright gets a 406 —
@@ -157,12 +178,7 @@ class VideoTranscriberClient
         return $this->authenticatedResponse(fn () => Http::asJson()
             ->withHeaders($this->headers())
             ->timeout(self::SUMMARY_TIMEOUT_SECONDS)
-            ->post($this->summaryEndpoint . '?' . http_build_query($query), [
-                'text'      => $text,
-                'end_flag'  => true,
-                'streaming' => true,
-                'model'     => $model ?? self::SUMMARY_MODEL,
-            ]))->body();
+            ->post($this->summaryEndpoint . '?' . http_build_query($query), $payload))->body();
     }
 
     public function getTranscription(string $recordId): array
