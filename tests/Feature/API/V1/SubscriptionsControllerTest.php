@@ -311,6 +311,15 @@ class SubscriptionsControllerTest extends TestCase
 
         $this->json('GET', $uri)
             ->assertStatus(200)
+            // chat 三個欄位一起斷言：它們讀的是 chat_usages，漏掉的話少跑一支
+            // migration 就會讓整個端點 500，而測試仍然是綠的。
+            ->assertJsonStructure([
+                'data' => [
+                    'plan'  => ['channels', 'media', 'chat'],
+                    'usage' => ['channels', 'media', 'chat'],
+                    'chat_reset_at',
+                ],
+            ])
             ->assertJson([
                 'data' => [
                     'plan' => [
@@ -320,6 +329,7 @@ class SubscriptionsControllerTest extends TestCase
                     'usage' => [
                         'channels' => 0,
                         'media'    => 0,
+                        'chat'     => 0,
                     ],
                 ],
             ]);
