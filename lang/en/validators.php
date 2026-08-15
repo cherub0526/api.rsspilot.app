@@ -11,6 +11,9 @@ return [
             'not_found'         => 'Media not found.',
             'caption_not_found' => 'Caption not found.',
         ],
+        'chat' => [
+            'chat_limit_reached' => 'You have reached the daily AI chat limit for your plan.',
+        ],
         'rss' => [
             'invalid_url' => 'Invalid RSS URL.',
             'not_found'   => 'RSS not found.',

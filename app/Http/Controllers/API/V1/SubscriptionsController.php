@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
+use App\Services\ChatQuotaService;
 use App\Http\Resources\PlanResource;
 use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
@@ -421,8 +422,11 @@ class SubscriptionsController extends AbstractController
         ]);
     }
 
-    public function usage(Request $request, SubscriptionService $subscriptionService): ResponseInterface
-    {
+    public function usage(
+        Request $request,
+        SubscriptionService $subscriptionService,
+        ChatQuotaService $chatQuotaService
+    ): ResponseInterface {
         $plan = $subscriptionService->getUserSubscriptionPlan(
             $subscriptionService->getUserSubscription($request->user()->id)
         );
@@ -430,18 +434,25 @@ class SubscriptionsController extends AbstractController
         $user = $request->user();
         $betweenDays = [now()->subDays(30)->startOfDay(), now()->endOfDay()];
 
+        // chat 的週期跟 channels / media 不同：前兩者是總量與 30 天滾動窗口，
+        // chat 是額度時區的自然日，所以額外附上重置時刻讓前端能講清楚。
+        $chatQuota = $chatQuotaService->snapshot($user);
+
         return response()->json([
             'data' => [
                 'plan' => [
                     'channels' => $plan->channel_limit,
                     'media'    => $plan->video_limit,
+                    'chat'     => $chatQuota->limit,
                 ],
                 'usage' => [
                     'channels' => $user->sources()->count(),
                     'media'    => $user->media()
                         ->whereBetween('userables.created_at', $betweenDays)
                         ->count(),
+                    'chat' => $chatQuota->used,
                 ],
+                'chat_reset_at' => $chatQuota->resetAt->getTimestamp(),
             ],
         ]);
     }

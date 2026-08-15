@@ -11,6 +11,9 @@ return [
             'not_found'         => '找不到指定的媒體。',
             'caption_not_found' => '找不到指定的字幕。',
         ],
+        'chat' => [
+            'chat_limit_reached' => '已達到方案允許的每日 AI 對話上限。',
+        ],
         'rss' => [
             'invalid_url' => '無效的 RSS 網址。',
             'not_found'   => '找不到指定的 RSS。',

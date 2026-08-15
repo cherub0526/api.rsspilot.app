@@ -14,7 +14,12 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'description', type: 'string', example: 'Full access to all features'),
         new OAT\Property(property: 'channel_limit', type: 'integer', example: 10),
         new OAT\Property(property: 'video_limit', type: 'integer', example: 100),
-        new OAT\Property(property: 'chat_limit', type: 'integer', example: 500),
+        new OAT\Property(
+            property: 'chat_limit',
+            type: 'integer',
+            description: 'Daily AI chat question limit. 0 means unlimited.',
+            example: 50
+        ),
         new OAT\Property(property: 'download_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'agent_enabled', type: 'boolean', example: false),
         new OAT\Property(property: 'advanced_model_enabled', type: 'boolean', example: true),

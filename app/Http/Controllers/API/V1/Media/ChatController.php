@@ -15,8 +15,11 @@ use App\Events\Chat\ChatDoneEvent;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
+use App\OpenApi\Responses\Http429;
+use App\Services\ChatQuotaService;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
+use App\Services\ChatQuotaSnapshot;
 use Hypervel\Support\Facades\Event;
 use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -24,14 +27,17 @@ use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
+use App\Exceptions\ChatQuotaExceededException;
 use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
 
 class ChatController
 {
     use ResolvesMedia;
 
-    public function __construct(private ChatStreamerInterface $streamer)
-    {
+    public function __construct(
+        private ChatStreamerInterface $streamer,
+        private ChatQuotaService $quota,
+    ) {
     }
 
     /**
@@ -43,6 +49,7 @@ class ChatController
      *
      * @throws InvalidRequestException
      * @throws NotFoundHttpException
+     * @throws ChatQuotaExceededException 當日提問額度已用盡
      */
     #[OAT\Post(
         path: '/v1/media/{mediaId}/chat',
@@ -92,6 +99,23 @@ class ChatController
             new OAT\Response(
                 response: 200,
                 description: 'AI response dispatched via SSE events',
+                headers: [
+                    new OAT\Header(
+                        header: 'X-RateLimit-Limit',
+                        description: 'Daily question limit of the current plan. Absent when the plan is unlimited.',
+                        schema: new OAT\Schema(type: 'integer', example: 3)
+                    ),
+                    new OAT\Header(
+                        header: 'X-RateLimit-Remaining',
+                        description: 'Questions left today. Absent when the plan is unlimited.',
+                        schema: new OAT\Schema(type: 'integer', example: 2)
+                    ),
+                    new OAT\Header(
+                        header: 'X-RateLimit-Reset',
+                        description: 'Unix timestamp of the next quota reset. Absent when the plan is unlimited.',
+                        schema: new OAT\Schema(type: 'integer', example: 1786752000)
+                    ),
+                ],
                 content: new OAT\JsonContent(
                     properties: [
                         new OAT\Property(property: 'status', type: 'string', example: 'done'),
@@ -102,6 +126,7 @@ class ChatController
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
             new OAT\Response(ref: Http404::class, response: 404),
+            new OAT\Response(ref: Http429::class, response: 429),
         ]
     )]
     public function store(Request $request, string $mediaId): ResponseInterface
@@ -117,6 +142,10 @@ class ChatController
 
         $media = $this->resolveMedia($request, $mediaId);
         $userId = (string) $request->user()->getKey();
+
+        // 額度在建立 session 之前就扣，被擋下來的請求才不會留下一堆
+        // 只有提問、沒有回應的空 session。
+        $quota = $this->quota->consume($request->user());
 
         $userMessage = collect($params['messages'])->last()['content'] ?? '';
         $session = $this->findOrCreateSession(
@@ -169,11 +198,34 @@ class ChatController
             if (!$saved) {
                 $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
             }
+
+            // 一個 token 都沒拿到才退還額度。已經串出部分內容的話使用者實際看過
+            // 回應、上游 token 也已經花掉了，那次算用掉。
+            if ($buffer === '') {
+                $this->quota->release($request->user(), $quota);
+            }
+
             Event::dispatch(new ChatErrorEvent($e->getMessage(), $userId, $mediaId));
             throw $e;
         }
 
-        return response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]);
+        return $this->withQuotaHeaders(
+            response()->json(['status' => 'done', 'session_id' => (string) $session->getKey()]),
+            $quota
+        );
+    }
+
+    /**
+     * 成功的回應也帶 X-RateLimit-*，前端不必等到被擋才知道今天還剩幾次。
+     * 不限制的方案不會有這組 header（見 ChatQuotaSnapshot::headers()）。
+     */
+    private function withQuotaHeaders(ResponseInterface $response, ChatQuotaSnapshot $quota): ResponseInterface
+    {
+        foreach ($quota->headers() as $name => $value) {
+            $response = $response->withHeader($name, $value);
+        }
+
+        return $response;
     }
 
     /**
