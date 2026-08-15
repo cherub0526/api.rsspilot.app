@@ -88,7 +88,7 @@ return [
         'limit' => [
             'integer' => 'Limit must be an integer.',
             'min'     => 'Limit must be at least 1.',
-            'max'     => 'Limit must not exceed 10.',
+            'max'     => 'Limit must not exceed 12.',
         ],
     ],
     'oauth' => [

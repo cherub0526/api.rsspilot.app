@@ -26,7 +26,7 @@ class MediaValidator extends BaseValidator
     {
         $this->rules = [
             'type'    => 'required|string|in:' . implode(',', array_keys(Media::$typeMaps)),
-            'limit'   => 'sometimes|integer|min:1|max:10',
+            'limit'   => 'sometimes|integer|min:1|max:12',
             'keyword' => 'sometimes|nullable|string|max:255',
         ];
 
