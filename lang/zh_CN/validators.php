@@ -8,8 +8,10 @@ return [
             'invalid_credentials' => '帐号或密码无效。',
         ],
         'media' => [
-            'not_found'         => '找不到指定的媒体。',
-            'caption_not_found' => '找不到指定的字幕。',
+            'not_found'          => '找不到指定的媒体。',
+            'caption_not_found'  => '找不到指定的字幕。',
+            'invalid_url'        => '无效的 YouTube 影片网址。',
+            'video_limit_reached' => '已达到方案允许的影片数量上限。',
         ],
         'chat' => [
             'chat_limit_reached' => '已达到方案允许的每日 AI 对话上限。',
@@ -89,6 +91,10 @@ return [
             'integer' => '限制必须是整数。',
             'min'     => '限制至少为 1。',
             'max'     => '限制不能超过 12。',
+        ],
+        'url' => [
+            'required' => '网址为必填。',
+            'string'   => '网址必须是字符串。',
         ],
     ],
     'oauth' => [

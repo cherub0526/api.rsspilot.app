@@ -201,6 +201,14 @@ Route::group('/media', function () {
             'middleware' => ['auth'],
         ]
     );
+    Route::post(
+        '/',
+        [
+            'as'         => 'store',
+            'uses'       => MediaController::class . '@store',
+            'middleware' => ['auth'],
+        ]
+    );
     Route::get(
         '/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
         [

@@ -8,8 +8,10 @@ return [
             'invalid_credentials' => '帳號或密碼無效。',
         ],
         'media' => [
-            'not_found'         => '找不到指定的媒體。',
-            'caption_not_found' => '找不到指定的字幕。',
+            'not_found'          => '找不到指定的媒體。',
+            'caption_not_found'  => '找不到指定的字幕。',
+            'invalid_url'        => '無效的 YouTube 影片網址。',
+            'video_limit_reached' => '已達到方案允許的影片數量上限。',
         ],
         'chat' => [
             'chat_limit_reached' => '已達到方案允許的每日 AI 對話上限。',
@@ -89,6 +91,10 @@ return [
             'integer' => '限制必須是整數。',
             'min'     => '限制至少為 1。',
             'max'     => '限制不能超過 12。',
+        ],
+        'url' => [
+            'required' => '網址為必填。',
+            'string'   => '網址必須是字串。',
         ],
     ],
     'oauth' => [

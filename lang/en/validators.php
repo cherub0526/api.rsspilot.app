@@ -8,8 +8,10 @@ return [
             'invalid_credentials' => 'Invalid account or password.',
         ],
         'media' => [
-            'not_found'         => 'Media not found.',
-            'caption_not_found' => 'Caption not found.',
+            'not_found'          => 'Media not found.',
+            'caption_not_found'  => 'Caption not found.',
+            'invalid_url'        => 'Invalid YouTube video URL.',
+            'video_limit_reached' => 'You have reached the video limit for your plan.',
         ],
         'chat' => [
             'chat_limit_reached' => 'You have reached the daily AI chat limit for your plan.',
@@ -89,6 +91,10 @@ return [
             'integer' => 'Limit must be an integer.',
             'min'     => 'Limit must be at least 1.',
             'max'     => 'Limit must not exceed 12.',
+        ],
+        'url' => [
+            'required' => 'URL is required.',
+            'string'   => 'URL must be a string.',
         ],
     ],
     'oauth' => [

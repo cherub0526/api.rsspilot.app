@@ -151,6 +151,54 @@ class YoutubeService
     }
 
     /**
+     * Extract a video ID from a YouTube video URL.
+     *
+     * 支援四種形式：
+     * - https://www.youtube.com/watch?v=VIDEOID
+     * - https://youtu.be/VIDEOID
+     * - https://www.youtube.com/shorts/VIDEOID
+     * - https://www.youtube.com/embed/VIDEOID
+     *
+     * 純粹解析字串，不呼叫任何 API——格式不對就不必白跑一趟外部服務。
+     * 影片是否真的存在由呼叫端另外確認。
+     */
+    public function getVideoIdFromUrl(string $url): ?string
+    {
+        $parsedUrl = parse_url($url);
+
+        if (!is_array($parsedUrl) || !isset($parsedUrl['host'])) {
+            return null;
+        }
+
+        $host = strtolower($parsedUrl['host']);
+        $path = trim($parsedUrl['path'] ?? '', '/');
+        $segments = $path === '' ? [] : explode('/', $path);
+
+        // youtu.be/VIDEOID —— 短網址把 ID 放在路徑第一段
+        if ($host === 'youtu.be' || $host === 'www.youtu.be') {
+            return $this->normaliseVideoId($segments[0] ?? null);
+        }
+
+        // 只認 youtube.com 本身與它的子網域。單純比對結尾會把 evilyoutube.com
+        // 也放進來。
+        if ($host !== 'youtube.com' && !str_ends_with($host, '.youtube.com')) {
+            return null;
+        }
+
+        if (in_array($segments[0] ?? '', ['shorts', 'embed', 'live', 'v'], true)) {
+            return $this->normaliseVideoId($segments[1] ?? null);
+        }
+
+        if (isset($parsedUrl['query'])) {
+            parse_str($parsedUrl['query'], $queryParams);
+
+            return $this->normaliseVideoId($queryParams['v'] ?? null);
+        }
+
+        return null;
+    }
+
+    /**
      * Fetch playlist metadata: title, channel_id, channel_title, thumbnail.
      *
      * @return null|array{title: string, channel_id: string, channel_title: string, thumbnail: null|string}
@@ -301,6 +349,19 @@ class YoutubeService
         } while ($pageToken);
 
         return $items;
+    }
+
+    /**
+     * YouTube 的 video ID 固定是 11 個 [A-Za-z0-9_-] 字元。卡死長度與字元集，
+     * 才不會讓 /watch?v= 後面隨便接的字串被當成合法 ID 一路送到外部服務。
+     */
+    protected function normaliseVideoId(?string $candidate): ?string
+    {
+        if (!is_string($candidate)) {
+            return null;
+        }
+
+        return preg_match('/^[A-Za-z0-9_-]{11}$/', $candidate) === 1 ? $candidate : null;
     }
 
     protected function getChannelIdByHandle(string $handle): ?string
