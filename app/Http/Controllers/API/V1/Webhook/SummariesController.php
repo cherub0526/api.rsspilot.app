@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Webhook;
 
 use App\Models\Media;
+use App\Models\Summary;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
@@ -98,7 +99,13 @@ class SummariesController extends AbstractController
 
         $summary = $media->summaries()->firstOrCreate(['locale' => $params['locale']]);
 
-        $summary->fill(['text' => $params['text']])->save();
+        // status 要跟著 text 一起寫。summaries.status 預設是 created，而讀取端
+        // （chat、延伸問題）只認 completed 的摘要——只寫 text 的話這份摘要存在
+        // 卻永遠不會被當成素材使用。
+        $summary->fill([
+            'text'   => $params['text'],
+            'status' => Summary::STATUS_COMPLETED,
+        ])->save();
 
         $media->fill(['status' => Media::STATUS_SUMMARIZED])->save();
 

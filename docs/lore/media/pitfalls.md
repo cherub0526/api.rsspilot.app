@@ -63,4 +63,4 @@ $media->summaries()
 
 `Media::summary()` 這個 relation 本身就是 `hasOne(...)->orderBy('created_at', 'desc')`，天生踩在這個陷阱上，只適合拿去顯示、不適合當 AI 素材。
 
-**反向的坑：** `POST /v1/webhook/summaries/{mediaId}`（`Webhook\SummariesController::store()`）只寫 `text`，**從來不把 status 改成 `completed`**，只把 media 改成 `summarized`。從這條路進來的摘要永遠停在 `created`，上面的 filter 一律看不到。目前線上的摘要都走 job，所以還沒咬到人；哪天要恢復 webhook 這條路，得先補上 status。
+**寫入端的對應義務（曾經漏過）：** 任何寫摘要的路徑都必須把 status 一起寫成 `completed`，否則那份摘要對讀取端等於不存在。`POST /v1/webhook/summaries/{mediaId}`（`Webhook\SummariesController::store()`）原本只寫 `text`、只把 media 改成 `summarized`，摘要本身永遠停在 `created`——因為線上摘要都走 job，這個洞一直沒被踩到。已於 2026-08-19 補上。新增第三條寫入路徑時記得同樣處理。

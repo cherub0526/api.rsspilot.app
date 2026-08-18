@@ -69,6 +69,9 @@ class SummariesControllerTest extends TestCase
         $this->assertNotNull($summary);
         $this->assertEquals($this->validParams()['text'], $summary->text);
 
+        // 讀取端只認 completed 的摘要，status 沒跟著寫的話這份摘要等於不存在。
+        $this->assertEquals(Summary::STATUS_COMPLETED, $summary->status);
+
         $this->assertEquals(Media::STATUS_SUMMARIZED, $media->fresh()->status);
     }
 
@@ -81,5 +84,9 @@ class SummariesControllerTest extends TestCase
             ->assertStatus(200);
 
         $this->assertEquals(1, Summary::where('media_id', $media->id)->where('locale', 'en')->count());
+
+        $summary = Summary::where('media_id', $media->id)->where('locale', 'en')->first();
+        $this->assertEquals($this->validParams()['text'], $summary->text);
+        $this->assertEquals(Summary::STATUS_COMPLETED, $summary->status);
     }
 }
