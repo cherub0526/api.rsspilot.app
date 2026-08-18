@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1\Media;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Price;
 use App\Models\Source;
 use App\Models\Summary;
+use App\Models\ChatUsage;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use Hypervel\Foundation\Testing\RefreshDatabase;
@@ -90,6 +93,35 @@ class ChatFollowUpsTest extends TestCase
             'status'     => $status,
             'text'       => ['long_summary' => ['content' => $content]],
             'created_at' => $createdAt ?? now(),
+        ]);
+    }
+
+    /**
+     * 沒有訂閱的使用者吃的是「月費 0 元」的方案，額度就從這裡來。
+     */
+    private function createFreePlan(int $chatLimit): Plan
+    {
+        $plan = Plan::factory()->create([
+            'title'      => 'Free',
+            'chat_limit' => $chatLimit,
+            'status'     => Plan::STATUS_ACTIVE,
+        ]);
+
+        Price::create([
+            'plan_id' => $plan->id,
+            'unit'    => Price::UNIT_MONTHLY,
+            'price'   => 0,
+        ]);
+
+        return $plan;
+    }
+
+    private function useQuota(User $user, int $count): void
+    {
+        ChatUsage::create([
+            'user_id'    => $user->id,
+            'quota_date' => now(config('ai.chat.quota_timezone') ?: config('app.timezone'))->toDateString(),
+            'count'      => $count,
         ]);
     }
 
@@ -238,6 +270,74 @@ class ChatFollowUpsTest extends TestCase
             ->assertJson(['data' => []]);
 
         $this->assertSame(0, $generator->calls);
+    }
+
+    /**
+     * 當日額度用完 → 不產生。問題產出來使用者也送不出去，白燒一次推論。
+     */
+    public function testReturnsEmptyArrayWhenDailyChatQuotaIsUsedUp(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+
+        $this->addMessage($session, ChatMessage::ROLE_AI, '回應內容');
+        $this->useQuota($user, 3);
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)
+            ->assertStatus(200)
+            ->assertJson(['data' => []]);
+
+        $this->assertSame(0, $generator->calls);
+    }
+
+    /**
+     * 還有剩餘額度就照常產生，而且不會因此扣掉額度。
+     */
+    public function testGeneratesWhenQuotaRemainsAndDoesNotConsumeIt(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+
+        $this->addMessage($session, ChatMessage::ROLE_AI, '回應內容');
+        $this->useQuota($user, 2);
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)
+            ->assertStatus(200)
+            ->assertJson(['data' => ['問題一', '問題二', '問題三']]);
+
+        $this->assertSame(1, $generator->calls);
+        $this->assertSame(2, (int) ChatUsage::where('user_id', $user->id)->value('count'));
+    }
+
+    /**
+     * chat_limit = 0 是不限制，不能被當成「一次都不能用」。
+     */
+    public function testGeneratesWhenPlanHasUnlimitedChatQuota(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(0);
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+
+        $this->addMessage($session, ChatMessage::ROLE_AI, '回應內容');
+        $this->useQuota($user, 99);
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)->assertStatus(200);
+
+        $this->assertSame(1, $generator->calls);
     }
 
     /**

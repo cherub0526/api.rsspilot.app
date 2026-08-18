@@ -433,7 +433,7 @@
                     "Media"
                 ],
                 "summary": "Generate follow-up questions from the last AI answer",
-                "description": "GET /v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups.\n\n依這個 session 最後一則 AI 回應產生延伸問題；還沒有任何 AI 回應時改用影片\n摘要當素材。刻意做成獨立端點而不是掛在 chat 回應裡：前端在答案顯示完之後\n才來要，主流程的延遲不受影響。\n\n不計入每日 chat 額度——使用者只是看「可以接著問什麼」，還沒真的發問，\n光看建議就燒掉免費方案 3 次中的 1 次會讓功能沒人敢用。成本改由路由上的\nthrottle 中介層擋。",
+                "description": "GET /v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups.\n\n依這個 session 最後一則 AI 回應產生延伸問題；還沒有任何 AI 回應時改用影片\n摘要當素材。刻意做成獨立端點而不是掛在 chat 回應裡：前端在答案顯示完之後\n才來要，主流程的延遲不受影響。\n\n不計入每日 chat 額度——使用者只是看「可以接著問什麼」，還沒真的發問，\n光看建議就燒掉免費方案 3 次中的 1 次會讓功能沒人敢用。成本改由路由上的\nthrottle 中介層擋。但額度已經用盡時就不產生了：問題產出來也按不下去，\n只是白付一次推論的錢。",
                 "operationId": "api.v1.media.chat.sessions.followUps",
                 "parameters": [
                     {
@@ -452,7 +452,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Follow-up questions. Generated from the last AI answer, falling back to the media summary when the session has no AI answer yet. Empty when neither is available, or when the model did not respond in the expected format.",
+                        "description": "Follow-up questions. Generated from the last AI answer, falling back to the media summary when the session has no AI answer yet. Empty when neither is available, when the daily chat quota is already used up, or when the model did not respond in the expected format.",
                         "content": {
                             "application/json": {
                                 "schema": {

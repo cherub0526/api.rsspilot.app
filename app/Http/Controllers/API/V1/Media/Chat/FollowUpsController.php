@@ -11,6 +11,7 @@ use App\Models\ChatSession;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
+use App\Services\ChatQuotaService;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
@@ -20,8 +21,10 @@ class FollowUpsController
 {
     use ResolvesMedia;
 
-    public function __construct(private FollowUpQuestionsGeneratorInterface $generator)
-    {
+    public function __construct(
+        private FollowUpQuestionsGeneratorInterface $generator,
+        private ChatQuotaService $quota,
+    ) {
     }
 
     /**
@@ -33,7 +36,8 @@ class FollowUpsController
      *
      * 不計入每日 chat 額度——使用者只是看「可以接著問什麼」，還沒真的發問，
      * 光看建議就燒掉免費方案 3 次中的 1 次會讓功能沒人敢用。成本改由路由上的
-     * throttle 中介層擋。
+     * throttle 中介層擋。但額度已經用盡時就不產生了：問題產出來也按不下去，
+     * 只是白付一次推論的錢。
      *
      * @throws NotFoundHttpException
      */
@@ -58,7 +62,8 @@ class FollowUpsController
                 response: 200,
                 description: 'Follow-up questions. Generated from the last AI answer, falling back to '
                     . 'the media summary when the session has no AI answer yet. Empty when neither is '
-                    . 'available, or when the model did not respond in the expected format.',
+                    . 'available, when the daily chat quota is already used up, or when the model did '
+                    . 'not respond in the expected format.',
                 content: new OAT\JsonContent(
                     properties: [
                         new OAT\Property(
@@ -89,6 +94,15 @@ class FollowUpsController
 
         if (!$session) {
             throw new NotFoundHttpException();
+        }
+
+        // 額度用完了就不產生。這個端點不扣額度，但問題產出來使用者也送不出去，
+        // 等於白燒一次推論。回空陣列而不是 429——真正的 429 由 chat 端點負責，
+        // 這裡只是安靜地不給建議。
+        $snapshot = $this->quota->snapshot($request->user());
+
+        if (!$snapshot->isUnlimited() && $snapshot->remaining() === 0) {
+            return response()->json(['data' => []]);
         }
 
         $answer = ChatMessage::where('session_id', (string) $session->getKey())
