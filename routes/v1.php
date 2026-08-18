@@ -27,6 +27,7 @@ use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasControll
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
+use App\Http\Controllers\API\V1\Media\Chat\FollowUpsController as ChatFollowUpsController;
 
 Route::group('/feedbacks', function () {
     Route::post('/', [
@@ -286,6 +287,16 @@ Route::group('/media', function () {
                 'as'         => 'sessions.destroy',
                 'uses'       => ChatSessionsController::class . '@destroy',
                 'middleware' => ['auth'],
+            ]
+        );
+        // 每次呼叫都是一次真實的推論，而且刻意不計入每日 chat 額度，
+        // 所以成本的上限改由 throttle 擋：每位使用者每分鐘 10 次。
+        Route::get(
+            '/sessions/{sessionId:[0-7][0-9a-hjkmnp-tv-z]{25}}/follow-ups',
+            [
+                'as'         => 'sessions.follow-ups',
+                'uses'       => ChatFollowUpsController::class . '@show',
+                'middleware' => ['auth', 'throttle:10,1'],
             ]
         );
     }, ['as' => 'chat']);

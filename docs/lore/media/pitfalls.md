@@ -45,3 +45,22 @@ What breaks, why, and what to do instead.
 `Kernel::schedule()` 目前只排了 `sources.sync`（每日 00:00）。`videotranscriber:start` 雖然會撈所有 `status = created` 的 media 送去轉錄，但**沒有任何排程會呼叫它**，只能手動執行。
 
 所以「建好 media，狀態留在 `created`，等排程處理」這條路實際上不成立——新的建立路徑要自己 dispatch job，否則影片會永遠停在 `created`。
+
+## 取「可用的摘要」不能只看 created_at，要 filter status = completed
+
+`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `chat()`、`app/Http/Controllers/API/V1/Media/Chat/FollowUpsController.php` → `show()` · `updated:` `2026-08-19` · `status:` `active`
+
+要拿摘要當 AI 素材時，正確寫法是：
+
+```php
+$media->summaries()
+    ->where('status', Summary::STATUS_COMPLETED)
+    ->orderByDesc('created_at')
+    ->first()?->text
+```
+
+**不要**用 `Media::summary()` relation，也不要只 `orderByDesc('created_at')->first()`。`summaries.status` 預設是 `created`，而 `SummaryJob` / `VideoTranscriberSmartSummaryJob` 都是先 `firstOrCreate(['locale' => ...])` 建好資料列、**再**去跑模型，中間那段時間資料列存在但 `text` 是空的。換語系重跑會因為 locale 不同真的新增一列，於是「最新的一列」正好是那筆空的，把先前跑好、還能用的摘要蓋掉——症狀是使用者原本看得到摘要，一按重新生成，chat 與延伸問題的素材就突然變空字串。
+
+`Media::summary()` 這個 relation 本身就是 `hasOne(...)->orderBy('created_at', 'desc')`，天生踩在這個陷阱上，只適合拿去顯示、不適合當 AI 素材。
+
+**反向的坑：** `POST /v1/webhook/summaries/{mediaId}`（`Webhook\SummariesController::store()`）只寫 `text`，**從來不把 status 改成 `completed`**，只把 media 改成 `summarized`。從這條路進來的摘要永遠停在 `created`，上面的 filter 一律看不到。目前線上的摘要都走 job，所以還沒咬到人；哪天要恢復 webhook 這條路，得先補上 status。
