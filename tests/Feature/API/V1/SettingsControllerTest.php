@@ -58,6 +58,64 @@ class SettingsControllerTest extends TestCase
         $this->assertEquals('en', $setting->data['ai']['language']);
     }
 
+    public function testUpdateValidatesLocaleIsSupported(): void
+    {
+        $this->fakeLogin();
+
+        $response = $this->json('PUT', route('api.v1.settings.update'), ['locale' => 'ja'])
+            ->assertStatus(422);
+
+        $this->assertEquals(
+            __('validators.settings.locale.in'),
+            $response->json('messages')['locale'][0]
+        );
+    }
+
+    public function testUpdateSavesLocaleWithoutAi(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $this->json('PUT', route('api.v1.settings.update'), ['locale' => 'zh-TW'])
+            ->assertStatus(200);
+
+        $setting = Setting::where('user_id', $user->id)->first();
+        $this->assertEquals('zh-TW', $setting->data['locale']);
+    }
+
+    public function testUpdateSavesLocaleAndAiTogether(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $this->json('PUT', route('api.v1.settings.update'), [
+            'locale' => 'zh-CN',
+            'ai'     => ['language' => 'en'],
+        ])->assertStatus(200);
+
+        $setting = Setting::where('user_id', $user->id)->first();
+        $this->assertEquals('zh-CN', $setting->data['locale']);
+        $this->assertEquals('en', $setting->data['ai']['language']);
+    }
+
+    public function testUpdateLocaleKeepsExistingAiLanguage(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        Setting::create([
+            'user_id' => $user->id,
+            'data'    => ['locale' => 'en', 'ai' => ['language' => 'ja']],
+        ]);
+
+        $this->json('PUT', route('api.v1.settings.update'), ['locale' => 'zh-TW'])
+            ->assertStatus(200);
+
+        $setting = Setting::where('user_id', $user->id)->first();
+        $this->assertEquals('zh-TW', $setting->data['locale']);
+        $this->assertEquals('ja', $setting->data['ai']['language']);
+    }
+
     public function testUpdateMergesIntoExistingSettingData(): void
     {
         /** @var User $user */

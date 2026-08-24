@@ -123,7 +123,19 @@ return [
 
     'locale' => env('APP_LOCALE', 'en'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'zh_TW'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'zh-TW'),
+
+    /*
+     * 介面語系的白名單，必須對應 lang/ 底下實際存在的資料夾。
+     * SetLocale middleware 與 SettingValidator 共用這份清單——分開維護會
+     * 讓「存得進去但沒有翻譯」的語系混進 settings.data。
+     *
+     * 一律使用 ISO 639-1 的連字號寫法（zh-TW / zh-CN），與 ISO6391 給 AI
+     * 回應語言用的代碼同一套。lang/ 底下的資料夾名稱必須跟著一致——
+     * 翻譯檔是照 locale 字串直接組路徑找的，改一邊不改另一邊會靜默地
+     * 全部落回 fallback_locale。
+     */
+    'available_locales' => ['en', 'zh-TW', 'zh-CN'],
 
     /*
     |--------------------------------------------------------------------------

@@ -202,6 +202,10 @@ return [
     ],
 
     'settings' => [
+        'locale' => [
+            'required' => '請選擇介面語系。',
+            'in'       => '選擇的介面語系不支援。',
+        ],
         'ai' => [
             'required' => 'ai 欄位為必填項。',
             'language' => [

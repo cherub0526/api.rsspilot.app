@@ -1103,7 +1103,7 @@
                 "tags": [
                     "Popularies"
                 ],
-                "summary": "List all free sources with their recent videos",
+                "summary": "List all free sources with video counts",
                 "operationId": "api.v1.popularies.index",
                 "parameters": [
                     {
@@ -1355,16 +1355,14 @@
                 "tags": [
                     "Settings"
                 ],
-                "summary": "Update user AI settings",
+                "summary": "Update user AI and locale settings",
                 "operationId": "api.v1.settings.update",
                 "requestBody": {
+                    "description": "Partial update — send `ai`, `locale`, or both. At least one is required.",
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
-                                "required": [
-                                    "ai"
-                                ],
                                 "properties": {
                                     "ai": {
                                         "required": [
@@ -1378,6 +1376,16 @@
                                             }
                                         },
                                         "type": "object"
+                                    },
+                                    "locale": {
+                                        "description": "UI locale, one of config('app.available_locales')",
+                                        "type": "string",
+                                        "enum": [
+                                            "en",
+                                            "zh-TW",
+                                            "zh-CN"
+                                        ],
+                                        "example": "zh-TW"
                                     }
                                 },
                                 "type": "object"

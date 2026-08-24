@@ -33,7 +33,7 @@ class DailyDigestMail extends Mailable
         return $this->subject(__('mails.daily_digest.subject', ['count' => $this->videos->count()]))
             ->view('emails.daily-digest', [
                 'userName'        => (string) $this->user->getAttribute('name'),
-                'date'            => Carbon::now()->locale('zh_TW')->isoFormat('YYYY 年 M 月 D 日，dddd'),
+                'date'            => Carbon::now()->locale('zh-TW')->isoFormat('YYYY 年 M 月 D 日，dddd'),
                 'videoCount'      => $this->videos->count(),
                 'videos'          => $this->buildVideoList(),
                 'channelCount'    => $this->user->rss()->count(),
@@ -77,7 +77,7 @@ class DailyDigestMail extends Mailable
                 'title'             => (string) $media->getAttribute('title'),
                 'channel'           => (string) ($media->source?->getAttribute('title') ?? ''),
                 'publishedAt'       => $publishedAt
-                    ? Carbon::parse($publishedAt)->locale('zh_TW')->diffForHumans()
+                    ? Carbon::parse($publishedAt)->locale('zh-TW')->diffForHumans()
                     : '',
                 'duration'          => $duration,
                 'thumbnailGradient' => $gradients[$index % count($gradients)],

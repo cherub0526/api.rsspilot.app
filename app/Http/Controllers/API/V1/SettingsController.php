@@ -21,12 +21,12 @@ class SettingsController extends AbstractController
     #[OAT\Put(
         path: '/v1/settings',
         operationId: 'api.v1.settings.update',
-        summary: 'Update user AI settings',
+        summary: 'Update user AI and locale settings',
         security: [['bearerAuth' => []]],
         requestBody: new OAT\RequestBody(
             required: true,
+            description: 'Partial update — send `ai`, `locale`, or both. At least one is required.',
             content: new OAT\JsonContent(
-                required: ['ai'],
                 properties: [
                     new OAT\Property(
                         property: 'ai',
@@ -41,6 +41,13 @@ class SettingsController extends AbstractController
                         ],
                         type: 'object'
                     ),
+                    new OAT\Property(
+                        property: 'locale',
+                        description: 'UI locale, one of config(\'app.available_locales\')',
+                        type: 'string',
+                        enum: ['en', 'zh-TW', 'zh-CN'],
+                        example: 'zh-TW'
+                    ),
                 ]
             )
         ),
@@ -53,7 +60,7 @@ class SettingsController extends AbstractController
     )]
     public function update(Request $request)
     {
-        $params = $request->only(['ai']);
+        $params = $request->only(['ai', 'locale']);
 
         $v = new SettingValidator($params);
         $v->setUpdateRules();

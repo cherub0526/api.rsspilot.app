@@ -203,6 +203,10 @@ return [
     ],
 
     'settings' => [
+        'locale' => [
+            'required' => 'The locale field is required.',
+            'in'       => 'The selected locale is invalid.',
+        ],
         'ai' => [
             'required' => 'The ai field is required.',
             'language' => [

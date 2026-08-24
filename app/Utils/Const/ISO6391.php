@@ -37,6 +37,7 @@ class ISO6391
         'Chichewa'            => 'ny',
         'Chinese'             => 'zh',
         'Traditional Chinese' => 'zh-TW',
+        'Simplified Chinese'  => 'zh-CN',
         'Chuvash'             => 'cv',
         'Cornish'             => 'kw',
         'Corsican'            => 'co',

@@ -13,18 +13,22 @@ class SettingValidator extends BaseValidator
         parent::__construct($params);
 
         $this->messages = [
-            'ai.required'          => __('validators.settings.ai.required'),
-            'ai.language.required' => __('validators.settings.ai.language.required'),
-            'ai.language.in'       => __('validators.settings.ai.language.in'),
+            'ai.required_without'       => __('validators.settings.ai.required'),
+            'ai.language.required_with' => __('validators.settings.ai.language.required'),
+            'ai.language.in'            => __('validators.settings.ai.language.in'),
+            'locale.required_without'   => __('validators.settings.locale.required'),
+            'locale.in'                 => __('validators.settings.locale.in'),
         ];
     }
 
     public function setUpdateRules(): self
     {
         $this->rules = [
-            'ai'          => 'required',
-            'ai.language' => 'required|in:' . implode(',', array_values(ISO6391::LANGUAGES)),
+            'ai'          => 'required_without:locale|array',
+            'ai.language' => 'required_with:ai|in:' . implode(',', array_values(ISO6391::LANGUAGES)),
+            'locale'      => 'required_without:ai|in:' . implode(',', config('app.available_locales')),
         ];
+
         return $this;
     }
 }

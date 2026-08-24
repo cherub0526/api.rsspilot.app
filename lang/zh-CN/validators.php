@@ -203,6 +203,10 @@ return [
     ],
 
     'settings' => [
+        'locale' => [
+            'required' => '请选择界面语系。',
+            'in'       => '选择的界面语系不支持。',
+        ],
         'ai' => [
             'required' => 'ai 字段为必填项。',
             'language' => [
