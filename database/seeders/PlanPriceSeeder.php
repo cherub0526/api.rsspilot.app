@@ -42,8 +42,8 @@ class PlanPriceSeeder extends Seeder
                 'custom_summary_enabled' => true,
                 'ai_quality'             => Plan::AI_QUALITY_ADVANCED,
                 'prices'                 => [
-                    ['unit' => Price::UNIT_MONTHLY, 'price' => 299],
-                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 48],
+                    ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
+                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
                 ],
             ],
             [
@@ -57,8 +57,8 @@ class PlanPriceSeeder extends Seeder
                 'custom_summary_enabled' => true,
                 'ai_quality'             => Plan::AI_QUALITY_DEEP,
                 'prices'                 => [
-                    ['unit' => Price::UNIT_MONTHLY, 'price' => 499],
-                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 96],
+                    ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],
+                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 249],
                 ],
             ],
         ];
