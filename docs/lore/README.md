@@ -14,7 +14,7 @@ Implicit knowledge that code, types, tests, and git history can't reveal — bus
 | Area | What's in it |
 |------|--------------|
 | [transcription](transcription/) | 字幕與轉錄 pipeline：videotranscriber.ai、Groq、YouTube captions、相關 queue job 與唯一鎖行為 |
-| [subscription](subscription/) | Paddle 與 Stripe 訂閱：webhook 驗簽、plan/price 同步、polymorphic 綁定 |
+| [subscription](subscription/) | 訂閱與計費：Stripe（現行金流）與 Paddle（前一代）、webhook 驗簽、plan/price 同步、額度規則、方案定價的成本結構 |
 | [media](media/) | Media 狀態流轉、RSS source 同步、summary 產生 |
 | [auth](auth/) | JWT guard、Socialite OAuth、token 與帳號綁定 |
 | [prompts](prompts/) | AI prompt 模板組裝：TemplateCompletionManager、訊息順序、回應語言來源 |

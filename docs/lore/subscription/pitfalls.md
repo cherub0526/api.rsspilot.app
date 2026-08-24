@@ -30,3 +30,18 @@ What breaks, why, and what to do instead.
 ```
 
 `isUnlimited()` 一定要先判——`remaining()` 對不限制的方案也回 `0`，漏了前置條件會讓 `chat_limit = 0`（不限制）變成「一次都不能用」，方向剛好相反。
+
+## prices.price 一律是 USD，但欄位沒有記錄幣別
+
+`code:` `database/migrations/*_create_prices_table.php`、`database/seeders/PlanPriceSeeder.php` · `updated:` `2026-08-25` · `status:` `active`
+
+`prices.price` 是 `decimal(8,2)`，**沒有 currency 欄位**。全專案的約定是這個數字一律為 **USD**，但這件事只存在於約定，schema 上完全看不出來——寫入或讀取時很容易照著在地幣別的直覺去填。
+
+2026-08-25 盤點時 seeder 裡就有這個症狀：Pro 是 `monthly 299` + `annually 48`，Advance 是 `monthly 499` + `annually 96`。照 USD 讀就是月繳 $299、年繳 $48/年，年繳比月繳便宜 98%，兩個數字不可能同時成立。`48` 與 `96` 剛好是 `4×12` 與 `8×12`，看起來是認真訂的美金年費；`299` / `499` 則像是新台幣的數字沒換算就寫進去了。
+
+碰到這張表時：
+
+- 新增或修改價格前先確認拿到的數字是 USD，不要沿用畫面上或討論裡的在地幣別數字。
+- 月費 × 12 與年費要對得起來（正常年繳折扣是 17%，也就是送兩個月）。差距大到不合理就是幣別搞混了，不是折扣策略。
+- 實際向使用者收的多幣別價格是金流商（目前為 Stripe）那邊在管的，這張表存的是基準值。改這裡不等於改了 Stripe 上的價格。
+- 這個數字是**未稅**基準。Stripe 不是 Merchant of Record，稅金要在結帳時外加，別把含稅價寫進這張表（見 `business-rules.md` 的稅務責任轉移）。
