@@ -15,7 +15,8 @@ interface FollowUpQuestionsGeneratorInterface
 {
     /**
      * @param string $answers 前一輪的回答內容
+     * @param string $language 產生問題所用的語言名稱（見 User::aiLanguageName()）
      * @return string[] 解析出的問題，依序排列。模型未依格式回應時可能不足 3 題
      */
-    public function generate(string $answers): array;
+    public function generate(string $answers, string $language): array;
 }

@@ -31,11 +31,11 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
     ) {
     }
 
-    public function generate(string $answers): array
+    public function generate(string $answers, string $language): array
     {
         $message = Agent::make()
             ->setAiProvider($this->provider ?? $this->defaultProvider())
-            ->chat(new UserMessage($this->template->build($answers)))
+            ->chat(new UserMessage($this->template->build($answers, $language)))
             ->getMessage();
 
         return $this->parser->parse($message->getContent());

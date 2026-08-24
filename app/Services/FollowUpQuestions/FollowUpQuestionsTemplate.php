@@ -22,22 +22,26 @@ class FollowUpQuestionsTemplate
      * 沿用 videotranscriber 既有模板的形狀（見 SmartSummaryTemplate、
      * TranslationTemplate）：指示在前、內容在後，整包當成一個 `text` 送出。
      */
-    public function build(string $answers): string
+    public function build(string $answers, string $language): string
     {
-        return $this->instructions() . "\n" . $answers . "\n";
+        return $this->instructions($language) . "\n" . $answers . "\n";
     }
 
     /**
-     * 內容以外的所有指示。Nowdoc：內文含 `###` 與 `**`，不能讓 PHP 插值。
+     * 內容以外的所有指示。
+     *
+     * 維持 Nowdoc 並用 str_replace 代入語言，而不是改成 Heredoc：內文含 `###`
+     * 與 `**`，日後若有人在提示詞裡加進 `$`，Heredoc 會靜默地把它當變數插值。
      */
-    protected function instructions(): string
+    protected function instructions(string $language): string
     {
-        return <<<'PROMPT'
+        $instructions = <<<'PROMPT'
             Based on the below Answers, please generate three related follow-up questions. These questions should:
             1. Be directly related to the original answer and deepen the discussion
             2. Spark the user's curiosity and encourage further thinking
             3. Cover different aspects to broaden the topic
-            4. The output language must be consistent with the language used in the **Answers** field
+            4. Write the questions ONLY in :language. This rule has absolute priority
+               over the language used in the **Answers** field — do not mirror it.
 
             Please provide these questions in the following format:
             ### 1. [Question 1]
@@ -48,5 +52,7 @@ class FollowUpQuestionsTemplate
 
             **Answers:**
             PROMPT;
+
+        return str_replace(':language', $language, $instructions);
     }
 }

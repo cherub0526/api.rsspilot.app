@@ -19,7 +19,7 @@ class NeuronFollowUpQuestionsTest extends TestCase
     {
         $provider = new FakeAIProvider("### 1. 均線怎麼用？\n### 2. 族群怎麼選？\n### 3. 停損怎麼設？");
 
-        $questions = (new NeuronFollowUpQuestions($provider))->generate('前一輪的回答內容');
+        $questions = (new NeuronFollowUpQuestions($provider))->generate('前一輪的回答內容', 'English');
 
         $this->assertSame(['均線怎麼用？', '族群怎麼選？', '停損怎麼設？'], $questions);
     }
@@ -33,7 +33,7 @@ class NeuronFollowUpQuestionsTest extends TestCase
     {
         $provider = new FakeAIProvider('### 1. a');
 
-        (new NeuronFollowUpQuestions($provider))->generate('前一輪的回答內容');
+        (new NeuronFollowUpQuestions($provider))->generate('前一輪的回答內容', 'English');
 
         $sent = array_map(
             fn ($message): string => $message->getContent(),
@@ -41,7 +41,7 @@ class NeuronFollowUpQuestionsTest extends TestCase
         );
 
         $this->assertSame(
-            [(new FollowUpQuestionsTemplate())->build('前一輪的回答內容')],
+            [(new FollowUpQuestionsTemplate())->build('前一輪的回答內容', 'English')],
             $sent,
             '送出的內容必須與模板組出的完全一致，且只有一則訊息'
         );
@@ -51,6 +51,6 @@ class NeuronFollowUpQuestionsTest extends TestCase
     {
         $provider = new FakeAIProvider('抱歉，我無法產生問題。');
 
-        $this->assertSame([], (new NeuronFollowUpQuestions($provider))->generate('回答'));
+        $this->assertSame([], (new NeuronFollowUpQuestions($provider))->generate('回答', 'English'));
     }
 }

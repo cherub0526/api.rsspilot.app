@@ -24,11 +24,11 @@ class VideoTranscriberFollowUpQuestions implements FollowUpQuestionsGeneratorInt
     ) {
     }
 
-    public function generate(string $answers): array
+    public function generate(string $answers, string $language): array
     {
         return $this->parser->parse(
             $this->client->completions(
-                text: $this->template->build($answers),
+                text: $this->template->build($answers, $language),
                 selectedTexts: [],
             )
         );

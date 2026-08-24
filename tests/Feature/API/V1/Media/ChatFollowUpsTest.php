@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Media;
 use App\Models\Price;
 use App\Models\Source;
+use App\Models\Setting;
 use App\Models\Summary;
 use App\Models\ChatUsage;
 use App\Models\ChatMessage;
@@ -35,16 +36,19 @@ class ChatFollowUpsTest extends TestCase
         $generator = new class($questions) implements FollowUpQuestionsGeneratorInterface {
             public ?string $received = null;
 
+            public ?string $receivedLanguage = null;
+
             public int $calls = 0;
 
             public function __construct(private array $questions)
             {
             }
 
-            public function generate(string $answers): array
+            public function generate(string $answers, string $language): array
             {
                 ++$this->calls;
                 $this->received = $answers;
+                $this->receivedLanguage = $language;
 
                 return $this->questions;
             }
@@ -187,6 +191,70 @@ class ChatFollowUpsTest extends TestCase
             ->assertJson(['data' => ['問題一', '問題二', '問題三']]);
 
         $this->assertSame('最新的回應', $generator->received);
+    }
+
+    public function testPassesTheUsersAiLanguageToTheGenerator(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+        $this->addMessage($session, ChatMessage::ROLE_AI, '回應');
+
+        Setting::create([
+            'user_id' => $user->id,
+            'data'    => ['ai' => ['language' => 'zh-TW']],
+        ]);
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)->assertStatus(200);
+
+        $this->assertSame('Traditional Chinese', $generator->receivedLanguage);
+    }
+
+    /**
+     * 沒有設定時退回 User::DEFAULT_AI_LANGUAGE，而不是空字串——空字串會讓
+     * 提示詞變成 "Write the questions ONLY in ."，模型行為無從預期。
+     */
+    public function testFallsBackToTheDefaultLanguageWhenUserHasNoSetting(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+        $this->addMessage($session, ChatMessage::ROLE_AI, '回應');
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)->assertStatus(200);
+
+        $this->assertSame('English', $generator->receivedLanguage);
+    }
+
+    /**
+     * 退回摘要當素材時語言仍取使用者設定。摘要的語言由 videotranscriber.ai
+     * 決定（這裡刻意造一份 zh-TW 摘要），比對素材會產出使用者讀不懂的問題。
+     */
+    public function testUsesTheUsersLanguageEvenWhenFallingBackToTheSummary(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $media = $this->freeMedia();
+        $session = $this->createSession($user, $media);
+        $this->addSummary($media, '這是中文摘要');
+
+        Setting::create([
+            'user_id' => $user->id,
+            'data'    => ['ai' => ['language' => 'ja']],
+        ]);
+
+        $generator = $this->fakeGenerator();
+
+        $this->fetch($media, $session->id)->assertStatus(200);
+
+        $this->assertSame('這是中文摘要', $generator->received);
+        $this->assertSame('Japanese', $generator->receivedLanguage);
     }
 
     /**

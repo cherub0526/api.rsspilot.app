@@ -51,7 +51,7 @@ class VideoTranscriberFollowUpQuestionsTest extends TestCase
         $this->fakeEndpoint("### 1. 均線怎麼用？\n### 2. 族群怎麼選？\n### 3. 停損怎麼設？");
 
         $questions = (new VideoTranscriberFollowUpQuestions(new VideoTranscriberClient()))
-            ->generate('前一輪的回答內容');
+            ->generate('前一輪的回答內容', 'English');
 
         $this->assertSame(['均線怎麼用？', '族群怎麼選？', '停損怎麼設？'], $questions);
     }
@@ -61,7 +61,7 @@ class VideoTranscriberFollowUpQuestionsTest extends TestCase
         $this->fakeEndpoint('### 1. a');
 
         (new VideoTranscriberFollowUpQuestions(new VideoTranscriberClient()))
-            ->generate('前一輪的回答內容');
+            ->generate('前一輪的回答內容', 'English');
 
         Http::assertSent(function ($request) {
             if (!str_contains($request->url(), '/summary/completions')) {
