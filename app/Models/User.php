@@ -147,6 +147,22 @@ class User extends Authenticatable
         return is_string($name) ? $name : $code;
     }
 
+    /**
+     * 使用者保存的介面語系，沒有設定或設定值已不在白名單內時回傳 null。
+     *
+     * 回 null 而不是回預設值，是為了讓呼叫端能區分「沒有偏好」與「偏好剛好
+     * 等於預設值」——SetLocale 要靠這個差別決定該不該退回 Accept-Language。
+     *
+     * 白名單會隨 lang/ 底下的資料夾增減，所以舊資料可能存著已經移除的語系；
+     * 直接餵給 App::setLocale() 會讓整站靜默落回 fallback，這裡先擋掉。
+     */
+    public function uiLocale(): ?string
+    {
+        $locale = ($this->setting()->first()?->data ?? [])['locale'] ?? null;
+
+        return in_array($locale, config('app.available_locales'), true) ? $locale : null;
+    }
+
     public function avatars(): HasMany
     {
         return $this->hasMany(UserAvatar::class, 'user_id', 'id');
