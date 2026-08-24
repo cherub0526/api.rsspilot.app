@@ -6,7 +6,7 @@ This file provides guidance to Claude Code、Gemini when working with code in th
 
 This is a video assistant API built with **Hypervel** (v0.3), a Laravel-style PHP framework with native coroutine
 support built on Swoole. The application provides AI-powered video analysis, summaries, captions, and chat capabilities
-for YouTube content, with Paddle subscription management.
+for YouTube content, with Stripe subscription management.
 
 **Core functionality:**
 
@@ -14,7 +14,7 @@ for YouTube content, with Paddle subscription management.
 - Video caption extraction and AI-powered transcription (via Groq)
 - AI-generated video summaries using OpenAI
 - Interactive chat with video content
-- Paddle subscription management with webhook handling
+- Stripe subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
 
 ## Project Lore
@@ -99,9 +99,15 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 
 ### Key Services
 
+**StripeClient** (`App\Services\StripeClient`)
+
+- Wrapper for the Stripe PHP SDK, initialized with `STRIPE_API_KEY`
+- Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `invoices()`, `checkoutSessions()`
+- `StripeSubscriptionService` holds the subscription lifecycle logic the webhook dispatches into
+
 **PaddleClient** (`App\Services\PaddleClient`)
 
-- Wrapper for Paddle PHP SDK
+- Wrapper for Paddle PHP SDK — **legacy**, kept for existing Paddle subscriptions. New work goes through Stripe.
 - Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `transactions()`
 - Respects sandbox mode via `PADDLE_SANDBOX` env var
 
@@ -146,12 +152,20 @@ __('mails.reset_password.subject')
 - Social OAuth via Hypervel Socialite (Facebook, Google)
 - Middleware: `'middleware' => ['auth']` on protected routes
 
-### Paddle Integration
+### Stripe Integration
 
-- SDK initialized with API key and sandbox mode from env
-- Webhook verification using `Paddle\SDK\Notifications\Verifier` with `PADDLE_WEBHOOK_SECRET_KEY`
-- Models sync with Paddle via Observers (`PlanObserver`, `PriceObserver`)
-- Store Paddle entities using polymorphic `foreign_type` and `foreign_id` pattern
+Stripe is the current payment provider. Paddle code is still present for legacy subscriptions — don't extend it.
+
+- SDK initialized with `STRIPE_API_KEY` (`App\Services\StripeClient`)
+- Webhook at `POST /v1/webhook/stripe`, verified with `Stripe\Webhook::constructEvent()` and `STRIPE_WEBHOOK_SECRET`
+- Handled events: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`,
+  `invoice.payment_failed` — all dispatched into `StripeSubscriptionService`
+- Models sync to Stripe via Observers (`StripePlanObserver`, `StripePriceObserver`, `StripeUserObserver`)
+- Store Stripe entities using the polymorphic `foreign_type` / `foreign_id` pattern (`Stripe` model),
+  the same shape the `Paddle` model uses
+- **Stripe is not a Merchant of Record.** Tax collection/remittance and chargebacks are ours, unlike
+  Paddle. `prices.price` is an untaxed USD base figure — see `docs/lore/subscription/` for the
+  pricing and tax rules.
 
 ## Code Conventions
 
