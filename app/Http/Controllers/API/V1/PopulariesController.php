@@ -17,7 +17,7 @@ class PopulariesController extends AbstractController
     #[OAT\Get(
         path: '/v1/popularies',
         operationId: 'api.v1.popularies.index',
-        summary: 'List all free sources with their recent videos',
+        summary: 'List all free sources with video counts',
         security: [['bearerAuth' => []]],
         tags: ['Popularies'],
         parameters: [
