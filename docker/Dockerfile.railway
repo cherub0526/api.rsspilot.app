@@ -1,0 +1,52 @@
+# Railway 專用。本機 / Forge 走的是 docker/Dockerfile，兩者刻意不共用：
+# 這一份的複製策略是白名單，改動頂層目錄時必須同步維護下方的 COPY 清單。
+FROM hyperf/hyperf:8.3-alpine-v3.19-swoole-v6
+
+WORKDIR /var/www
+
+# 依賴層獨立，composer.lock 沒動時整層命中快取。
+#
+# --no-scripts 是必要的：composer.json 的 post-autoload-dump 會 rm -rf
+# runtime/container，但此刻應用程式碼還沒進來。
+# --no-autoloader 同理，autoloader 留到程式碼齊了再一次產生。
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist \
+    && composer clear-cache
+
+# 逐項複製，不用 COPY . .。
+#
+# Docker 不讀 .gitignore，而根目錄的 .dockerignore 會同時作用在
+# docker/Dockerfile 上、改變本機建置行為——兩邊並行的前提下不能動它。
+# 白名單複製是這裡唯一能保證「本機 .env 與含 dev 依賴的 vendor/ 不會被
+# 烤進 image」的做法。新增頂層目錄時記得補進來，漏掉會在開機時才炸。
+COPY app/       app/
+COPY bootstrap/ bootstrap/
+COPY config/    config/
+COPY database/  database/
+COPY lang/      lang/
+COPY public/    public/
+COPY resources/ resources/
+COPY routes/    routes/
+COPY storage/   storage/
+COPY artisan    ./
+
+RUN composer dump-autoload --no-dev --optimize
+
+# Hyperf 的 DotenvManager::load() 走 Dotenv->load() 而不是 safeLoad()
+# （vendor/hyperf/support/src/DotenvManager.php:34），找不到 .env 會丟
+# InvalidPathException，在 artisan 的 ClassLoader::init() 就中斷。
+#
+# Railway 的變數是注入到 process env，而 env() 實作就是 getenv()
+# （vendor/hyperf/support/src/Functions.php:46），所以這個檔案保持全空即可。
+# repository 建成 immutable，空檔也不會蓋掉注入的值。
+RUN touch .env
+
+# runtime/ 存 DI proxy class，開機時即時產生，必須可寫。
+RUN mkdir -p runtime storage/logs \
+    && chmod -R 777 runtime storage
+
+EXPOSE 9501
+
+# 注意是 start 不是 serve。serve 這個指令不存在——Hyperf 註冊的是
+# start（vendor/hyperf/server/src/Command/StartServer.php:33）。
+CMD ["php", "/var/www/artisan", "start"]
