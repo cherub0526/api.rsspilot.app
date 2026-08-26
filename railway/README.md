@@ -17,6 +17,21 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 每個 Railway service 都指向同一個 repo，差別在 **Settings → Config-as-code**
 指到哪一份設定檔。
 
+根目錄另有一份 `railway.json`，Railway 在 service 沒有指定 config 路徑時會
+自動讀它。那份**刻意只寫 build 區塊**，不含 `startCommand` 也不含
+`preDeployCommand`：
+
+- 好處：任何 service 就算忘了設定 config 路徑，至少仍會用對 Dockerfile，
+  不會退回自動偵測（見下方「build 失敗」段）。
+- 為什麼不把 api 的設定放進去：根設定是**所有** service 的預設值，若含
+  `preDeployCommand`，四個 service 每次部署都會各跑一次 migration。
+  漏設路徑的 service 退化成「多開一個 API」是可接受的失誤，四路並發跑
+  migration 不是。
+
+`railway/*.json` 每一份都各自帶完整的 build 區塊，所以不論 Railway 對指定
+路徑的處理是「取代」還是「與根設定合併」，結果都一樣 —— 這是刻意的，
+省掉去確認它到底是哪一種。
+
 | Service | 設定檔 | 說明 |
 |---|---|---|
 | `api` | `railway/api.json` | HTTP。`preDeployCommand` 跑 migration，只有這一個 service 跑 |
@@ -107,3 +122,31 @@ Railway 的 `ON_FAILURE` 不會重啟正常退出的容器，worker 會在第一
 
 `healthcheckTimeout` 給到 120 秒，因為 Hyperf 開機時要即時產生 DI proxy class
 到 `runtime/`，冷啟動比一般 PHP 應用慢。
+
+## build 失敗：`ext-swoole is missing`
+
+```
+hypervel/framework v0.3.17 requires ext-swoole ^5.1|^6.0 -> it is missing
+Build Failed: composer install --optimize-autoloader --no-scripts --no-interaction
+```
+
+這個錯**不是**缺套件，是 Railway 根本沒用到 `docker/Dockerfile.railway` ——
+它退回自動偵測的 builder，自己組了一套沒有 swoole 的 PHP 環境。
+
+兩個一眼分辨的指紋：
+
+| | 自動偵測 builder | 本專案的 Dockerfile |
+|---|---|---|
+| composer 指令 | `install --optimize-autoloader --no-scripts --no-interaction` | `install --no-dev --no-scripts --no-autoloader --prefer-dist` |
+| conf.d 路徑 | `/usr/local/etc/php/conf.d/`（Debian 官方 php image） | `/etc/php83/conf.d`（alpine） |
+
+基底 image `hyperf/hyperf:8.3-alpine-v3.19-swoole-v6` 本身就帶 swoole 6.2.2，
+走對 Dockerfile 不可能缺。
+
+**修法**：到該 service 的 Settings 確認 Config-as-code 路徑指向
+`railway/<service>.json`，或 Builder 設為 Dockerfile 且 Dockerfile Path 指向
+`docker/Dockerfile.railway`。
+
+**不要照錯誤訊息的建議加 `--ignore-platform-req=ext-swoole`。** 那只會讓
+composer 安裝通過，建出一個沒有 swoole 的 image；Hypervel 整個執行期都建立在
+Swoole 上，結果是 build 成功但服務永遠起不來，而且問題被推遲到執行期才爆。
