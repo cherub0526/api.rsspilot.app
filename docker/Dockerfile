@@ -16,4 +16,4 @@ COPY . .
 EXPOSE 9501
 
 # Start the Hyperf server
-CMD ["/usr/bin/php", "/var/www/artisan", "serve"]
+CMD ["/usr/bin/php", "/var/www/artisan", "start"]
