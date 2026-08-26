@@ -82,3 +82,58 @@ sudo supervisorctl restart <program>   # 完整 restart，不是 reload
 
 真實案例：2026-08-13，`User::aiLanguageName()` 隨 `9986198` 上線後，production 對
 `ChatController.php:135` 噴這個錯；磁碟 `grep` 回 1，清快取 + 完整重啟後恢復 200。
+
+## 沒有 `.env` 檔不是「用預設值」，是開機直接中斷
+
+`code:` `vendor/hyperf/support/src/DotenvManager.php` → `load()` · `code:` `vendor/hypervel/foundation/src/ClassLoader.php:55` · `updated:` `2026-08-27` · `status:` `active`
+
+容器化部署時很自然會想「設定全用環境變數注入，不放 `.env` 檔」。這個專案**不行** ——
+少了 `.env` 檔，應用程式在讀到任何 config 之前就死了。
+
+`DotenvManager::load()` 呼叫的是 `Dotenv->load()` 而**不是** `safeLoad()`。兩者的差別只在
+後者會 catch `InvalidPathException`：
+
+```php
+// vendor/vlucas/phpdotenv/src/Dotenv.php
+public function safeLoad() {
+    try { return $this->load(); }
+    catch (InvalidPathException $e) { return []; }   // 抑制例外
+}
+```
+
+呼叫點在 `ClassLoader::init()`（`artisan` 第 21 行就執行），所以檔案不存在時例外從
+`artisan` 頂層拋出，config、logging、exception handler 全都還沒建立起來 —— 錯誤訊息只有一行
+裸露的 stack trace，看不出跟 `.env` 有關。
+
+**解法是放一個空檔**，不是把設定寫回去：
+
+- `env()` 的實作就是 `getenv()`（`vendor/hyperf/support/src/Functions.php:46`），注入到 process
+  env 的變數本來就讀得到，不需要經過 `.env`。
+- repository 建成 `immutable()`（`DotenvManager::getDotenv()`），`.env` 裡的值**不會**覆蓋已經
+  存在的環境變數。所以即使檔案有內容也不影響注入值 —— 但保持全空能讓「設定來自哪裡」只有
+  一個答案，省掉日後對著兩份來源 debug。
+
+實例：`docker/Dockerfile.railway` 的 `RUN touch .env`。
+
+## `swoole_cpu_num()` 看不到容器的 CPU 配額
+
+`code:` `config/server.php` → `Constant::OPTION_WORKER_NUM` · `updated:` `2026-08-27` · `status:` `active`
+
+`config/server.php` 的 worker 數預設是 `env('SERVER_WORKERS_NUMBER', swoole_cpu_num())`。
+在容器裡跑時，那個 fallback **不能信** —— `swoole_cpu_num()` 回報的是核心可見的 CPU 數，
+與 cgroup 的 CPU 配額無關。
+
+實測（同一個 image，只改 `--cpus`）：
+
+| 容器設定 | `/sys/fs/cgroup/cpu.max` | `swoole_cpu_num()` |
+|---|---|---|
+| 無限制 | `max 100000` | 2 |
+| `--cpus=1` | `100000 100000` | 2 |
+| `--cpus=0.5` | `50000 100000` | 2 |
+
+配額改了三種，回報值一次都沒動。在配額 0.5 CPU 的環境上它仍會叫 Swoole 開 2 個 worker；
+換到核心可見數更大的宿主機（雲端共用機器動輒 32、64 核）就是幾十個 worker 擠在一份小配額裡，
+每個都吃一份記憶體。症狀是 OOM 或整體延遲暴增，而不是明確的錯誤。
+
+**任何容器環境都要顯式設定 `SERVER_WORKERS_NUMBER`**，把它當必填而不是選填。
+Forge 那種獨佔 VPS 的部署不受影響，fallback 在那裡是對的。
