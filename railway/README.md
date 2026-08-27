@@ -6,7 +6,7 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 |---|---|---|
 | 建置 | `docker/Dockerfile` | `docker/Dockerfile.railway` |
 | 常駐程序 | `supervisor/*.conf` | 每個 queue 群組一個 service |
-| 排程 | 系統 cron → `schedule:run` | Railway cron service |
+| 排程 | 系統 cron → `schedule:run` | 常駐 service（**不是** cron） |
 
 改動 `app/`、`config/` 這類共用程式碼時兩邊都會受影響；改動 `docker/Dockerfile`
 或 `supervisor/*.conf` 只影響 Forge，改動本目錄與 `docker/Dockerfile.railway`
@@ -37,7 +37,7 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 | `api` | `railway/api.json` | HTTP。`preDeployCommand` 跑 migration，只有這一個 service 跑 |
 | `worker-fast` | `railway/worker-fast.json` | 原 supervisor 中 `--timeout=120` 的五個 queue |
 | `worker-slow` | `railway/worker-slow.json` | 原 supervisor 中 `--timeout=300` 的三個 queue |
-| `scheduler` | `railway/scheduler.json` | cron `* * * * *` → `schedule:run` |
+| `scheduler` | `railway/scheduler.json` | 常駐 `schedule:run`，自帶迴圈，不要設 cron |
 
 八個 supervisor program 合併成兩個 service，是照 timeout 值切的——一個
 `queue:work` 只能有一個 `--timeout`，所以 120 與 300 不能混在同一個 service。
@@ -122,7 +122,8 @@ Railway 注入的變數本來就讀得到；repository 建成 `immutable()`，�
 
 ### worker 的 restart policy 必須是 `ALWAYS`
 
-`--max-time=3600` 讓 worker 每小時自我了結一次以避開記憶體累積，**退出碼是 0**。
+`--max-time=3600` 讓 worker 處理完工作後自我了結以避開記憶體累積，
+**退出碼是 0**（`Worker::stopIfNecessary()` 回 `EXIT_SUCCESS`）。
 Railway 的 `ON_FAILURE` 不會重啟正常退出的容器，worker 會在第一個小時後
 安靜地永久停擺，而 service 顯示為成功部署。
 
@@ -284,3 +285,36 @@ Railway 的 log 保留期依方案而定，超過就查不到了。這是內建�
 `FoundationServiceProvider:132` 把 `database.redis` 映射到 `redis` config
 key —— Hyperf 的 redis 元件讀的是後者。專案裡沒有 `config/redis.php`
 是正常的，不要為了這個錯誤去新建一份。
+
+## scheduler 是常駐 service，不是 cron
+
+**Hypervel 的 `schedule:run` 與 Laravel 的語意不同。** Laravel 的版本執行完
+到期任務就退出，設計上由系統 cron 每分鐘呼叫一次；Hypervel 的版本是
+
+```php
+while (! $this->shouldStop()) {
+    $this->runEvents($this->schedule->dueEvents($this->app), Date::now());
+    Sleep::usleep(100000);      // 100ms
+}
+```
+
+（`vendor/hypervel/console/src/Commands/ScheduleRunCommand.php`）——它自己
+就是排程器。實測不帶 `--once` 執行，三分鐘後仍在跑，需要外力才會結束。
+
+所以 `railway/scheduler.json` 是**常駐 service**：沒有 `cronSchedule`，
+`restartPolicyType` 設 `ALWAYS`。這樣同時解掉幾個問題：不必確認 Railway
+cron 的最小間隔、不必每分鐘付一次應用程式的冷啟動成本、`onOneServer()`
+的鎖也只需要跟自己競爭。
+
+要一次性行為時用 `schedule:run --once`，實測會在數秒內以退出碼 0 結束。
+
+## worker 的 `--max-time` 在閒置時不會觸發
+
+實測：`--max-time=8` 的 worker，在沒有任何工作進來的情況下，五分鐘後
+仍在執行（CPU 約 0.7%，不是忙碌迴圈）。
+
+也就是說**不能把 `--max-time` 當成低流量佇列的記憶體保險**。它在 worker
+處理過工作之後才可靠地生效。`--memory=256` 那道防線才是閒置時仍然有效的。
+
+`restartPolicyType: ALWAYS` 的必要性不受影響——重點是 worker 退出時的
+退出碼是 0，`ON_FAILURE` 不會把它拉起來。

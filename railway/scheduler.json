@@ -6,7 +6,7 @@
   },
   "deploy": {
     "startCommand": "php /var/www/artisan schedule:run",
-    "cronSchedule": "* * * * *",
-    "restartPolicyType": "NEVER"
+    "restartPolicyType": "ALWAYS",
+    "numReplicas": 1
   }
 }
