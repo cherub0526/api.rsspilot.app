@@ -56,12 +56,22 @@ HTTP_SERVER_PORT=${{PORT}}
 # 完整量測與症狀見 docs/lore/framework/pitfalls.md
 SERVER_WORKERS_NUMBER=4
 
-DB_CONNECTION=mysql
-DB_HOST=${{MySQL.MYSQLHOST}}
-DB_PORT=${{MySQL.MYSQLPORT}}
-DB_DATABASE=${{MySQL.MYSQLDATABASE}}
-DB_USERNAME=${{MySQL.MYSQLUSER}}
-DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+# 用 Railway 的 Postgres plugin 時。DB_CONNECTION 預設是 mysql
+# （config/database.php:20），不設就會拿 pgsql 的連線參數去接 mysql driver
+DB_CONNECTION=pgsql
+DB_HOST=${{Postgres.PGHOST}}
+DB_PORT=${{Postgres.PGPORT}}
+DB_DATABASE=${{Postgres.PGDATABASE}}
+DB_USERNAME=${{Postgres.PGUSER}}
+DB_PASSWORD=${{Postgres.PGPASSWORD}}
+
+# 改用 MySQL plugin 的話換成這組
+# DB_CONNECTION=mysql
+# DB_HOST=${{MySQL.MYSQLHOST}}
+# DB_PORT=${{MySQL.MYSQLPORT}}
+# DB_DATABASE=${{MySQL.MYSQLDATABASE}}
+# DB_USERNAME=${{MySQL.MYSQLUSER}}
+# DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
 
 # supervisor/README.md 的不等式仍然成立，且這是全域值，
 # 必須大於所有 service 中最大的 --timeout（目前 300）
@@ -77,6 +87,11 @@ LOG_CHANNELS=stderr
 
 `REDIS_AUTH` 是這個專案自己的命名（`config/database.php:110`），照 Laravel
 習慣寫成 `REDIS_PASSWORD` 會靜默地連到無密碼模式然後失敗。
+
+**不要設 `DB_DRIVER`。** mysql 與 pgsql 兩個區塊都讀同一個
+`env('DB_DRIVER')`，只是預設值不同（`config/database.php:24` 與 `:44`）。
+設了它就會同時套用到兩邊，`DB_CONNECTION` 切換就失效。留空讓各自的
+預設生效。
 
 其餘 key 照 `.env.example` 補齊。以下這幾個要換成 Railway 網域，並回到各家
 後台同步更新：`APP_URL`、`CLIENT_URL`、`FACEBOOK_REDIRECT_URL`、
@@ -171,3 +186,20 @@ bash: fork: retry: Resource temporarily unavailable
 
 修法是設好變數後 redeploy。若已經設了仍然發生，才往下查記憶體洩漏或
 把配額調大。
+
+## 連線報 `invalid integer value "5432}}"`
+
+```
+SQLSTATE[08006] [7] invalid integer value "5432}}" for connection option "port"
+```
+
+`${{...}}` 參照沒展開乾淨，多出來的 `}}` 被當成值的一部分帶進連線參數。
+通常是括號打成兩層（`${{Postgres.PGPORT}}}}`），或從別處複製後改字時漏刪。
+
+`DB_PORT` 之所以第一個爆，是因為 libpq 會嚴格驗證它，而
+`config/database.php:47` 的 `env('DB_PORT', 5432)` **沒有** `(int)` 轉型
+——同專案的 `HTTP_SERVER_PORT`、`REDIS_PORT` 都有轉，這裡沒有。
+
+**修好 `DB_PORT` 之後要把整組變數都檢查一遍。** 同一次編輯很可能弄壞了
+不只一個，只是其他欄位在連線流程中比較晚才被驗證，或者根本不驗證而是
+靜默地連錯地方。
