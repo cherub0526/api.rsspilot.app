@@ -81,8 +81,15 @@ REDIS_HOST=${{Redis.REDISHOST}}
 REDIS_PORT=${{Redis.REDISPORT}}
 REDIS_AUTH=${{Redis.REDISPASSWORD}}
 
-# 容器重啟後檔案就沒了，且 Railway log 面板只收 stdout/stderr
-LOG_CHANNELS=stderr
+# 是 LOG_CHANNEL（單數），不是 .env.example 裡那個 LOG_CHANNELS。
+# config/logging.php:58 的 stack channel 把 channels 寫死成 ['single']，
+# 不讀環境變數，所以設 LOG_CHANNELS 是 no-op——log 會寫進容器裡的
+# storage/logs/hypervel.log，Railway 面板永遠看不到，重啟後檔案也沒了
+LOG_CHANNEL=stderr
+
+# 讓 log 以 JSON 輸出，Railway 才能解析成可過濾的欄位（見下方 Logs 面板段）。
+# 不設就是純文字行，只能做字串搜尋
+LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter
 ```
 
 `REDIS_AUTH` 是這個專案自己的命名（`config/database.php:110`），照 Laravel
@@ -203,3 +210,47 @@ SQLSTATE[08006] [7] invalid integer value "5432}}" for connection option "port"
 **修好 `DB_PORT` 之後要把整組變數都檢查一遍。** 同一次編輯很可能弄壞了
 不只一個，只是其他欄位在連線流程中比較晚才被驗證，或者根本不驗證而是
 靜默地連錯地方。
+
+## 用 Railway 的 Logs 面板
+
+### 先讓 log 變成結構化的
+
+`stderr` channel 的 `formatter` 本來就讀 `env('LOG_STDERR_FORMATTER')`
+（`config/logging.php:110`），所以切成 JSON **不需要改任何程式碼**，設環境
+變數即可。實測兩種輸出：
+
+不設（預設 LineFormatter）：
+
+```
+[2026-08-27 01:50:15] local.ERROR: 資料庫連線失敗 {"media_id":42,...}
+```
+
+設成 `Monolog\Formatter\JsonFormatter`：
+
+```json
+{"message":"資料庫連線失敗","context":{"media_id":42,"queue":"media.summary"},
+ "level":400,"level_name":"ERROR","channel":"local","datetime":"2026-08-27T01:50:16+00:00","extra":{}}
+```
+
+差別在於後者的每個 key 都能被 Railway 解析成獨立欄位拿去過濾，前者只能做
+字串比對。`context` 裡塞的東西（`media_id`、`queue`…）也一併變成可查詢的維度，
+這是平常寫 `Log::error($msg, [...])` 就已經在產生、但純文字格式下用不到的資料。
+
+**未驗證的一點**：JsonFormatter 的 `level` 是數字（400），`level_name` 才是
+`ERROR`。Railway 的解析器是否認得數字型 level、會不會把嚴重度標對，我沒有
+在 Railway 上實測過。若面板的嚴重度顯示不正確，改用 `@level_name:ERROR`
+過濾，那個欄位是明確的字串。
+
+### 保留期
+
+Railway 的 log 保留期依方案而定，超過就查不到了。這是內建面板的硬限制——
+需要長期保留或跨月比對就得接 log drain（`config/logging.php` 已備好
+`papertrail` channel）。實際天數請以你方案的說明為準。
+
+### 建議的分工
+
+- `LOG_LEVEL=info` 起步。設 `debug` 在正式環境會把面板洗掉，也吃保留期額度。
+- 四個 service 的 log 是分開的。查問題時先確定是 api 還是某個 worker——
+  同一筆 media 的失敗可能只出現在 `worker-slow`。
+- 真正要人立刻知道的錯誤，別靠盯面板。`config/logging.php:77` 已有 slack
+  channel，設 `LOG_SLACK_WEBHOOK_URL` 就能把 critical 以上推出去。
