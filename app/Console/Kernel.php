@@ -15,7 +15,7 @@ class Kernel extends ConsoleKernel
      */
     public function schedule(Schedule $schedule): void
     {
-        $schedule->call(Sync::class)->dailyAt('00:00')
+        $schedule->command(Sync::class)->dailyAt('00:00')
             ->name('sources.sync')->onOneServer();
     }
 
