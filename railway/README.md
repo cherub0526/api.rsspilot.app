@@ -50,9 +50,11 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 HTTP_SERVER_PORT=${{PORT}}
 
 # 必填，不是選填。config/server.php:32 的 fallback 是 swoole_cpu_num()，
-# 而那個函式完全看不到 cgroup 的 CPU 配額（實測見 docs/lore/framework/pitfalls.md），
-# 不設會 fork 出遠超配額的 worker，症狀是 OOM 而不是明確錯誤
-SERVER_WORKERS_NUMBER=2
+# 而那個函式完全看不到 cgroup 的 CPU 配額，會照宿主機核心數 fork。
+# 閒置記憶體實測為 RSS ≈ 155 + 46 × N (MB)，依 service 記憶體選 N：
+#   512MB → 4    1GB → 8    2GB → 16
+# 完整量測與症狀見 docs/lore/framework/pitfalls.md
+SERVER_WORKERS_NUMBER=4
 
 DB_CONNECTION=mysql
 DB_HOST=${{MySQL.MYSQLHOST}}
@@ -150,3 +152,22 @@ Build Failed: composer install --optimize-autoloader --no-scripts --no-interacti
 **不要照錯誤訊息的建議加 `--ignore-platform-req=ext-swoole`。** 那只會讓
 composer 安裝通過，建出一個沒有 swoole 的 image；Hypervel 整個執行期都建立在
 Swoole 上，結果是 build 成功但服務永遠起不來，而且問題被推遲到執行期才爆。
+
+## console 進不去：`bash: fork: retry`
+
+```
+bash: fork: retry: Resource temporarily unavailable
+```
+
+記憶體耗盡，fork 不出新行程。**第一個要查的是 `SERVER_WORKERS_NUMBER`
+有沒有設**——沒設的話 Swoole 會照宿主機核心數開 worker，宿主機是 32 或
+64 核時閒置就要 1.6～3.1 GB（實測見上方環境變數段）。
+
+診斷時注意：此刻 `ps`、`top`、`free` 自己也要 fork，同樣跑不起來，
+在容器裡下指令只會得到同一行錯誤。改看這兩個地方，都不需要 fork：
+
+1. service 的 **Metrics** 分頁——記憶體是否貼著配額上限
+2. service 的 **Variables** 分頁——`SERVER_WORKERS_NUMBER` 是否存在
+
+修法是設好變數後 redeploy。若已經設了仍然發生，才往下查記憶體洩漏或
+把配額調大。
