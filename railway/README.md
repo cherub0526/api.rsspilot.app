@@ -93,7 +93,7 @@ LOG_STDERR_FORMATTER=Monolog\Formatter\JsonFormatter
 ```
 
 `REDIS_AUTH` 是這個專案自己的命名（`config/database.php:110`），照 Laravel
-習慣寫成 `REDIS_PASSWORD` 會靜默地連到無密碼模式然後失敗。
+習慣寫成 `REDIS_PASSWORD` 不會有任何效果。詳見下方 NOAUTH 段。
 
 **不要設 `DB_DRIVER`。** mysql 與 pgsql 兩個區塊都讀同一個
 `env('DB_DRIVER')`，只是預設值不同（`config/database.php:24` 與 `:44`）。
@@ -254,3 +254,33 @@ Railway 的 log 保留期依方案而定，超過就查不到了。這是內建�
   同一筆 media 的失敗可能只出現在 `worker-slow`。
 - 真正要人立刻知道的錯誤，別靠盯面板。`config/logging.php:77` 已有 slack
   channel，設 `LOG_SLACK_WEBHOOK_URL` 就能把 critical 以上推出去。
+
+## Redis 報 `NOAUTH Authentication required`
+
+連線時沒有帶密碼。這個專案有三種寫法會導致它，而且**錯誤訊息一模一樣**，
+從訊息本身分不出是哪一種。實測（Redis 開 `requirepass`，只改變數）：
+
+| 變數設定 | 結果 |
+|---|---|
+| `REDIS_AUTH` 沒設 | `NOAUTH Authentication required.` |
+| 設成 `REDIS_PASSWORD` | `NOAUTH Authentication required.` |
+| `REDIS_AUTH=(null)` | `NOAUTH Authentication required.` |
+| `REDIS_AUTH=s3kr1t` | 成功 |
+
+三個各自的原因：
+
+1. **欄位名不是 `REDIS_PASSWORD`。** `config/database.php:110` 讀的是
+   `env('REDIS_AUTH')`。設 `REDIS_PASSWORD` 只是多了一個沒人讀的變數。
+2. **`(null)` 是會被轉成 null 的字面值。** `.env.example:42` 出廠就寫著
+   `REDIS_AUTH=(null)`，而 `env()` 會把字串 `(null)`、`null`、`(true)`、
+   `(false)`、`(empty)` 轉成對應的 PHP 值
+   （`vendor/hyperf/support/src/Functions.php:46`）。本機開發沒有密碼時
+   這是對的，但整份複製到雲端環境就變成「明明設了卻等於沒設」。
+3. 參照寫壞（多餘的 `}}` 之類），與 `DB_PORT` 那一題同源。
+
+**修法**：`REDIS_AUTH=${{Redis.REDISPASSWORD}}`，並確認展開後不含多餘字元。
+
+順帶一提，`config/database.php` 的 redis 區塊之所以生效，是因為
+`FoundationServiceProvider:132` 把 `database.redis` 映射到 `redis` config
+key —— Hyperf 的 redis 元件讀的是後者。專案裡沒有 `config/redis.php`
+是正常的，不要為了這個錯誤去新建一份。
