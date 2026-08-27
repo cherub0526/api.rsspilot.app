@@ -35,8 +35,8 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 | Service | 設定檔 | 說明 |
 |---|---|---|
 | `api` | `railway/api.json` | HTTP。`preDeployCommand` 跑 migration，只有這一個 service 跑 |
-| `worker-fast` | `railway/worker-fast.json` | 原 supervisor 中 `--timeout=120` 的五個 queue |
-| `worker-slow` | `railway/worker-slow.json` | 原 supervisor 中 `--timeout=300` 的三個 queue |
+| `worker-fast` | `railway/worker-fast.json` | `--timeout=120` 的 queue（部分暫停中，見下方） |
+| `worker-slow` | `railway/worker-slow.json` | `--timeout=300` 的 queue（部分暫停中，見下方） |
 | `scheduler` | `railway/scheduler.json` | 常駐 `schedule:run`，自帶迴圈，不要設 cron |
 
 八個 supervisor program 合併成兩個 service，是照 timeout 值切的——一個
@@ -372,3 +372,45 @@ worker 與 scheduler **不要開 public domain，也不要設 healthcheck**—�
 
 migration 只掛在 `api` 一個 service 上，其餘三個不要加，否則同一次部署會
 有四路並發跑 migration。
+
+## 目前暫停中的 queue
+
+`media.info`、`media.caption`、`media.youtube-data-caption`、`rss.sync`
+四個 queue 已從 worker 的 `--queue` 清單移除，**沒有任何 worker 會消化它們**。
+
+| Service | 仍在處理 | 已移除 |
+|---|---|---|
+| `worker-fast` | `videotranscriber.start`, `videotranscriber.fetch` | `media.info`, `media.caption`, `media.youtube-data-caption` |
+| `worker-slow` | `media.summary`, `videotranscriber.smart-summary` | `rss.sync` |
+
+兩個 service 都保留，因為各自還有 queue 要跑，`--timeout` 的分組也沒變。
+要恢復就是把名字加回 `--queue` 清單，順序即優先序。
+
+### 這四個之中，只有兩個實際上有工作
+
+查過派工端之後：
+
+| Queue | 誰派工 | 暫停的實際影響 |
+|---|---|---|
+| `media.info` | **無** | 無。`InfoJob` 在 `app/` 內沒有任何 dispatch 點 |
+| `media.youtube-data-caption` | **無** | 無。`YoutubeDataCaptionJob` 同上 |
+| `media.caption` | `SyncJob:175` → `YoutubeCaptionJob` | 有，但源頭是 `rss.sync` |
+| `rss.sync` | `RSSController:199`（使用者訂閱 feed）、`rss:sync` 指令 | 有 |
+
+`InfoJob`、`CaptionJob`、`YoutubeDataCaptionJob` 三個 job 類別在
+`app/`、`routes/`、`database/` 底下都找不到 dispatch 點——它們是改用
+videotranscriber.ai 之前的遺留物。所以 `media.info` 與
+`media.youtube-data-caption` 本來就是空的佇列，移除與否沒有差別。
+
+還有一個連鎖效應：`media.caption` 的工作是由 `SyncJob` 派出的，而 `SyncJob`
+跑在已暫停的 `rss.sync` 上。也就是說停掉 `rss.sync` 之後，`media.caption`
+連新工作都不會產生。
+
+### 累積與恢復
+
+暫停期間派出的工作**不會遺失**，它們留在 `jobs` 資料表裡等消化。恢復時會
+一次湧入，若已累積很多，先確認外部 API 的速率限制撐得住。
+
+注意 `ShouldBeUnique` 的行為：工作在佇列中排隊時仍持有唯一鎖，同一個對象
+的重複 dispatch 會被丟棄。所以長期暫停不等於「恢復後把期間所有事件補跑一
+遍」，而是每個對象大約留下一筆。
