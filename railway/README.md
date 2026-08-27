@@ -318,3 +318,57 @@ cron 的最小間隔、不必每分鐘付一次應用程式的冷啟動成本、
 
 `restartPolicyType: ALWAYS` 的必要性不受影響——重點是 worker 退出時的
 退出碼是 0，`ON_FAILURE` 不會把它拉起來。
+
+## 建立步驟
+
+四個 service 都是同一個 repo，差別只在 config 路徑與變數。
+
+### 1. 先把共用變數集中在專案層
+
+Project → **Shared Variables**，把 DB、Redis、第三方 API 金鑰、log 設定
+全放這裡，各 service 再引用（`${{shared.<NAME>}}`）。
+
+**不要一個 service 貼一次。** 四份手貼的變數會漂移，而漂移的症狀是
+「同一份程式碼在 api 正常、在 worker 半夜失敗」，很難查。
+
+只有兩個變數是 api 專屬、不放共用：`HTTP_SERVER_PORT`、
+`SERVER_WORKERS_NUMBER`。
+
+### 2. 逐一建立 service
+
+每個都是 New → GitHub Repo → 選這個 repo，然後在 Settings 設：
+
+| Service | Config 路徑 | Public domain |
+|---|---|---|
+| `api` | `railway/api.json` | 要 |
+| `worker-fast` | `railway/worker-fast.json` | 不要 |
+| `worker-slow` | `railway/worker-slow.json` | 不要 |
+| `scheduler` | `railway/scheduler.json` | 不要 |
+
+設好 config 路徑後，start command、重啟策略、healthcheck 都由該檔案帶入，
+不需要在面板重複填一次。面板上手動填的值會蓋掉檔案裡的，兩邊都改只會
+讓「實際跑的是哪個」變得不明確。
+
+worker 與 scheduler **不要開 public domain，也不要設 healthcheck**——
+它們不聽 HTTP，healthcheck 必然失敗，會被判定部署不成功而反覆重啟。
+
+### 3. worker 需要的不只是 DB 與 Redis
+
+最常見的漏設：只給了 DB 和 Redis 就以為夠了。實際上 job 會直接呼叫外部
+服務——轉錄、摘要、影片資訊、S3 上傳——所以 `GROQ_API_KEY`、
+`OPENAI_API_KEY`、`OPENROUTER_API_KEY`、`RAPID_API_KEY`、`YOUTUBE_API_KEY`、
+`VIDEOTRANSCRIBER_*`、`AWS_*` 這些在 worker service 上一個都不能少。
+
+漏掉的症狀是 job 進了 failed_jobs 而 api 完全正常，通常要等到有人回報
+「影片一直沒有摘要」才會發現。
+
+最省事的做法是共用變數全部引用到四個 service，只有上面那兩個 api 專屬的
+例外。多給不會出事，少給會。
+
+### 4. 部署順序
+
+先 `api`——它的 `preDeployCommand` 會跑 migration，把 `jobs`、`failed_jobs`
+等資料表建起來。worker 在資料表存在前啟動會一直報錯重啟。
+
+migration 只掛在 `api` 一個 service 上，其餘三個不要加，否則同一次部署會
+有四路並發跑 migration。
