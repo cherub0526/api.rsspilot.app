@@ -39,19 +39,24 @@ class ChatQuotaTest extends TestCase
      */
     private function createFreePlan(int $chatLimit): Plan
     {
-        $plan = Plan::factory()->create([
-            'title'      => 'Free',
-            'chat_limit' => $chatLimit,
-            'status'     => Plan::STATUS_ACTIVE,
-        ]);
+        // 包 withoutEvents：Plan 與 Price 的 observer 會直接 new StripeClient()
+        // 打 Stripe API。不擋的話這個 helper 每呼叫一次就是數次網路往返，實測
+        // 整個 test case 從 0.7 秒變成 10.7 秒，而且金鑰若有效就會真的建出商品。
+        return Plan::withoutEvents(function () use ($chatLimit) {
+            $plan = Plan::factory()->create([
+                'title'      => 'Free',
+                'chat_limit' => $chatLimit,
+                'status'     => Plan::STATUS_ACTIVE,
+            ]);
 
-        Price::create([
-            'plan_id' => $plan->id,
-            'unit'    => Price::UNIT_MONTHLY,
-            'price'   => 0,
-        ]);
+            Price::create([
+                'plan_id' => $plan->id,
+                'unit'    => Price::UNIT_MONTHLY,
+                'price'   => 0,
+            ]);
 
-        return $plan;
+            return $plan;
+        });
     }
 
     private function createAccessibleMedia(): Media

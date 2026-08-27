@@ -27,5 +27,16 @@
         <env name="CACHE_DRIVER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="OPENROUTER_API_KEY" value="test-key" force="true"/>
+        <!--
+            測試絕不使用 .env 裡的真實金鑰。Plan/Price 的 observer 會直接
+            new StripeClient() 呼叫 Stripe API，漏包 withoutEvents 的測試
+            就會對外發請求；金鑰若有效更會真的建出商品。
+
+            這裡給的是明顯無效的字串而不是留空——Stripe SDK 在金鑰為 null
+            時是「建構當下」就丟 InvalidArgumentException，而三個 observer
+            的 new StripeClient() 都寫在 try 之外，留空會讓建立 Plan 直接
+            噴未捕捉的例外。
+        -->
+        <env name="STRIPE_API_KEY" value="sk_test_invalid_for_tests_only" force="true"/>
     </php>
 </phpunit>
