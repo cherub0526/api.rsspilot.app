@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
-use App\Models\Media;
-use App\Models\User;
 use Carbon\Carbon;
-use Hypervel\Database\Eloquent\Collection;
+use App\Models\User;
+use App\Models\Media;
+use App\Models\Summary;
 use Hypervel\Mail\Mailable;
 use Hypervel\Queue\Queueable;
 use Hypervel\Queue\SerializesModels;
+use Hypervel\Database\Eloquent\Collection;
 
 class DailyDigestMail extends Mailable
 {
@@ -18,11 +19,16 @@ class DailyDigestMail extends Mailable
     use SerializesModels;
 
     /**
+     * `$videos` 必須維持非 public：`Mailable::buildViewData()` 會把所有 public
+     * 屬性塞進版型變數，而且蓋過 `view()` 傳進去的同名資料——留成 public 的話，
+     * 版型裡的 `$videos` 會變成 Media 模型集合而不是下面組出來的陣列，
+     * `$video['keyPoints']` 取到 null，`@foreach` 直接炸掉。
+     *
      * @param Collection<int, Media> $videos Media models with loaded `summary` and `source` relations
      */
     public function __construct(
         public readonly User $user,
-        public readonly Collection $videos,
+        protected readonly Collection $videos,
     ) {
     }
 
@@ -63,20 +69,20 @@ class DailyDigestMail extends Mailable
         $emojis = ['🤖', '📊', '📱', '🧠', '🎯', '💡', '🚀', '📚'];
 
         return $this->videos->values()->map(function (Media $media, int $index) use ($gradients, $emojis): array {
-            /** @var \App\Models\Summary|null $summary */
-            $summary     = $media->summary()->first();
+            /** @var null|Summary $summary */
+            $summary = $media->summary()->first();
             $videoDetail = (array) $media->getAttribute('video_detail');
-            $videoId     = $videoDetail['yt:videoId'] ?? null;
+            $videoId = $videoDetail['yt:videoId'] ?? null;
             $rawDuration = (int) $media->getAttribute('duration');
-            $duration    = $rawDuration > 0
+            $duration = $rawDuration > 0
                 ? sprintf('%d:%02d', intdiv($rawDuration, 60), $rawDuration % 60)
                 : '';
             $publishedAt = $media->getAttribute('published_at');
 
             return [
-                'title'             => (string) $media->getAttribute('title'),
-                'channel'           => (string) ($media->source?->getAttribute('title') ?? ''),
-                'publishedAt'       => $publishedAt
+                'title'       => (string) $media->getAttribute('title'),
+                'channel'     => (string) ($media->source?->getAttribute('title') ?? ''),
+                'publishedAt' => $publishedAt
                     ? Carbon::parse($publishedAt)->locale('zh-TW')->diffForHumans()
                     : '',
                 'duration'          => $duration,
