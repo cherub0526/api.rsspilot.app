@@ -39,6 +39,25 @@ railway config apply    # 套用；破壞性變更會另外要求確認
 
 需要 Railway CLI **5.42.1 以上**，舊版會停在升級錯誤。
 
+**也需要 Node 22.6 以上。** CLI 是用 `node --experimental-strip-types` 直接
+執行 `.railway/railway.ts`，版本太舊會停在：
+
+```
+node failed to evaluate IaC file.
+node: bad option: --experimental-strip-types
+```
+
+實測各版本行為：
+
+| Node | 結果 |
+|---|---|
+| 22.5 以下 | `bad option`，無法執行 |
+| 22.6 | 可執行，但會噴實驗性功能警告 |
+| 22.18 / 24 | 正常 |
+
+這個錯誤訊息容易誤導——它看起來像 `railway.ts` 寫壞了，實際上跟檔案內容
+無關，純粹是執行它的 Node 太舊。用 nvm 的話 `nvm use 24` 即可。
+
 **第一次 plan 一定要看完再 apply。** 重點是確認它**沒有**提議刪除任何環境變數
 ——現有變數是在面板上設的，`railway.ts` 裡刻意沒有宣告 `env`，若 plan 想移除
 它們，要改用 `preserve()` 把值留住再繼續。
