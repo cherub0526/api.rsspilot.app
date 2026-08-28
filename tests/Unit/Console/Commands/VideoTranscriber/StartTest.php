@@ -69,4 +69,43 @@ class StartTest extends TestCase
 
         Queue::assertNothingPushed();
     }
+
+    public function testDispatchesNothingWhenAlreadyAtTheConcurrentLimit(): void
+    {
+        Queue::fake();
+
+        Media::factory()->count(5)->create(['status' => Media::STATUS_TRANSCRIBING]);
+        Media::factory()->count(3)->create(['status' => Media::STATUS_CREATED]);
+
+        $this->artisan('videotranscriber:start')->run();
+
+        Queue::assertNothingPushed();
+    }
+
+    public function testOnlyDispatchesUpToTheRemainingSlots(): void
+    {
+        Queue::fake();
+
+        Media::factory()->count(3)->create(['status' => Media::STATUS_TRANSCRIBING]);
+        Media::factory()->count(4)->create(['status' => Media::STATUS_CREATED]);
+
+        $this->artisan('videotranscriber:start')->run();
+
+        // 5 個名額扣掉 3 個在途，只剩 2 個。其餘留給下一次執行。
+        Queue::assertPushed(VideoTranscriberStartJob::class, 2);
+    }
+
+    public function testIdOptionBypassesTheConcurrentLimit(): void
+    {
+        Queue::fake();
+
+        Media::factory()->count(5)->create(['status' => Media::STATUS_TRANSCRIBING]);
+        $target = Media::factory()->create(['status' => Media::STATUS_CREATED]);
+
+        $this->artisan('videotranscriber:start', ['--id' => $target->id])->run();
+
+        // 指名 media 是明確的人工覆寫，跟略過狀態篩選同樣的理由。
+        Queue::assertPushed(VideoTranscriberStartJob::class, 1);
+        Queue::assertPushed(fn (VideoTranscriberStartJob $job) => $job->uniqueId() === $target->id);
+    }
 }
