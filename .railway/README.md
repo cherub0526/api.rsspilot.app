@@ -510,3 +510,40 @@ videotranscriber.ai 之前的遺留物。所以 `media.info`、
 注意 `ShouldBeUnique` 的行為：工作在佇列中排隊時仍持有唯一鎖，同一個對象
 的重複 dispatch 會被丟棄。所以長期暫停不等於「恢復後把期間所有事件補跑一
 遍」，而是每個對象大約留下一筆。
+
+## 變數與 source 必須顯式宣告
+
+`omit means delete` 對**變數**同樣適用，而且 `source` 也一樣。第二次 plan 的
+實際輸出：
+
+```
+Plan: 2 to add, 6 to change, 102 to destroy
+  - Delete variable api.APP_ENV
+  - Delete variable api.DB_PASSWORD
+  ...（api 與 scheduler 各 51 個）
+  ~ Update api source.branch, source.repo, source.type
+    └ source.repo ("cherub0526/api.rsspilot.app" → null)
+```
+
+也就是說：沒宣告變數 → 全部刪光；沒宣告 `source` → 把 service 與 GitHub 的
+連結拆掉。
+
+### 現行做法
+
+- **既有 service**（`api`、`scheduler`）用 `preserve()`：保留 Railway 上的
+  現值，值不進 repo。
+- **新建的 worker** 沒有現值可保留，改為參照 `api` 的同名變數
+  （`mirrorOf(api)`），兩個 worker 不必各自維護一份。
+- `ENV_KEYS` 是那 51 個變數的名單。**在面板新增變數時要同步加進這份清單**，
+  否則下一次 apply 會把它刪掉。
+
+這也是為什麼把共用變數搬到專案層 Shared Variables 值得做——名單只要維護
+一份，而且 `ctx.shared.NAME` 可以直接參照。目前是 service 層各存一份。
+
+### `sleepApplication`
+
+`api` 面板上目前是開啟的，所以檔案裡顯式宣告 `sleepApplication: true`。
+不宣告的話 plan 會把它設成 null，等於順手改掉了沒人要求改的行為。
+
+Staging 這樣省錢沒問題，但要知道代價：休眠後的第一個請求要等冷啟動，而
+Hyperf 開機還要產生 DI proxy。webhook 打進來時會吃到這段延遲。
