@@ -170,3 +170,38 @@ bash: fork: retry: Resource temporarily unavailable
 這是 fork 失敗，不是 shell 壞掉 —— 而且此時 `ps`、`top` 這類診斷指令
 自己也要 fork，同樣跑不起來，很容易誤判成「機器掛了」。要確認請改看
 平台的記憶體圖表與環境變數設定，不要試圖在容器裡下指令。
+
+## Mailable 的 public 屬性會蓋掉 `view()` 傳進去的同名資料
+
+`code:` `vendor/hypervel/mail/src/Mailable.php` → `buildViewData()` · `code:` `app/Mail/DailyDigestMail.php` · `updated:` `2026-08-29` · `status:` `active`
+
+Mailable 有兩個管道可以把資料送進版型，而它們**不是對等的**：
+
+```php
+public function buildViewData(): array
+{
+    $data = $this->viewData;                       // ← ->view($view, [...]) 傳進來的
+    // ...
+    foreach ((new ReflectionClass($this))->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+        $data[$property->getName()] = $property->getValue($this);   // ← public 屬性後寫，蓋過上面
+    }
+    return $data;
+}
+```
+
+public 屬性（含建構子 promoted 的 `public readonly`）在後面才寫進 `$data`，所以**同名時是屬性贏**，
+`->view('...', ['videos' => $compiledArray])` 傳的值會被靜靜換掉。
+
+**症狀離原因很遠**：版型不會報「變數被覆蓋」，只會在型別不合的地方炸。實例是
+`DailyDigestMail` —— 建構子收 `public readonly Collection $videos`（Media 模型集合），
+`build()` 又把整理成陣列的清單以 `videos` 傳給版型。版型 `@foreach ($videos as $video)` 拿到的
+其實是模型集合，`$video['title']` 因為 Media 有這個欄位所以照樣印得出來，一路要到
+`@foreach ($video['keyPoints'] ...)` 才因為 null 而 fatal。看起來像「摘要資料沒帶到」，
+實際上是變數整個被換掉了。
+
+**怎麼避**：只給版型用的中繼資料一律走 `->view()`，Mailable 自己要留的狀態就別放 public ——
+`protected readonly` 一樣能被 `SerializesModels` 序列化進 queue。要留 public 當測試用的 API 也可以，
+但名字絕不能跟版型變數撞。
+
+**測試抓不到**：`Mail::fake()` 只記錄 mailable、不渲染版型，所以斷言 `$mail->videos` 的測試會全綠而信
+一寄就爆。信件的測試至少要有一個案例真的呼叫 `$mail->render()`。
