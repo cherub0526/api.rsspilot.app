@@ -123,7 +123,8 @@ export default defineRailway((ctx) => {
             //
             // 兩邊都顯式給值而不是省略：不宣告的話 plan 會設成 null，等於
             // 順手改掉了沒人要求改的行為。
-            sleepApplication: !isProduction,
+            // sleepApplication: !isProduction,
+            sleepApplication: true
         },
     });
 
