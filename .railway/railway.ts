@@ -66,13 +66,13 @@ export default defineRailway((ctx) => {
     },
   });
 
-  // rss.sync 暫停中。
+  // rss.sync、media.summary 暫停中。
   const workerSlow = service("worker-slow", {
     build,
     deploy: {
       startCommand:
         `${ARTISAN} queue:work database ` +
-        `--queue='media.summary,videotranscriber.smart-summary' ` +
+        `--queue='videotranscriber.smart-summary' ` +
         `--timeout=300 ${WORKER_FLAGS}`,
       restartPolicyType: "ALWAYS",
       numReplicas: 1,
