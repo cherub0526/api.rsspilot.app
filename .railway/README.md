@@ -547,3 +547,54 @@ Plan: 2 to add, 6 to change, 102 to destroy
 
 Staging 這樣省錢沒問題，但要知道代價：休眠後的第一個請求要等冷啟動，而
 Hyperf 開機還要產生 DI proxy。webhook 打進來時會吃到這段延遲。
+
+## 從 Staging 推到 Production
+
+**流程一樣**：切換 link 的環境，再 `plan` → 檢查 → `apply`。
+
+```bash
+railway status                 # 先確認目前 link 到哪個專案／環境
+railway environment            # 切換到 production（或用 railway link 重連）
+railway status                 # 再確認一次切對了
+railway config plan            # 這時 diff 的對象是 production
+```
+
+`plan` 永遠是對「當下 link 的那個環境」做 diff，所以切錯環境是最容易犯的錯。
+每次 plan 前先看一眼 `railway status` 的環境名稱。
+
+### 同一份檔案，環境差異寫在檔案裡
+
+IaC 沒有「一個環境一份檔案」的概念。`.railway/railway.ts` 會被套用到每個
+環境，兩邊該不一樣的東西要用 `ctx.isEnvironment()` 分岔。目前分岔的有兩處：
+
+| | Staging | Production |
+|---|---|---|
+| `source.branch` | `develop` | `main` |
+| `deploy.sleepApplication` | `true`（省成本） | `false` |
+
+休眠在 production 一定要關：休眠後的第一個請求要等冷啟動，而 Hyperf 開機
+還要產生 DI proxy，webhook 打進來會吃到這段延遲。
+
+**新增任何環境相關的設定時，先問「這個值在 production 該一樣嗎」。** 寫死
+等於把 staging 的設定推到正式環境，而且 plan 上看起來只是一行無害的 update。
+
+### 第一次對 production 跑 plan 時，重點看刪除清單
+
+最大的風險是 `ENV_KEYS`。那份 51 個變數的名單是照 **staging** 的實際內容抄
+的，production 幾乎一定有 staging 沒有的變數——正式的金流金鑰、不同的網域
+設定等等。**名單裡沒有的變數會被刪掉。**
+
+所以第一次對 production plan 時：
+
+1. 先看有沒有 `Delete variable` 開頭的行
+2. 有的話**不要 apply**，把那些名稱補進 `ENV_KEYS`
+3. 重跑 plan，直到刪除清單清空
+
+同理，production 的 service 名稱未必是 `api` / `scheduler`。名稱對不上會變成
+「新建 + 刪除」，plan 會明白顯示出來。
+
+### 兩個 worker 在 production 也是新建
+
+`worker-fast` 與 `worker-slow` 在 production 同樣不存在，plan 會顯示
+`+ Create service`。它們的變數是從 `api` 鏡射過去的（`mirrorOf(api)`），
+所以會自動拿到 production 那一份的值，不需要另外設定。

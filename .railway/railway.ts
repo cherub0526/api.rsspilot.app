@@ -48,12 +48,6 @@ const ARTISAN = "php /var/www/artisan";
 const WORKER_FLAGS = "--sleep=3 --max-time=3600 --memory=256";
 
 /**
- * 必須顯式宣告，否則 plan 會把 source.repo / branch / type 全設為 null——
- * 也就是把 service 與 GitHub 的連結拆掉。
- */
-const source = github("cherub0526/api.rsspilot.app", { branch: "develop" });
-
-/**
  * 面板上既有的變數名稱。值一律用 preserve() 保留 Railway 上的現值，
  * 不寫進 repo。
  *
@@ -93,6 +87,20 @@ const mirrorOf = (
     Object.fromEntries(ENV_KEYS.map((k) => [k, from.env[k]]));
 
 export default defineRailway((ctx) => {
+    // 同一份檔案會被套用到每個 environment，plan 是對「當下 link 的那個」
+    // 做 diff。凡是兩邊該不一樣的東西都必須在這裡分岔，寫死等於把 staging
+    // 的設定推到 production。
+    const isProduction = ctx.isEnvironment("production");
+
+    /**
+     * 必須顯式宣告，否則 plan 會把 source.repo / branch / type 全設為 null——
+     * 也就是把 service 與 GitHub 的連結拆掉。
+     *
+     * 分支要跟著環境走。寫死 develop 會讓 production 改從開發分支部署。
+     */
+    const source = github("cherub0526/api.rsspilot.app", {
+        branch: isProduction ? "main" : "develop",
+    });
     const api = service("api", {
         source,
         env: preserved(),
@@ -109,9 +117,13 @@ export default defineRailway((ctx) => {
             healthcheckTimeout: 120,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
-            // 面板上目前是開啟的。不宣告的話 plan 會把它設成 null，
-            // 等於順手改掉了沒人要求改的行為。
-            sleepApplication: true,
+            // staging 開著以省成本；production 一定要關——休眠後的第一個
+            // 請求要等冷啟動，而 Hyperf 開機還要產生 DI proxy，webhook 打
+            // 進來會吃到這段延遲。
+            //
+            // 兩邊都顯式給值而不是省略：不宣告的話 plan 會設成 null，等於
+            // 順手改掉了沒人要求改的行為。
+            sleepApplication: !isProduction,
         },
     });
 
