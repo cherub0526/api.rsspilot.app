@@ -48,6 +48,22 @@ const ARTISAN = "php /var/www/artisan";
 const WORKER_FLAGS = "--sleep=3 --max-time=3600 --memory=256";
 
 /**
+ * 四個 service 與 Postgres / Redis 必須同區，否則私有網路連不過去。
+ *
+ * 不宣告的話，IaC 新建的 service 會落在「帳號預設區域」而不是既有服務所在
+ * 的區域。實際症狀不是明確的連不上，而是：
+ *
+ *   SQLSTATE[08006] could not send SSL negotiation packet:
+ *   Resource temporarily unavailable
+ *
+ * TCP 看似連上了、SSL 交握的第一個 send 才 EAGAIN，讀起來像 SSL 或驅動的
+ * 問題，跟區域八竿子打不著——這是本專案實際踩過的坑。
+ *
+ * 區域可隨時更換，不影響網域與私有網路，沒掛 volume 就沒有停機。
+ */
+const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
+
+/**
  * 面板上既有的變數名稱。值一律用 preserve() 保留 Railway 上的現值，
  * 不寫進 repo。
  *
@@ -115,6 +131,7 @@ export default defineRailway((ctx) => {
             healthcheckPath: "/api",
             // Hyperf 開機時要即時產生 DI proxy，冷啟動比一般 PHP 應用慢。
             healthcheckTimeout: 120,
+            region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
             // staging 開著以省成本；production 一定要關——休眠後的第一個
@@ -141,6 +158,7 @@ export default defineRailway((ctx) => {
                 `--timeout=120 ${WORKER_FLAGS}`,
             // 必須是 ALWAYS：worker 因 --max-time 自我了結時退出碼是 0，
             // ON_FAILURE 不會把它拉起來，service 會顯示部署成功但永久停擺。
+            region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
         },
@@ -156,6 +174,7 @@ export default defineRailway((ctx) => {
                 `${ARTISAN} queue:work database ` +
                 `--queue='videotranscriber.smart-summary' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
+            region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
         },
@@ -172,6 +191,7 @@ export default defineRailway((ctx) => {
         build,
         deploy: {
             startCommand: `${ARTISAN} schedule:run`,
+            region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
         },

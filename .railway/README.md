@@ -598,3 +598,40 @@ IaC 沒有「一個環境一份檔案」的概念。`.railway/railway.ts` 會被
 `worker-fast` 與 `worker-slow` 在 production 同樣不存在，plan 會顯示
 `+ Create service`。它們的變數是從 `api` 鏡射過去的（`mirrorOf(api)`），
 所以會自動拿到 production 那一份的值，不需要另外設定。
+
+## worker 連不上資料庫：`could not send SSL negotiation packet`
+
+```
+SQLSTATE[08006] [7] could not send SSL negotiation packet:
+Resource temporarily unavailable
+```
+
+**是區域不一致，不是 SSL 也不是驅動的問題。**
+
+新建的 service 若沒有宣告 `region`，會落在「帳號預設區域」而不是既有服務
+所在的區域。跨區的私有網路連不過去，而症狀偏偏長得像 SSL 出錯：TCP 看似
+連上了，SSL 交握的第一個 send 才回 `EAGAIN`。
+
+`railway.ts` 裡的 `REGION` 常數就是為此存在，四個 service 共用它，必須跟
+Postgres / Redis 同一區。
+
+### 排查時可以先排除的
+
+以下都實測過**不是**成因，不必再往這些方向查（用專案的實際基底 image、
+開 SSL 的 Postgres、在 coroutine 內連線）：
+
+| 假設 | 實測結果 |
+|---|---|
+| Swoole 的 `SWOOLE_HOOK_PDO_PGSQL` 不支援 SSL | 連線成功，SSL 生效 |
+| 關掉該 hook 才能連 | 開關皆可連 |
+| IPv6 私有網路的問題 | 走 IPv6 位址連線成功 |
+| Alpine 的 musl 解析問題 | 走主機名連線成功 |
+
+`Resource temporarily unavailable` 是 `EAGAIN`，跟記憶體耗盡時
+`bash: fork: retry` 是同一個 errno——同樣的字眼會出現在完全不同的成因上，
+別被它帶偏。
+
+### 換區是安全的
+
+依 Railway 文件，service 的區域可隨時更換，不影響網域與私有網路，沒有掛
+volume 就沒有停機。本專案四個 service 都沒有 volume。
