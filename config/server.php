@@ -17,7 +17,13 @@ return [
             'name'      => 'http',
             'type'      => Server::SERVER_HTTP,
             'host'      => env('HTTP_SERVER_HOST', '0.0.0.0'),
-            'port'      => (int) env('HTTP_SERVER_PORT', 9501),
+            // PORT 是雲端平台（Railway 等）注入的慣例名稱，容器要聽在它指定的
+            // port 才收得到流量。多這一層 fallback，部署時就不必記得再設一個
+            // HTTP_SERVER_PORT——忘記設會讓程式聽在 9501、平台卻往別的 port
+            // 送，健康檢查只會回 service unavailable，看不出是 port 對不上。
+            //
+            // HTTP_SERVER_PORT 仍然優先，本機與 Forge 都不會設 PORT，行為不變。
+            'port'      => (int) env('HTTP_SERVER_PORT', env('PORT', 9501)),
             'sock_type' => SWOOLE_SOCK_TCP,
             'callbacks' => [
                 Event::ON_REQUEST => [HttpKernel::class, 'onRequest'],
