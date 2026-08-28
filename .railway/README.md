@@ -30,7 +30,23 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 
 ## 套用方式
 
-在已 link 到該專案的目錄下：
+先安裝相依套件（只需一次）：
+
+```bash
+npm install
+```
+
+`railway.ts` 匯入 `railway/iac`，CLI 是用 node 直接執行該檔，所以那個套件
+必須實際存在於 `node_modules`。少了它會停在：
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'railway'
+```
+
+專案根目錄的 `package.json` **只為了這件事存在**，應用程式本身是 PHP，
+沒有其他 JS 相依。
+
+然後在已 link 到該專案的目錄下：
 
 ```bash
 railway config plan     # 先看 diff，不改動任何東西
