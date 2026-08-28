@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Console\Commands\Media\Notify;
 use App\Console\Commands\Sources\Sync;
 use Hypervel\Console\Scheduling\Schedule;
 use App\Console\Commands\VideoTranscriber\Fetch;
@@ -34,6 +35,12 @@ class Kernel extends ConsoleKernel
         // 結束時是 summarized 或 summarize_failed，都不再落入這支指令的查詢條件。
         $schedule->command(Summarize::class)->everyMinute()
             ->name('videotranscriber.summary')->onOneServer()->withoutOverlapping(5);
+
+        // 每日摘要信。時間是應用程式時區（APP_TIMEZONE），跟指令內判斷「今天」
+        // 用的是同一個時區，所以 09:00 跑到的一定是前一個完整的日界線之後、
+        // 當天 00:00 起加入的影片。
+        $schedule->command(Notify::class)->dailyAt('09:00')
+            ->name('media.notify')->onOneServer()->withoutOverlapping(30);
     }
 
     public function commands(): void
