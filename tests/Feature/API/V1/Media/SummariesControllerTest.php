@@ -7,6 +7,7 @@ namespace Tests\Feature\API\V1\Media;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Source;
 use App\Models\Summary;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -71,6 +72,30 @@ class SummariesControllerTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('locale', 'en')
             ->assertJsonPath('text', 'A short summary.');
+    }
+
+    /**
+     * 免費來源的影片不需要先加進影片庫就能讀摘要。
+     *
+     * 這一段原本用 $request->user()->media()->find()，只看 userables 綁定、
+     * 不看來源是否免費，同一支影片的 captions 拿得到、摘要卻回 422。改為與
+     * 其他端點共用 Media::isAccessibleBy 之後兩邊一致。
+     */
+    public function testIndexSucceedsForFreeSourceWithoutOwningTheMedia(): void
+    {
+        $this->fakeLogin();
+
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        Summary::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'en',
+            'text'     => 'A short summary.',
+        ]);
+
+        $this->json('GET', route('api.v1.media.summaries.index', ['mediaId' => $media->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('locale', 'en');
     }
 
     // ================================================================

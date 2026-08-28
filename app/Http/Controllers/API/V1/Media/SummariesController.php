@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Media;
 
+use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
@@ -43,7 +44,14 @@ class SummariesController
      */
     public function index(Request $request, string $mediaId)
     {
-        if (!$media = $request->user()->media()->find($mediaId)) {
+        // 原本用 $request->user()->media()->find() 一次做「找得到」與「有權限」
+        // 兩件事，但它只看 userables 綁定、不看來源是否免費——免費來源的影片
+        // 在 captions 拿得到、在這裡卻拿不到。改為與其他端點共用同一份判斷。
+        if (!$media = Media::find($mediaId)) {
+            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        }
+
+        if (!$media->isAccessibleBy($request->user())) {
             throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
         }
 
@@ -76,7 +84,14 @@ class SummariesController
      */
     public function show(Request $request, string $mediaId, string $summaryId)
     {
-        if (!$media = $request->user()->media()->find($mediaId)) {
+        // 原本用 $request->user()->media()->find() 一次做「找得到」與「有權限」
+        // 兩件事，但它只看 userables 綁定、不看來源是否免費——免費來源的影片
+        // 在 captions 拿得到、在這裡卻拿不到。改為與其他端點共用同一份判斷。
+        if (!$media = Media::find($mediaId)) {
+            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        }
+
+        if (!$media->isAccessibleBy($request->user())) {
             throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
         }
 
