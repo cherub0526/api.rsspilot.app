@@ -21,6 +21,20 @@
  */
 import { defineRailway, project, service } from "railway/iac";
 
+/**
+ * 限縮 omit=delete 的作用域，只涵蓋本檔宣告的資源。
+ *
+ * 沒有這一行時 IaC 會把整個 environment 視為本檔的管轄範圍，凡是這裡沒宣告
+ * 的東西都排進刪除清單——實測 plan 曾提議刪掉 Postgres、Redis、mailpit 與
+ * 前端的 rsspilot.app service。那些屬於別的 repo，這個 repo 不該擁有它們。
+ *
+ * 官方把 partial 定位為「separate repositories cannot share that file」時的
+ * 最後手段，而這正是這裡的情況。兩個限制：
+ *   1. apply 之後不要改這個名字。
+ *   2. 若日後把所有 service 併進單一檔案，要把這行拿掉。
+ */
+export const partial = "api.rsspilot.app";
+
 /** 四個 service 共用同一份 image。as const 讓 builder 收斂成字面值型別。 */
 const build = {
   builder: "DOCKERFILE",
@@ -33,7 +47,7 @@ const ARTISAN = "php /var/www/artisan";
 const WORKER_FLAGS = "--sleep=3 --max-time=3600 --memory=256";
 
 export default defineRailway((ctx) => {
-  const api = service("api", {
+  const api = service("api.rsspilot.app", {
     build,
     deploy: {
       startCommand: `${ARTISAN} start`,
@@ -81,7 +95,10 @@ export default defineRailway((ctx) => {
 
   // 常駐，不是 cron。Hypervel 的 schedule:run 自帶 while 迴圈，
   // 每 100ms 檢查一次到期任務；設 cronSchedule 會讓容器永遠不退出。
-  const scheduler = service("scheduler", {
+  //
+  // 名稱刻意沿用 Railway 上既有的（含空格）——資源是以名稱配對的，
+  // 改名等同於「刪掉舊的、建一個新的」。
+  const scheduler = service("api.rsspilot.app scheduler", {
     build,
     deploy: {
       startCommand: `${ARTISAN} schedule:run`,

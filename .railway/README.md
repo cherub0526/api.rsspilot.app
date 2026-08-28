@@ -74,6 +74,41 @@ node: bad option: --experimental-strip-types
 這個錯誤訊息容易誤導——它看起來像 `railway.ts` 寫壞了，實際上跟檔案內容
 無關，純粹是執行它的 Node 太舊。用 nvm 的話 `nvm use 24` 即可。
 
+### 這個 repo 只擁有自己的 service
+
+`railway.ts` 頂端有一行 `export const partial = "api.rsspilot.app"`，**不要刪，
+也不要改名**。
+
+沒有它的話，IaC 會把整個 environment 當成本檔的管轄範圍——「omit means
+delete」，凡是這裡沒宣告的都排進刪除清單。第一次 plan 的實際輸出是：
+
+```
+Plan: 4 to add, 0 to change, 6 to destroy
+  - Delete database Redis
+  - Delete database Postgres
+  - Delete service rsspilot.app
+  - Delete service mailpit
+  ...
+```
+
+那些資源屬於別的 repo 或是共用基礎設施，這個 repo 不該擁有它們。官方把
+partial 定位為「separate repositories cannot share that file」時的最後手段，
+而這正是這裡的情況。
+
+兩個限制：apply 之後不要改這個名字；若日後把所有 service 併進單一檔案，
+要把這行拿掉。
+
+### service 名稱必須對齊面板上既有的
+
+資源是**以名稱配對**的。名稱對不上時 plan 不會更新既有 service，而是
+「新建一個 + 刪除舊的」。所以 `api.rsspilot.app` 與
+`api.rsspilot.app scheduler`（含空格）都刻意沿用 Railway 上原本的名字，
+不要為了整齊而改成 `api` / `scheduler`。
+
+`worker-fast` 與 `worker-slow` 是真正的新增，面板上還不存在。
+
+### 先 plan 再 apply
+
 **第一次 plan 一定要看完再 apply。** 重點是確認它**沒有**提議刪除任何環境變數
 ——現有變數是在面板上設的，`railway.ts` 裡刻意沒有宣告 `env`，若 plan 想移除
 它們，要改用 `preserve()` 把值留住再繼續。
