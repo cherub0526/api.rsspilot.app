@@ -5,6 +5,7 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 | | Forge / 本機 | Railway |
 |---|---|---|
 | 建置 | `docker/Dockerfile` | `docker/Dockerfile.railway` |
+| 設定 | `supervisor/*.conf` 手動貼上 | `.railway/railway.ts`（IaC） |
 | 常駐程序 | `supervisor/*.conf` | 每個 queue 群組一個 service |
 | 排程 | 系統 cron → `schedule:run` | 常駐 service（**不是** cron） |
 
@@ -14,34 +15,52 @@ Forge（VPS + supervisor）與 Railway 並行，兩邊**不共用建置檔**：
 
 ## Service 對照
 
-每個 Railway service 都指向同一個 repo，差別在 **Settings → Config-as-code**
-指到哪一份設定檔。
+四個 service 全部定義在 `.railway/railway.ts` 一個檔案裡。
 
-根目錄另有一份 `railway.json`，Railway 在 service 沒有指定 config 路徑時會
-自動讀它。那份**刻意只寫 build 區塊**，不含 `startCommand` 也不含
-`preDeployCommand`：
+| Service | 說明 |
+|---|---|
+| `api` | HTTP。`preDeployCommand` 跑 migration，只有這一個 service 跑 |
+| `worker-fast` | `--timeout=120` 的 queue（部分暫停中，見下方） |
+| `worker-slow` | `--timeout=300` 的 queue（部分暫停中，見下方） |
+| `scheduler` | 常駐 `schedule:run`，自帶迴圈，不要設 cron |
 
-- 好處：任何 service 就算忘了設定 config 路徑，至少仍會用對 Dockerfile，
-  不會退回自動偵測（見下方「build 失敗」段）。
-- 為什麼不把 api 的設定放進去：根設定是**所有** service 的預設值，若含
-  `preDeployCommand`，四個 service 每次部署都會各跑一次 migration。
-  漏設路徑的 service 退化成「多開一個 API」是可接受的失誤，四路並發跑
-  migration 不是。
-
-`railway/*.json` 每一份都各自帶完整的 build 區塊，所以不論 Railway 對指定
-路徑的處理是「取代」還是「與根設定合併」，結果都一樣 —— 這是刻意的，
-省掉去確認它到底是哪一種。
-
-| Service | 設定檔 | 說明 |
-|---|---|---|
-| `api` | `railway/api.json` | HTTP。`preDeployCommand` 跑 migration，只有這一個 service 跑 |
-| `worker-fast` | `railway/worker-fast.json` | `--timeout=120` 的 queue（部分暫停中，見下方） |
-| `worker-slow` | `railway/worker-slow.json` | `--timeout=300` 的 queue（部分暫停中，見下方） |
-| `scheduler` | `railway/scheduler.json` | 常駐 `schedule:run`，自帶迴圈，不要設 cron |
-
-八個 supervisor program 合併成兩個 service，是照 timeout 值切的——一個
+八個 supervisor program 合併成兩個 worker service，是照 timeout 值切的——一個
 `queue:work` 只能有一個 `--timeout`，所以 120 與 300 不能混在同一個 service。
 `--queue` 的順序即優先序。
+
+## 套用方式
+
+在已 link 到該專案的目錄下：
+
+```bash
+railway config plan     # 先看 diff，不改動任何東西
+railway config apply    # 套用；破壞性變更會另外要求確認
+```
+
+需要 Railway CLI **5.42.1 以上**，舊版會停在升級錯誤。
+
+**第一次 plan 一定要看完再 apply。** 重點是確認它**沒有**提議刪除任何環境變數
+——現有變數是在面板上設的，`railway.ts` 裡刻意沒有宣告 `env`，若 plan 想移除
+它們，要改用 `preserve()` 把值留住再繼續。
+
+`railway.ts` 同樣沒有宣告 `source` 與 Postgres / Redis 資源：service 已經接好
+repo、資料庫也已存在，讓 IaC 只管理 build 與 deploy 設定是風險最低的起點。
+之後要把變數也納管，可以改用型別化的跨資源參照（`db.env.PGHOST`），那會順帶
+消滅手貼 `${{...}}` 打錯字的整類問題。
+
+> IaC API 目前是 **beta**，官方明言欄位會變動。
+
+## 為什麼不再用 railway.json
+
+Config as Code（`railway.json` / `railway.toml`）已棄用：
+
+- 每個 service 指定自己 config 檔的設定已經不支援
+- 2026-12-01 起完全停止讀取
+- 官方明言「由 `railway.json` / `railway.toml` 管理的 service 必須先遷移，
+  IaC 才能接管」——兩者不能並存，所以舊檔案已全部刪除
+
+順帶修正一個舊檔案裡的錯誤：`preDeployCommand` 的型別是 **`string[]`**，
+先前的 `railway.json` 寫成字串。
 
 ## 環境變數
 
@@ -168,9 +187,9 @@ Build Failed: composer install --optimize-autoloader --no-scripts --no-interacti
 基底 image `hyperf/hyperf:8.3-alpine-v3.19-swoole-v6` 本身就帶 swoole 6.2.2，
 走對 Dockerfile 不可能缺。
 
-**修法**：到該 service 的 Settings 確認 Config-as-code 路徑指向
-`railway/<service>.json`，或 Builder 設為 Dockerfile 且 Dockerfile Path 指向
-`docker/Dockerfile.railway`。
+**修法**：確認 `.railway/railway.ts` 已經 `railway config apply` 過——四個
+service 的 `build` 都指向 `docker/Dockerfile.railway`。若 service 尚未納入 IaC
+管理，就會退回自動偵測。
 
 **不要照錯誤訊息的建議加 `--ignore-platform-req=ext-swoole`。** 那只會讓
 composer 安裝通過，建出一個沒有 swoole 的 image；Hypervel 整個執行期都建立在
@@ -301,7 +320,7 @@ while (! $this->shouldStop()) {
 （`vendor/hypervel/console/src/Commands/ScheduleRunCommand.php`）——它自己
 就是排程器。實測不帶 `--once` 執行，三分鐘後仍在跑，需要外力才會結束。
 
-所以 `railway/scheduler.json` 是**常駐 service**：沒有 `cronSchedule`，
+所以 `railway.ts` 裡的 `scheduler` 是**常駐 service**：沒有 `cronSchedule`，
 `restartPolicyType` 設 `ALWAYS`。這樣同時解掉幾個問題：不必確認 Railway
 cron 的最小間隔、不必每分鐘付一次應用程式的冷啟動成本、`onOneServer()`
 的鎖也只需要跟自己競爭。
@@ -336,21 +355,22 @@ Project → **Shared Variables**，把 DB、Redis、第三方 API 金鑰、log �
 
 ### 2. 逐一建立 service
 
-每個都是 New → GitHub Repo → 選這個 repo，然後在 Settings 設：
+`railway config apply` 會依 `.railway/railway.ts` 建立或更新這四個 service，
+不需要在面板逐一新增。start command、重啟策略、healthcheck 都由該檔案帶入。
 
-| Service | Config 路徑 | Public domain |
-|---|---|---|
-| `api` | `railway/api.json` | 要 |
-| `worker-fast` | `railway/worker-fast.json` | 不要 |
-| `worker-slow` | `railway/worker-slow.json` | 不要 |
-| `scheduler` | `railway/scheduler.json` | 不要 |
+面板上手動改過的值會與 IaC 產生分歧——`railway.ts` 是唯一真相來源，下一次
+`plan` 會把面板的手改標成待還原的 diff。要調整就改檔案。
 
-設好 config 路徑後，start command、重啟策略、healthcheck 都由該檔案帶入，
-不需要在面板重複填一次。面板上手動填的值會蓋掉檔案裡的，兩邊都改只會
-讓「實際跑的是哪個」變得不明確。
+| Service | Public domain |
+|---|---|
+| `api` | 要 |
+| `worker-fast` | 不要 |
+| `worker-slow` | 不要 |
+| `scheduler` | 不要 |
 
 worker 與 scheduler **不要開 public domain，也不要設 healthcheck**——
 它們不聽 HTTP，healthcheck 必然失敗，會被判定部署不成功而反覆重啟。
+`railway.ts` 裡這三個 service 都沒有 `healthcheckPath`，維持原樣即可。
 
 ### 3. worker 需要的不只是 DB 與 Redis
 
