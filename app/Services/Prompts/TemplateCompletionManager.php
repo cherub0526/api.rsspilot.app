@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Prompts;
 
 use App\Utils\AI\Completion;
+use App\Utils\AI\OpenRouterModels;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -69,7 +70,7 @@ class TemplateCompletionManager
      * 執行完成請求
      *
      * @param string $userContent 使用者內容
-     * @param string $model OpenAI 模型 (default: gpt-3.5-turbo)
+     * @param string $model 模型名稱（空字串則依模板查 configs.openrouter_models）
      * @param array $additionalParams 額外參數
      * @return array OpenAI 回應
      */
@@ -79,7 +80,7 @@ class TemplateCompletionManager
         array $additionalParams = []
     ): array {
         if ($model === '') {
-            $model = config('ai.default_model');
+            $model = OpenRouterModels::for($this->template::class);
         }
         // 建立消息陣列
         $messages = $this->template->buildMessages($userContent, $additionalParams);
@@ -100,12 +101,12 @@ class TemplateCompletionManager
      * Body 為 OpenRouter SSE 格式（text/event-stream）。
      *
      * @param string $userContent 使用者輸入
-     * @param string $model       模型名稱（空字串使用 config 預設值）
+     * @param string $model 模型名稱（空字串則依模板查 configs.openrouter_models）
      */
     public function completeStream(string $userContent, string $model = ''): ResponseInterface
     {
         if ($model === '') {
-            $model = config('ai.default_model');
+            $model = OpenRouterModels::for($this->template::class);
         }
 
         $messages = $this->template->buildMessages($userContent);

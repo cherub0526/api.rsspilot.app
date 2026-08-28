@@ -29,7 +29,7 @@ class NeuronChatStreamer implements ChatStreamerInterface
             ->setAiProvider(new OpenAILike(
                 baseUri: (string) config('ai.openrouter.base_uri'),
                 key: (string) config('ai.openrouter.api_key'),
-                model: (string) config('ai.default_model'),
+                model: OpenRouterModels::for(self::class),
             ))
             ->setInstructions($instructions);
 
