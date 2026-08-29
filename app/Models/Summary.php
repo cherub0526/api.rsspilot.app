@@ -14,7 +14,7 @@ class Summary extends Model
 
     use HasFactory;
 
-    public const LOCALE_ZH_TW = 'zh_tw';
+    public const LOCALE_ZH_TW = 'zh-TW';
 
     public const LOCALE_EN = 'en';
 
@@ -45,6 +45,7 @@ class Summary extends Model
      */
     protected array $fillable = [
         'media_id',
+        'user_id',
         'config_id',
         'locale',
         'text',
@@ -58,6 +59,7 @@ class Summary extends Model
      */
     protected array $casts = [
         'media_id'    => 'string',
+        'user_id'     => 'string',
         'locale'      => 'string',
         'text'        => 'array',
         'ai_model'    => 'string',
@@ -67,6 +69,14 @@ class Summary extends Model
     public function media(): BelongsTo
     {
         return $this->belongsTo(Media::class, 'media_id', 'id');
+    }
+
+    /**
+     * 這份摘要專屬的使用者；null 代表全站共用（見 Media::summaryFor()）。
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
     public function config(): BelongsTo

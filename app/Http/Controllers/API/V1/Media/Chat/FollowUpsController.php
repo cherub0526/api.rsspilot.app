@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Media\Chat;
 
-use App\Models\Summary;
 use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
@@ -111,13 +110,11 @@ class FollowUpsController
             ->value('content');
 
         // 還沒有任何 AI 回應（session 剛開）就退回影片摘要當素材——這一刻使用者
-        // 最想知道的正是「這支影片可以問什麼」。摘要取最新一份已完成的：重跑摘要
-        // 會先建一筆 text 還空著的資料列，只看時間排序會蓋掉先前可用的那份。
+        // 最想知道的正是「這支影片可以問什麼」。摘要與 /summaries、chat 取同一份
+        // （見 Media::summaryFor()），`true` 是只取已完成的：重跑摘要會先建一筆
+        // text 還空著的資料列，沒過濾就會拿到空殼。
         if (!is_string($answer) || $answer === '') {
-            $summaryText = $media->summaries()
-                ->where('status', Summary::STATUS_COMPLETED)
-                ->orderByDesc('created_at')
-                ->first()?->text ?? [];
+            $summaryText = $media->summaryFor($request->user(), true)?->text ?? [];
             $answer = $summaryText['long_summary']['content'] ?? null;
         }
 

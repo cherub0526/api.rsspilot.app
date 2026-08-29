@@ -268,6 +268,44 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * 6-0-0. 參考資料與 /summaries 端點取同一份：使用者自己的摘要優先於共用的。
+     */
+    public function testStorePrefersTheUsersOwnSummaryAsReferenceMaterial(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        Summary::create([
+            'media_id' => $media->id,
+            'locale'   => Summary::LOCALE_ZH_TW,
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['long_summary' => ['content' => '共用的摘要']],
+        ]);
+        Summary::create([
+            'media_id' => $media->id,
+            'user_id'  => $user->id,
+            'locale'   => Summary::LOCALE_ZH_TW,
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['long_summary' => ['content' => '自己的摘要']],
+        ]);
+
+        Setting::create([
+            'user_id' => $user->id,
+            'data'    => ['locale' => Summary::LOCALE_ZH_TW, 'ai' => ['language' => 'en']],
+        ]);
+        $streamer = $this->fakeOpenRouter();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '重點是什麼？']],
+        ])->assertStatus(200);
+
+        $this->assertStringContainsString('自己的摘要', (string) $streamer->instructions);
+        $this->assertStringNotContainsString('共用的摘要', (string) $streamer->instructions);
+    }
+
+    /**
      * 6-0-1. 只認 status=completed 的摘要，且取最新的那一份。
      *
      * 重跑摘要會先建一筆 status=created、text 還是空的資料列；若只依時間排序，
@@ -711,12 +749,12 @@ class ChatControllerTest extends TestCase
      */
     public function testStoreReturns404ForSessionWithWrongMedia(): void
     {
-        /** @var \App\Models\User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => true]);
-        $media1  = Media::factory()->create(['source_id' => $source->id]);
-        $media2  = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create([
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media1 = Media::factory()->create(['source_id' => $source->id]);
+        $media2 = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create([
             'user_id'  => $user->id,
             'media_id' => $media2->id,
         ]);
@@ -796,7 +834,7 @@ class ChatControllerTest extends TestCase
     {
         $this->fakeLogin();
         $source = Source::factory()->create(['free' => false]);
-        $media  = Media::factory()->create(['source_id' => $source->id]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('GET', route('api.v1.media.chat.sessions.index', ['mediaId' => $media->id]))
             ->assertStatus(404);
@@ -808,15 +846,15 @@ class ChatControllerTest extends TestCase
     public function testSessionsIndexReturnsUserSessions(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $other   = User::factory()->create();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $media2  = Media::factory()->create(['source_id' => $source->id]);
+        $user = $this->fakeLogin();
+        $other = User::factory()->create();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $media2 = Media::factory()->create(['source_id' => $source->id]);
 
-        \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'My session']);
-        \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id, 'title' => 'Other user session']);
-        \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media2->id, 'title' => 'Other media session']);
+        ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'My session']);
+        ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id, 'title' => 'Other user session']);
+        ChatSession::create(['user_id' => $user->id, 'media_id' => $media2->id, 'title' => 'Other media session']);
 
         $this->json('GET', route('api.v1.media.chat.sessions.index', ['mediaId' => $media->id]))
             ->assertStatus(200)
@@ -833,9 +871,9 @@ class ChatControllerTest extends TestCase
      */
     public function testSessionShowRequiresAuth(): void
     {
-        $media   = Media::factory()->create();
-        $user    = User::factory()->create();
-        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        $media = Media::factory()->create();
+        $user = User::factory()->create();
+        $session = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
         $this->json('GET', route('api.v1.media.chat.sessions.show', [
             'mediaId'   => $media->id,
@@ -849,10 +887,10 @@ class ChatControllerTest extends TestCase
     public function testSessionShowReturns404WhenNotOwned(): void
     {
         $this->fakeLogin();
-        $other   = User::factory()->create();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+        $other = User::factory()->create();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
 
         $this->json('GET', route('api.v1.media.chat.sessions.show', [
             'mediaId'   => $media->id,
@@ -865,11 +903,11 @@ class ChatControllerTest extends TestCase
      */
     public function testSessionShowReturns404WhenMediaNotAccessible(): void
     {
-        /** @var \App\Models\User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => false]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => false]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
         $this->json('GET', route('api.v1.media.chat.sessions.show', [
             'mediaId'   => $media->id,
@@ -883,22 +921,22 @@ class ChatControllerTest extends TestCase
     public function testSessionShowReturnsSessionWithMessages(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create([
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create([
             'user_id'  => $user->id,
             'media_id' => $media->id,
             'title'    => 'Test session',
         ]);
 
-        \App\Models\ChatMessage::create([
+        ChatMessage::create([
             'session_id' => $session->id,
             'role'       => 'user',
             'content'    => 'Hello',
             'created_at' => now(),
         ]);
-        \App\Models\ChatMessage::create([
+        ChatMessage::create([
             'session_id' => $session->id,
             'role'       => 'ai',
             'content'    => 'World',
@@ -926,9 +964,9 @@ class ChatControllerTest extends TestCase
      */
     public function testSessionDestroyRequiresAuth(): void
     {
-        $media   = Media::factory()->create();
-        $user    = User::factory()->create();
-        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        $media = Media::factory()->create();
+        $user = User::factory()->create();
+        $session = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
         $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
             'mediaId'   => $media->id,
@@ -942,10 +980,10 @@ class ChatControllerTest extends TestCase
     public function testSessionDestroyReturns404WhenNotOwned(): void
     {
         $this->fakeLogin();
-        $other   = User::factory()->create();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+        $other = User::factory()->create();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
 
         $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
             'mediaId'   => $media->id,
@@ -959,10 +997,10 @@ class ChatControllerTest extends TestCase
     public function testSessionDestroyReturns404WhenMediaNotAccessible(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => false]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => false]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
         $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
             'mediaId'   => $media->id,
@@ -976,10 +1014,10 @@ class ChatControllerTest extends TestCase
     public function testSessionDestroySucceeds(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
-        $session = \App\Models\ChatSession::create([
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        $session = ChatSession::create([
             'user_id'  => $user->id,
             'media_id' => $media->id,
             'title'    => 'Test session',
@@ -999,13 +1037,13 @@ class ChatControllerTest extends TestCase
     public function testSessionDestroyDoesNotAffectOtherUsersSessions(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $other   = User::factory()->create();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $user = $this->fakeLogin();
+        $other = User::factory()->create();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
 
-        $mySession    = \App\Models\ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
-        $otherSession = \App\Models\ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
+        $mySession = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
+        $otherSession = ChatSession::create(['user_id' => $other->id, 'media_id' => $media->id]);
 
         $this->json('DELETE', route('api.v1.media.chat.sessions.destroy', [
             'mediaId'   => $media->id,

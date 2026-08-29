@@ -87,7 +87,7 @@ class DailyDigestJob implements ShouldQueue
             ->whereHas('summaries', function ($summaries): void {
                 $summaries->where('status', Summary::STATUS_COMPLETED);
             })
-            ->with(['source', 'summary'])
+            ->with('source')
             ->orderByDesc('media.published_at')
             ->get();
     }

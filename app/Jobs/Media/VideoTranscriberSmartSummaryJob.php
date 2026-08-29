@@ -9,6 +9,7 @@ use Throwable;
 use App\Models\Media;
 use App\Models\Caption;
 use App\Models\Summary;
+use App\Utils\Const\ISO6391;
 use Hypervel\Queue\Queueable;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
@@ -82,13 +83,24 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
 
         $this->media->fill(['status' => Media::STATUS_SUMMARIZING])->save();
 
+        // 只認全站共用那一筆：使用者自己的摘要（user_id 有值）不能被這支
+        // 排程重跑蓋掉。locale 一律存正規化後的值，否則就跟 settings 那邊的
+        // 寫法對不上，Media::summaryFor() 永遠選不到。
         /** @var Summary $summary */
-        $summary = $this->media->summaries()->firstOrCreate(['locale' => $caption->locale]);
+        $summary = $this->media->summaries()->firstOrCreate([
+            'user_id' => null,
+            'locale'  => ISO6391::normalize((string) $caption->locale),
+        ]);
 
         $template = new SmartSummaryTemplate($this->languageCode);
 
+        // 時間戳只存在 segments 裡，`text` 是把每段用空白接起來的扁平字串——
+        // 餵 `text` 的話 prompt 裡那句「有時間戳就標註」永遠不會生效。舊資料或
+        // 其他來源可能沒有 segments，那時退回 `text`，摘要照做只是沒有時間點。
+        $transcript = $caption->timestampedTranscript() ?: (string) $caption->text;
+
         try {
-            $response = $client->completions($template->build($caption->text));
+            $response = $client->completions($template->build($transcript));
         } catch (VideoTranscriberAuthException) {
             $this->releaseOrFail($summary, self::AUTH_RETRY_DELAY_SECONDS);
             return;
@@ -134,7 +146,10 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
 
         /** @var null|Summary $summary */
         $summary = $locale
-            ? $this->media->summaries()->where('locale', $locale)->first()
+            ? $this->media->summaries()
+                ->whereNull('user_id')
+                ->where('locale', ISO6391::normalize((string) $locale))
+                ->first()
             : null;
 
         $this->markFailed($summary);

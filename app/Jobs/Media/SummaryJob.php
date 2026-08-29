@@ -8,6 +8,7 @@ use Throwable;
 use App\Models\Media;
 use App\Models\Summary;
 use App\Utils\AI\Completion;
+use App\Utils\Const\ISO6391;
 use Hypervel\Queue\Queueable;
 use App\Services\Prompts\TemplateFactory;
 use Hypervel\Queue\Contracts\ShouldQueue;
@@ -48,7 +49,8 @@ class SummaryJob implements ShouldQueue
         }
 
         $summary = $this->media->summaries()->firstOrCreate([
-            'locale' => $caption->locale,
+            'user_id' => null,
+            'locale'  => ISO6391::normalize((string) $caption->locale),
         ]);
 
         try {

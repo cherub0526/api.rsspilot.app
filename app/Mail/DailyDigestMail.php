@@ -69,8 +69,10 @@ class DailyDigestMail extends Mailable
         $emojis = ['🤖', '📊', '📱', '🧠', '🎯', '💡', '🚀', '📚'];
 
         return $this->videos->values()->map(function (Media $media, int $index) use ($gradients, $emojis): array {
+            // 與 /summaries、chat 取同一份摘要（見 Media::summaryFor()），只取
+            // 已完成的——信裡直接顯示內容，撈到還沒填的空殼就是一封空信。
             /** @var null|Summary $summary */
-            $summary = $media->summary()->first();
+            $summary = $media->summaryFor($this->user, true);
             $videoDetail = (array) $media->getAttribute('video_detail');
             $videoId = $videoDetail['yt:videoId'] ?? null;
             $rawDuration = (int) $media->getAttribute('duration');

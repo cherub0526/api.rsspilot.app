@@ -44,6 +44,34 @@ class DailyDigestJobTest extends TestCase
         );
     }
 
+    public function testUsesTheUsersOwnSummaryInTheirLocale(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $user->setting()->create(['data' => ['locale' => Summary::LOCALE_ZH_TW]]);
+        $source = $this->subscribe($user, true);
+        $media = $this->mediaFor($user, $source);
+        $media->summaries()->whereNull('user_id')->update(['text' => ['short_summary' => 'shared summary']]);
+
+        Summary::factory()->create([
+            'media_id' => $media->id,
+            'user_id'  => $user->id,
+            'locale'   => Summary::LOCALE_ZH_TW,
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['short_summary' => '我自己的摘要', 'long_summary' => ['key_points' => ['a']]],
+        ]);
+
+        (new DailyDigestJob($user->id, Carbon::today()->toDateString()))->handle();
+
+        Mail::assertSent(
+            DailyDigestMail::class,
+            // 共用那筆的 short_summary 是 'shared'，出現它就代表挑錯了。
+            fn (DailyDigestMail $mail) => str_contains($mail->render(), '我自己的摘要')
+                && !str_contains($mail->render(), 'shared summary')
+        );
+    }
+
     public function testSkipsMediaAddedOnAnotherDay(): void
     {
         Mail::fake();

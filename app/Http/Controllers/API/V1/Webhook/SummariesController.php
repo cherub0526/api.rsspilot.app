@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API\V1\Webhook;
 use App\Models\Media;
 use App\Models\Summary;
 use Hypervel\Http\Request;
+use App\Utils\Const\ISO6391;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
@@ -97,7 +98,10 @@ class SummariesController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        $summary = $media->summaries()->firstOrCreate(['locale' => $params['locale']]);
+        $summary = $media->summaries()->firstOrCreate([
+            'user_id' => null,
+            'locale'  => ISO6391::normalize((string) $params['locale']),
+        ]);
 
         // status 要跟著 text 一起寫。summaries.status 預設是 created，而讀取端
         // （chat、延伸問題）只認 completed 的摘要——只寫 text 的話這份摘要存在
