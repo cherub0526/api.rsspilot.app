@@ -155,7 +155,9 @@ use App\Models\Source;
 
 **為什麼一定要查**：測試環境是 **sqlite**（`DB_CONNECTION=sqlite_testing`），
 sqlite 對 `varchar(n)` 的長度**完全不強制**，超長字串照樣寫入、測試照樣綠燈；
-正式環境是 MySQL，同一筆資料可能直接拋 `QueryException` 變成 500。
+正式與 staging 是 **PostgreSQL**（Railway 兩個環境的 `DB_CONNECTION` 都是 `pgsql`，
+`config/database.php` 的預設值 `mysql` 只是 fallback，不代表實際使用的引擎），
+超長字串會直接拋 `QueryException` 變成 500。
 **這是測試抓不到的落差**，只能靠寫規則時自己查。
 
 **兩種處置擇一**，判準是「長度是不是使用者該被擋下的錯誤」：

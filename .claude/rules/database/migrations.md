@@ -163,8 +163,31 @@ return new class extends BaseMigration {
 ## 字串欄位長度會回到 Validator
 
 新增 `string('欄位', 長度)` 時，**同步確認對應的 Validator 有沒有 `max:`**。
-測試環境是 sqlite，不強制長度；正式環境是 MySQL，會拒絕超長寫入。
+測試環境是 sqlite，不強制長度；正式與 staging 是 PostgreSQL，會拒絕超長寫入。
 判準與寫法見 `../validators.md` 的〈寫規則前先查 DB 欄位長度〉。
+
+## 改既有欄位的型別要手寫 SQL
+
+Blueprint 的 `->change()` **在這個專案不能用**——它會走
+`Hyperf\Database\Schema\Grammars\ChangeColumn::compile()`，那裡先檢查
+`isDoctrineAvailable()`，而 `doctrine/dbal` 沒有安裝，直接拋 `RuntimeException`。
+
+改用 `DB::statement()` 手寫，並依 driver 分支——改欄位型別的語法三種資料庫互不相容：
+
+```php
+match (DB::connection()->getDriverName()) {
+    'pgsql' => DB::statement('ALTER TABLE t ALTER COLUMN c TYPE TEXT'),
+    'mysql' => DB::statement("ALTER TABLE `t` MODIFY `c` TEXT NOT NULL COMMENT '說明'"),
+    default => null,   // sqlite：測試環境，沒有改型別的語法，也不強制長度
+};
+```
+
+兩個容易漏的細節：
+
+- **MySQL 的 `MODIFY` 是整欄重新定義**，沒帶到的 `COMMENT`、`NOT NULL` 會被清掉，必須重寫。
+- **PostgreSQL 的欄位註解存在 `pg_description`**，改型別不會動到它，**不要**重下 `COMMENT`。
+
+實例見 `2026_08_30_100000_change_oauths_tokens_to_text.php`。
 
 ## Seeder
 
