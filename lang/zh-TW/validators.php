@@ -9,6 +9,7 @@ return [
         ],
         'oauth' => [
             'provider_not_configured' => '該登入方式尚未設定。',
+            'exchange_failed'         => '授權驗證失敗，請重新登入。',
         ],
         'media' => [
             'not_found'           => '找不到指定的媒體。',

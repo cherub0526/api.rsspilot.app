@@ -21,6 +21,7 @@ use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
+use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
@@ -90,6 +91,10 @@ Route::group('/oauth', function () {
     Route::post('/{provider}/redirect', [
         'as'   => 'redirect.store',
         'uses' => RedirectController::class . '@store',
+    ]);
+    Route::post('/{provider}/callback', [
+        'as'   => 'callback.store',
+        'uses' => CallbackController::class . '@store',
     ]);
 }, ['as' => 'oauth']);
 

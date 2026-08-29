@@ -1118,6 +1118,88 @@
                 ]
             }
         },
+        "/v1/oauth/{provider}/callback": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Exchange the provider authorization code for an access token",
+                "operationId": "api.v1.oauth.callback.store",
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "description": "OAuth provider. Only `google` is wired up right now.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "google",
+                                "facebook"
+                            ],
+                            "example": "google"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "code",
+                                    "redirect"
+                                ],
+                                "properties": {
+                                    "code": {
+                                        "description": "The authorization code the provider sent to the redirect URL.",
+                                        "type": "string",
+                                        "example": "4/0AfJohXl..."
+                                    },
+                                    "redirect": {
+                                        "description": "Must be byte-for-byte the value sent to /v1/oauth/{provider}/redirect. The provider rejects the exchange when the two differ.",
+                                        "type": "string",
+                                        "format": "uri",
+                                        "maxLength": 255,
+                                        "example": "https://rsspilot.app/oauth/google/callback"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1Qi..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                }
+            }
+        },
         "/v1/oauth/{provider}/redirect": {
             "post": {
                 "tags": [
@@ -1183,51 +1265,6 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/422"
-                    }
-                }
-            }
-        },
-        "/v1/auth/oauth/callback": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Handle OAuth provider callback and bind social account",
-                "operationId": "api.v1.auth.oauth.callback",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "provider",
-                                    "code"
-                                ],
-                                "properties": {
-                                    "provider": {
-                                        "type": "string",
-                                        "enum": [
-                                            "facebook",
-                                            "google"
-                                        ],
-                                        "example": "google"
-                                    },
-                                    "code": {
-                                        "type": "string",
-                                        "example": "4/0AfJohXl..."
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "OAuth account bound successfully"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
                     }
                 }
             }

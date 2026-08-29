@@ -9,6 +9,7 @@ return [
         ],
         'oauth' => [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
+            'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
         'media' => [
             'not_found'           => 'Media not found.',

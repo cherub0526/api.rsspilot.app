@@ -23,11 +23,19 @@ class OauthValidator extends BaseValidator
         ];
     }
 
+    /**
+     * 收 provider callback、拿 code 換 token 用。
+     *
+     * `redirect` 不是多餘的——provider 會核對交換 token 時的 redirect_uri 與當初
+     * 發出授權請求時的是否逐字相同，所以呼叫端必須把同一個值再送一次。
+     * `provider` 來自 URL 路徑段而不是 body，呼叫端要自己併進參數陣列。
+     */
     public function setStoreRules(): self
     {
         $this->rules = [
             'provider' => 'required|in:' . implode(',', array_keys(Oauth::$providerMaps)),
             'code'     => 'required',
+            'redirect' => 'required|string|url|max:255',
         ];
 
         return $this;
