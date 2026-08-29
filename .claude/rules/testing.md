@@ -62,6 +62,13 @@ class SourcesControllerTest extends TestCase
 | 登入 | `$this->fakeLogin()`（建 User + `actingAs`，回傳該 User） |
 | 執行 | `composer test`（**沒有** `php artisan test`、沒有 `--parallel`） |
 
+> **不要用 `vendor/bin/co-phpunit`。** 它把整個 PHPUnit 包進單一協程，
+> `RunTestsInCoroutine` 的「每測試一協程」包裝會因此完全不執行，502 個測試
+> 共用同一份 `Context`——`actingAs()` 的登入狀態跨測試外洩，所有斷言 401 的
+> 測試會拿到 2xx（實測 38 個假失敗）。也不要為了讓它變綠去改 `tearDown()`，
+> 那會傷到真正在用的 runner。完整因果見
+> `docs/lore/framework/pitfalls.md`〈`co-phpunit` 會關掉每測試一協程的隔離〉。
+
 ## 命名規範
 
 - 方法名稱用 `test` 前綴 + **PascalCase**：`testIndex()`、`testStoreChannel()`
@@ -153,3 +160,5 @@ docker compose exec hypervel composer test                              # 全部
 docker compose exec hypervel vendor/bin/phpunit tests/Feature/API/V1     # 單一目錄
 docker compose exec hypervel vendor/bin/phpunit --filter=testIndex       # 單一測試
 ```
+
+`vendor/bin/co-phpunit` 不在這個清單裡是刻意的——理由見上方的警告。

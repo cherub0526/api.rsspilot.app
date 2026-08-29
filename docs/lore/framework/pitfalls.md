@@ -205,3 +205,70 @@ public 屬性（含建構子 promoted 的 `public readonly`）在後面才寫進
 
 **測試抓不到**：`Mail::fake()` 只記錄 mailable、不渲染版型，所以斷言 `$mail->videos` 的測試會全綠而信
 一寄就爆。信件的測試至少要有一個案例真的呼叫 `$mail->render()`。
+
+## `co-phpunit` 會關掉每測試一協程的隔離，別拿它跑這個專案的測試
+
+`code:` `vendor/hyperf/testing/co-phpunit` · `code:` `vendor/hypervel/foundation/src/Testing/Concerns/RunTestsInCoroutine.php` → `runTest()` · `updated:` `2026-08-30` · `status:` `active`
+
+`vendor/bin/co-phpunit` 看起來像是「協程版的測試指令」，在這個專案跑它會得到 **38 個失敗**，
+而且失敗的樣子非常誤導：清一色是斷言 401 的測試拿到 200／204——像是認證整個壞掉。
+實際上一個 bug 都沒有，是測試隔離被那支指令關掉了。
+
+因果鏈：
+
+1. `co-phpunit` 把**整個 PHPUnit 應用程式**包進單一協程：
+
+   ```php
+   Swoole\Coroutine\run(function () use (&$code) {
+       $code = (new PHPUnit\TextUI\Application())->run($_SERVER['argv']);
+   });
+   ```
+
+2. `RunTestsInCoroutine::runTest()` 靠「我還在非協程環境」來決定要不要替**每一個測試**
+   各包一次 `run()`：
+
+   ```php
+   if (Coroutine::getCid() === -1 && $this->enableCoroutine) { ... }
+   ```
+
+   已經在協程裡，cid 不是 -1，條件為 false ⇒ 每測試一協程的包裝**完全不執行**。
+
+3. 502 個測試共用同一個協程 ⇒ 共用同一份 `Context`（`Hypervel\Context\Context` 底層是
+   `Coroutine::getContextFor($coroutineId)`，以協程 ID 索引）。
+
+4. `actingAs()` → `be()` → `guard()->setUser()` 與 `shouldUse()`，兩者都寫進 `Context`
+   （`JwtGuard::setUser()` 是 `Context::set($this->getContextKey(), $user)`）。於是**任何一個測試
+   呼叫過 `fakeLogin()` 之後，後面所有測試都繼承那個登入狀態**——所有「未登入應回 401」的
+   測試因此全數失敗。
+
+**這不是 Hypervel 特有的衝突**：`Hyperf\Testing\TestCase` 自己也 `use Concerns\RunTestsInCoroutine`，
+守衛條件一模一樣（多一個 `extension_loaded('swoole')`）。兩者是同一個問題的兩代解法，
+設計上互斥——外層先開協程，內層的守衛就永遠不成立。co-phpunit 早於 trait 出現，
+現在多半是遺留用法。
+
+**第二個後果，而且是靜默的**：`invokeSetupInCoroutine()` / `invokeTearDownInCoroutine()`
+只在 `runTestsInCoroutine()` 內被呼叫。那個方法不執行 ⇒ `setUpInCoroutine()` /
+`tearDownInCoroutine()` 兩個 hook 永遠不會觸發，且不報錯。本專案目前沒用到這兩個 hook。
+
+**不要試圖讓 co-phpunit 變綠。** 最直覺的解法是在 `Tests\TestCase::tearDown()` 加一行
+`Context::destroyAll()`，但那會傷到真正在用的 runner：正常 `phpunit` 下 `setUp()` /
+`tearDown()` 是跑在**非協程環境**的（包裝只涵蓋 `runTest()`，PHPUnit 的順序是
+setUp → runTest → tearDown），而 `destroyAll()` 在 cid < 0 時是
+
+```php
+if ($coroutineId < 0) {
+    static::$nonCoContext = [];   // 整個清掉
+    return;
+}
+```
+
+——會抹掉每個測試的協程賴以初始化的 `$nonCoContext`（`Context::copyFromNonCoroutine()`
+的來源）。為了一個沒人使用的入口，去動共用基礎設施，不划算。
+
+**唯一入口是 `composer test`**（= `phpunit -c phpunit.xml.dist`）。專案內沒有任何地方引用
+co-phpunit，`composer.lock` 提到它只是因為 `hyperf/testing` 宣告了這個 bin。
+
+**順帶釐清一個容易反過來想的點**：co-phpunit 反映的**不是**正式環境。正式環境是每個 worker
+process 常駐、但**每個請求一個協程**，`Context` 隨協程銷毀——兩個請求永遠不共用協程 Context。
+所以「一個測試 ≙ 一個請求」的 `phpunit` 才是正確類比。正式環境真正會跨請求殘留的是
+singleton / static / 容器層的狀態，那一層兩個 runner 條件相同，換 runner 沒有任何幫助。
