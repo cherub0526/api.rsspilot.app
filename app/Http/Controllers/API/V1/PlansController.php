@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\API\V1\Subscriptions;
+namespace App\Http\Controllers\API\V1;
 
 use App\Models\Plan;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\Http\Resources\PlanResource;
+use App\Http\Controllers\AbstractController;
 use App\OpenApi\Schemas\PlanResource as PlanSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
-class PlansController
+class PlansController extends AbstractController
 {
     #[OAT\Get(
         path: '/v1/plans',

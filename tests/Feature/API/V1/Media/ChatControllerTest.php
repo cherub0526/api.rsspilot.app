@@ -783,7 +783,7 @@ class ChatControllerTest extends TestCase
         $source = Source::factory()->create(['free' => false]);
         $media = Media::factory()->create(['source_id' => $source->id]);
 
-        $this->json('GET', route('api.v1.media.chat.stream', ['mediaId' => $media->id]))
+        $this->json('GET', route('api.v1.media.chat.stream.show', ['mediaId' => $media->id]))
             ->assertStatus(401);
     }
 
@@ -808,7 +808,7 @@ class ChatControllerTest extends TestCase
         $source = Source::factory()->create(['free' => false]);
         $media = Media::factory()->create(['source_id' => $source->id]);
 
-        $this->json('GET', route('api.v1.media.chat.stream', ['mediaId' => $media->id]))
+        $this->json('GET', route('api.v1.media.chat.stream.show', ['mediaId' => $media->id]))
             ->assertStatus(404);
     }
 

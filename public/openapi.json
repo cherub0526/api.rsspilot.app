@@ -144,43 +144,38 @@
                 }
             }
         },
-        "/v1/auth": {
+        "/v1/auth/logout": {
             "post": {
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Login and obtain access token",
-                "operationId": "api.v1.auth.store",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "account",
-                                    "password"
-                                ],
-                                "properties": {
-                                    "account": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "minLength": 6,
-                                        "example": "johndoe"
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "minLength": 8,
-                                        "example": "secret123"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
+                "summary": "Log the current user out",
+                "operationId": "api.v1.auth.logout.store",
                 "responses": {
                     "200": {
-                        "description": "Access token issued",
+                        "description": "OK."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/auth/refresh": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Exchange the current access token for a new one",
+                "operationId": "api.v1.auth.refresh.store",
+                "responses": {
+                    "200": {
+                        "description": "New access token issued",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -203,10 +198,15 @@
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
+                    "401": {
+                        "$ref": "#/components/responses/401"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/auth/register": {
@@ -215,7 +215,7 @@
                     "Auth"
                 ],
                 "summary": "Register a new user",
-                "operationId": "api.v1.auth.register",
+                "operationId": "api.v1.auth.register.store",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -259,6 +259,71 @@
                 "responses": {
                     "201": {
                         "description": "User registered and access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/auth": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login and obtain access token",
+                "operationId": "api.v1.auth.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "account",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "account": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "minLength": 6,
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "minLength": 8,
+                                        "example": "secret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Access token issued",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -434,7 +499,7 @@
                 ],
                 "summary": "Generate follow-up questions from the last AI answer",
                 "description": "GET /v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups.\n\n依這個 session 最後一則 AI 回應產生延伸問題；還沒有任何 AI 回應時改用影片\n摘要當素材。刻意做成獨立端點而不是掛在 chat 回應裡：前端在答案顯示完之後\n才來要，主流程的延遲不受影響。\n\n不計入每日 chat 額度——使用者只是看「可以接著問什麼」，還沒真的發問，\n光看建議就燒掉免費方案 3 次中的 1 次會讓功能沒人敢用。成本改由路由上的\nthrottle 中介層擋。但額度已經用盡時就不產生了：問題產出來也按不下去，\n只是白付一次推論的錢。",
-                "operationId": "api.v1.media.chat.sessions.followUps",
+                "operationId": "api.v1.media.chat.sessions.follow-ups.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -632,7 +697,7 @@
                 ],
                 "summary": "SSE long connection to receive AI reply tokens",
                 "description": "GET /v1/media/{mediaId}/chat/stream.\n\n建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。\n\n流程：\n 1. 開啟長連線，送出 connected 事件\n 2. 為此連線建立專屬 Swoole Channel\n 3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent\n    （依 userId + mediaId 過濾，只接收屬於自己的事件）\n 4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈",
-                "operationId": "api.v1.media.chat.stream",
+                "operationId": "api.v1.media.chat.stream.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -1091,6 +1156,33 @@
                 "responses": {
                     "200": {
                         "description": "OAuth account bound successfully"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/plans": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "List available subscription plans",
+                "operationId": "api.v1.plans.index",
+                "responses": {
+                    "200": {
+                        "description": "List of active subscription plans",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlanResource"
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
@@ -1732,31 +1824,157 @@
                 ]
             }
         },
-        "/v1/plans": {
+        "/v1/subscriptions/checkout-session": {
             "get": {
                 "tags": [
-                    "Plans"
+                    "Subscriptions"
                 ],
-                "summary": "List available subscription plans",
-                "operationId": "api.v1.plans.index",
+                "summary": "Retrieve Stripe Checkout Session status after redirect",
+                "operationId": "api.v1.subscriptions.checkout-session.index",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "query",
+                        "description": "Stripe Checkout Session ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "cs_live_xxx"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "List of active subscription plans",
+                        "description": "Session status with subscribed plan and billing info",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/PlanResource"
-                                    }
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "open",
+                                                "complete",
+                                                "expired"
+                                            ],
+                                            "example": "complete"
+                                        },
+                                        "customer_email": {
+                                            "type": "string",
+                                            "example": "user@example.com",
+                                            "nullable": true
+                                        },
+                                        "plan": {
+                                            "$ref": "#/components/schemas/PlanResource"
+                                        },
+                                        "billing": {
+                                            "description": "Present only when status=complete",
+                                            "properties": {
+                                                "period_start": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-05-30T00:00:00+00:00"
+                                                },
+                                                "period_end": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-06-30T00:00:00+00:00"
+                                                },
+                                                "amount": {
+                                                    "type": "number",
+                                                    "format": "float",
+                                                    "example": 9.99,
+                                                    "nullable": true
+                                                },
+                                                "currency": {
+                                                    "type": "string",
+                                                    "example": "USD",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
                                 }
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "description": "Session not found or does not belong to user"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/usage": {
+            "get": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get subscription usage statistics for the past 30 days",
+                "operationId": "api.v1.subscriptions.usage.index",
+                "responses": {
+                    "200": {
+                        "description": "Usage statistics",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "properties": {
+                                                "plan": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "type": "integer",
+                                                            "example": 10
+                                                        },
+                                                        "media": {
+                                                            "type": "integer",
+                                                            "example": 100
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "usage": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        },
+                                                        "media": {
+                                                            "type": "integer",
+                                                            "example": 42
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/subscriptions": {
@@ -1965,159 +2183,6 @@
                     },
                     "404": {
                         "description": "Subscription not found"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/subscriptions/usage": {
-            "get": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Get subscription usage statistics for the past 30 days",
-                "operationId": "api.v1.subscriptions.usage",
-                "responses": {
-                    "200": {
-                        "description": "Usage statistics",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "data": {
-                                            "properties": {
-                                                "plan": {
-                                                    "properties": {
-                                                        "channels": {
-                                                            "type": "integer",
-                                                            "example": 10
-                                                        },
-                                                        "media": {
-                                                            "type": "integer",
-                                                            "example": 100
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                },
-                                                "usage": {
-                                                    "properties": {
-                                                        "channels": {
-                                                            "type": "integer",
-                                                            "example": 3
-                                                        },
-                                                        "media": {
-                                                            "type": "integer",
-                                                            "example": 42
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/subscriptions/checkout-session": {
-            "get": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Retrieve Stripe Checkout Session status after redirect",
-                "operationId": "api.v1.subscriptions.checkout-session",
-                "parameters": [
-                    {
-                        "name": "session_id",
-                        "in": "query",
-                        "description": "Stripe Checkout Session ID",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "example": "cs_live_xxx"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Session status with subscribed plan and billing info",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "enum": [
-                                                "open",
-                                                "complete",
-                                                "expired"
-                                            ],
-                                            "example": "complete"
-                                        },
-                                        "customer_email": {
-                                            "type": "string",
-                                            "example": "user@example.com",
-                                            "nullable": true
-                                        },
-                                        "plan": {
-                                            "$ref": "#/components/schemas/PlanResource"
-                                        },
-                                        "billing": {
-                                            "description": "Present only when status=complete",
-                                            "properties": {
-                                                "period_start": {
-                                                    "type": "string",
-                                                    "format": "date-time",
-                                                    "example": "2026-05-30T00:00:00+00:00"
-                                                },
-                                                "period_end": {
-                                                    "type": "string",
-                                                    "format": "date-time",
-                                                    "example": "2026-06-30T00:00:00+00:00"
-                                                },
-                                                "amount": {
-                                                    "type": "number",
-                                                    "format": "float",
-                                                    "example": 9.99,
-                                                    "nullable": true
-                                                },
-                                                "currency": {
-                                                    "type": "string",
-                                                    "example": "USD",
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object",
-                                            "nullable": true
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    },
-                    "404": {
-                        "description": "Session not found or does not belong to user"
                     }
                 },
                 "security": [
@@ -3452,6 +3517,10 @@
             "description": "Media"
         },
         {
+            "name": "Plans",
+            "description": "Plans"
+        },
+        {
             "name": "Popularies",
             "description": "Popularies"
         },
@@ -3466,10 +3535,6 @@
         {
             "name": "Sources",
             "description": "Sources"
-        },
-        {
-            "name": "Plans",
-            "description": "Plans"
         },
         {
             "name": "Subscriptions",

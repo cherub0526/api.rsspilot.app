@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Feature\API\V1\Subscriptions;
+namespace Tests\Feature\API\V1;
 
 use Tests\TestCase;
 use App\Models\Plan;

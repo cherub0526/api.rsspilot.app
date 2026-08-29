@@ -42,7 +42,7 @@ class FollowUpsController
      */
     #[OAT\Get(
         path: '/v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups',
-        operationId: 'api.v1.media.chat.sessions.followUps',
+        operationId: 'api.v1.media.chat.sessions.follow-ups.show',
         summary: 'Generate follow-up questions from the last AI answer',
         security: [['bearerAuth' => []]],
         tags: ['Media'],

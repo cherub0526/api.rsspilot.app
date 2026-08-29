@@ -286,7 +286,7 @@ class SubscriptionsControllerTest extends TestCase
      */
     public function testCheckoutSession()
     {
-        $uri = route('api.v1.subscriptions.checkout-session');
+        $uri = route('api.v1.subscriptions.checkout-session.index');
 
         // Unauthenticated
         $this->json('GET', $uri)->assertStatus(401);
@@ -301,7 +301,7 @@ class SubscriptionsControllerTest extends TestCase
 
     public function testUsage()
     {
-        $uri = route('api.v1.subscriptions.usage');
+        $uri = route('api.v1.subscriptions.usage.index');
 
         // Unauthenticated
         $this->json('GET', $uri)->assertStatus(401);

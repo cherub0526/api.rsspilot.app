@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\API\V1;
+namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Models\User;
 use Hypervel\Http\Request;
@@ -14,7 +14,7 @@ use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\Http\Controllers\Concerns\IssuesAccessToken;
 
-class AuthController extends AbstractController
+class RegisterController extends AbstractController
 {
     use IssuesAccessToken;
 
@@ -22,13 +22,13 @@ class AuthController extends AbstractController
      * @throws InvalidRequestException
      */
     #[OAT\Post(
-        path: '/v1/auth',
-        operationId: 'api.v1.auth.store',
-        summary: 'Login and obtain access token',
+        path: '/v1/auth/register',
+        operationId: 'api.v1.auth.register.store',
+        summary: 'Register a new user',
         requestBody: new OAT\RequestBody(
             required: true,
             content: new OAT\JsonContent(
-                required: ['account', 'password'],
+                required: ['account', 'email', 'password', 'password_confirmation'],
                 properties: [
                     new OAT\Property(
                         property: 'account',
@@ -38,7 +38,20 @@ class AuthController extends AbstractController
                         example: 'johndoe'
                     ),
                     new OAT\Property(
+                        property: 'email',
+                        type: 'string',
+                        format: 'email',
+                        maxLength: 255,
+                        example: 'johndoe@example.com'
+                    ),
+                    new OAT\Property(
                         property: 'password',
+                        type: 'string',
+                        minLength: 8,
+                        example: 'secret123'
+                    ),
+                    new OAT\Property(
+                        property: 'password_confirmation',
                         type: 'string',
                         minLength: 8,
                         example: 'secret123'
@@ -49,8 +62,8 @@ class AuthController extends AbstractController
         tags: ['Auth'],
         responses: [
             new OAT\Response(
-                response: 200,
-                description: 'Access token issued',
+                response: 201,
+                description: 'User registered and access token issued',
                 content: new OAT\JsonContent(
                     properties: [
                         new OAT\Property(
@@ -68,17 +81,13 @@ class AuthController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['account', 'password']);
+        $params = $request->only(['account', 'email', 'password', 'password_confirmation']);
 
         $v = new AuthValidator($params);
-        $v->setStoreRules();
+        $v->setRegisterRules();
 
         if (!$v->passes()) {
             throw new InvalidRequestException($v->errors()->toArray());
-        }
-
-        if (!$this->guard()->attempt($params)) {
-            throw new InvalidRequestException(['password' => [__('validators.controllers.auth.invalid_credentials')]]);
         }
 
         $user = User::query()
@@ -86,6 +95,18 @@ class AuthController extends AbstractController
             ->where('social_type', User::SOCIAL_TYPE_LOCAL)
             ->first();
 
-        return $this->responseAccessToken($this->guard()->login($user));
+        if (!$user) {
+            $user = User::create([
+                'account'     => $params['account'],
+                'name'        => $params['account'],
+                'email'       => $params['email'],
+                'password'    => bcrypt($params['password']),
+                'social_type' => User::SOCIAL_TYPE_LOCAL,
+            ]);
+        }
+
+        $token = $this->guard()->login($user);
+
+        return $this->responseAccessToken($token, 201);
     }
 }

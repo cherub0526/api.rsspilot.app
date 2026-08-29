@@ -6,6 +6,7 @@ use Hypervel\Support\Facades\Route;
 use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
+use App\Http\Controllers\API\V1\PlansController;
 use App\Http\Controllers\API\V1\UsersController;
 use App\Http\Controllers\API\V1\SourcesController;
 use App\Http\Controllers\API\V1\SettingsController;
@@ -13,21 +14,25 @@ use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
 use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Auth\GoogleController;
+use App\Http\Controllers\API\V1\Auth\LogoutController;
+use App\Http\Controllers\API\V1\Auth\RefreshController;
 use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\Webhook\GroqController;
+use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
-use App\Http\Controllers\API\V1\Subscriptions\PlansController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
+use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\FollowUpsController as ChatFollowUpsController;
+use App\Http\Controllers\API\V1\Subscriptions\UsageController as SubscriptionUsageController;
 
 Route::group('/feedbacks', function () {
     Route::post('/', [
@@ -60,20 +65,20 @@ Route::group('/auth', function () {
 
     Route::post(
         '/register',
-        ['as' => 'register', 'uses' => AuthController::class . '@register']
+        ['as' => 'register.store', 'uses' => RegisterController::class . '@store']
     );
 
     Route::post('/', ['as' => 'store', 'uses' => AuthController::class . '@store']);
 
     Route::post(
         '/refresh',
-        ['as' => 'refresh', 'uses' => AuthController::class . '@refresh', 'middleware' => ['auth']]
+        ['as' => 'refresh.store', 'uses' => RefreshController::class . '@store', 'middleware' => ['auth']]
     );
     Route::post(
         '/logout',
         [
-            'as'         => 'logout',
-            'uses'       => AuthController::class . '@logout',
+            'as'         => 'logout.store',
+            'uses'       => LogoutController::class . '@store',
             'middleware' => ['auth'],
         ]
     );
@@ -264,7 +269,7 @@ Route::group('/media', function () {
             'middleware' => ['auth'],
         ]);
         Route::get('/stream', [
-            'as'         => 'stream',
+            'as'         => 'stream.show',
             'uses'       => ChatStreamController::class . '@show',
             'middleware' => ['auth'],
         ]);
@@ -294,7 +299,7 @@ Route::group('/media', function () {
         Route::get(
             '/sessions/{sessionId:[0-7][0-9a-hjkmnp-tv-z]{25}}/follow-ups',
             [
-                'as'         => 'sessions.follow-ups',
+                'as'         => 'sessions.follow-ups.show',
                 'uses'       => ChatFollowUpsController::class . '@show',
                 'middleware' => ['auth', 'throttle:10,1'],
             ]
@@ -316,6 +321,21 @@ Route::group('/subscriptions', function () {
         'uses'       => SubscriptionsController::class . '@store',
         'middleware' => ['auth'],
     ]);
+    // 靜態段排在同層動態段之前。`{subscriptionId}` 沒有格式約束，目前只掛
+    // PUT/DELETE 所以還撞不到這兩條 GET——但只要哪天補上 GET /{subscriptionId}，
+    // 順序就是唯一的保障，不要等到那時候才調。
+    Route::get('/checkout-session', [
+        'as'         => 'checkout-session.index',
+        'uses'       => CheckoutSessionController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::get('/usage', [
+        'as'         => 'usage.index',
+        'uses'       => SubscriptionUsageController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+
     Route::put('/{subscriptionId}', [
         'as'         => 'update',
         'uses'       => SubscriptionsController::class . '@update',
@@ -324,18 +344,6 @@ Route::group('/subscriptions', function () {
     Route::delete('/{subscriptionId}', [
         'as'         => 'destroy',
         'uses'       => SubscriptionsController::class . '@destroy',
-        'middleware' => ['auth'],
-    ]);
-
-    Route::get('/checkout-session', [
-        'as'         => 'checkout-session',
-        'uses'       => SubscriptionsController::class . '@checkoutSession',
-        'middleware' => ['auth'],
-    ]);
-
-    Route::get('/usage', [
-        'as'         => 'usage',
-        'uses'       => SubscriptionsController::class . '@usage',
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'subscriptions']);
