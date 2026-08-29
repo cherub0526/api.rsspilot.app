@@ -21,6 +21,7 @@ use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
+use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
@@ -83,6 +84,14 @@ Route::group('/auth', function () {
         ]
     );
 }, ['as' => 'auth']);
+
+// 登入流程的起點，必然是未登入狀態，不掛 auth。
+Route::group('/oauth', function () {
+    Route::post('/{provider}/redirect', [
+        'as'   => 'redirect.store',
+        'uses' => RedirectController::class . '@store',
+    ]);
+}, ['as' => 'oauth']);
 
 Route::group('/users', function () {
     Route::get(

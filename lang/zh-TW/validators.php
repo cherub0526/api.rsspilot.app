@@ -7,10 +7,13 @@ return [
         'auth' => [
             'invalid_credentials' => '帳號或密碼無效。',
         ],
+        'oauth' => [
+            'provider_not_configured' => '該登入方式尚未設定。',
+        ],
         'media' => [
-            'not_found'          => '找不到指定的媒體。',
-            'caption_not_found'  => '找不到指定的字幕。',
-            'invalid_url'        => '無效的 YouTube 影片網址。',
+            'not_found'           => '找不到指定的媒體。',
+            'caption_not_found'   => '找不到指定的字幕。',
+            'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
         ],
         'chat' => [
@@ -106,6 +109,12 @@ return [
         ],
         'code' => [
             'required' => '代碼為必填。',
+        ],
+        'redirect' => [
+            'required' => '導轉網址為必填。',
+            'string'   => '導轉網址必須是字串。',
+            'url'      => '導轉網址格式不正確。',
+            'max'      => '導轉網址不得超過 :max 個字元。',
         ],
     ],
     'rss' => [
@@ -247,9 +256,9 @@ return [
                 'string'   => 'text.short_summary 必須是字串。',
             ],
             'long_summary' => [
-                'required'   => 'text.long_summary 欄位為必填項。',
-                'array'      => 'text.long_summary 必須是陣列。',
-                'content'    => [
+                'required' => 'text.long_summary 欄位為必填項。',
+                'array'    => 'text.long_summary 必須是陣列。',
+                'content'  => [
                     'required' => 'text.long_summary.content 欄位為必填項。',
                     'string'   => 'text.long_summary.content 必須是字串。',
                 ],

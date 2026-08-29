@@ -1118,6 +1118,75 @@
                 ]
             }
         },
+        "/v1/oauth/{provider}/redirect": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Build the provider authorization URL to start an OAuth sign-in",
+                "operationId": "api.v1.oauth.redirect.store",
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "description": "OAuth provider. Only `google` is wired up right now.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "google",
+                                "facebook"
+                            ],
+                            "example": "google"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "redirect"
+                                ],
+                                "properties": {
+                                    "redirect": {
+                                        "description": "Where the provider sends the user back to. Must be registered with the provider beforehand.",
+                                        "type": "string",
+                                        "format": "uri",
+                                        "maxLength": 255,
+                                        "example": "https://rsspilot.app/oauth/callback"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Authorization URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "example": "https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=https%3A%2F%2Frsspilot.app%2Foauth%2Fcallback&scope=openid+profile+email&response_type=code"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                }
+            }
+        },
         "/v1/auth/oauth/callback": {
             "post": {
                 "tags": [
@@ -3333,6 +3402,27 @@
                                 "message": {
                                     "type": "string",
                                     "example": "Not found."
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            },
+            "422": {
+                "description": "Invalid request parameters",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "messages": {
+                                    "description": "驗證失敗的實際回應。\n\n`App\\Exceptions\\InvalidRequestException::render()` 回的是 422 加上 `messages`\n這個鍵（不是 400、也不是 `errors`）——`$statusCode` 與 `render()` 兩處都寫死了。\n既有端點多半沿用 Http400，那份與執行期行為對不上；新端點請用這一份。",
+                                    "type": "object",
+                                    "example": {
+                                        "redirect": [
+                                            "導轉網址為必填。"
+                                        ]
+                                    }
                                 }
                             },
                             "type": "object"

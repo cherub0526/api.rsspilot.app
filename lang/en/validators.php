@@ -7,10 +7,13 @@ return [
         'auth' => [
             'invalid_credentials' => 'Invalid account or password.',
         ],
+        'oauth' => [
+            'provider_not_configured' => 'This sign-in method is not configured yet.',
+        ],
         'media' => [
-            'not_found'          => 'Media not found.',
-            'caption_not_found'  => 'Caption not found.',
-            'invalid_url'        => 'Invalid YouTube video URL.',
+            'not_found'           => 'Media not found.',
+            'caption_not_found'   => 'Caption not found.',
+            'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
         ],
         'chat' => [
@@ -26,11 +29,11 @@ return [
             'channel_limit_reached' => 'You have reached the channel subscription limit for your plan.',
         ],
         'subscription' => [
-            'plan_not_found'       => 'Plan not found.',
-            'price_not_found'      => 'Price not found.',
-            'price_not_in_plan'    => 'Price not found in plan.',
-            'not_found'            => 'Subscription not found.',
-            'session_id_required'  => 'session_id is required.',
+            'plan_not_found'      => 'Plan not found.',
+            'price_not_found'     => 'Price not found.',
+            'price_not_in_plan'   => 'Price not found in plan.',
+            'not_found'           => 'Subscription not found.',
+            'session_id_required' => 'session_id is required.',
         ],
         'webhook' => [
             'paddle' => [
@@ -106,6 +109,12 @@ return [
         ],
         'code' => [
             'required' => 'Code is required.',
+        ],
+        'redirect' => [
+            'required' => 'Redirect URL is required.',
+            'string'   => 'Redirect URL must be a string.',
+            'url'      => 'Redirect URL is invalid.',
+            'max'      => 'Redirect URL may not be greater than :max characters.',
         ],
     ],
     'rss' => [
@@ -248,9 +257,9 @@ return [
                 'string'   => 'The text.short_summary must be a string.',
             ],
             'long_summary' => [
-                'required'   => 'The text.long_summary field is required.',
-                'array'      => 'The text.long_summary must be an array.',
-                'content'    => [
+                'required' => 'The text.long_summary field is required.',
+                'array'    => 'The text.long_summary must be an array.',
+                'content'  => [
                     'required' => 'The text.long_summary.content field is required.',
                     'string'   => 'The text.long_summary.content must be a string.',
                 ],

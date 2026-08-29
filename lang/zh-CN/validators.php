@@ -7,10 +7,13 @@ return [
         'auth' => [
             'invalid_credentials' => '帐号或密码无效。',
         ],
+        'oauth' => [
+            'provider_not_configured' => '该登录方式尚未设置。',
+        ],
         'media' => [
-            'not_found'          => '找不到指定的媒体。',
-            'caption_not_found'  => '找不到指定的字幕。',
-            'invalid_url'        => '无效的 YouTube 影片网址。',
+            'not_found'           => '找不到指定的媒体。',
+            'caption_not_found'   => '找不到指定的字幕。',
+            'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
         ],
         'chat' => [
@@ -106,6 +109,12 @@ return [
         ],
         'code' => [
             'required' => '代码为必填。',
+        ],
+        'redirect' => [
+            'required' => '跳转网址为必填。',
+            'string'   => '跳转网址必须是字符串。',
+            'url'      => '跳转网址格式不正确。',
+            'max'      => '跳转网址不得超过 :max 个字符。',
         ],
     ],
     'rss' => [
@@ -248,9 +257,9 @@ return [
                 'string'   => 'text.short_summary 必须是字符串。',
             ],
             'long_summary' => [
-                'required'   => 'text.long_summary 字段为必填项。',
-                'array'      => 'text.long_summary 必须是数组。',
-                'content'    => [
+                'required' => 'text.long_summary 字段为必填项。',
+                'array'    => 'text.long_summary 必须是数组。',
+                'content'  => [
                     'required' => 'text.long_summary.content 字段为必填项。',
                     'string'   => 'text.long_summary.content 必须是字符串。',
                 ],

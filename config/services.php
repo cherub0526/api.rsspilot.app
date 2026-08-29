@@ -36,15 +36,23 @@ return [
         ],
     ],
 
+    /*
+     * `redirect` 的預設值是空字串而不是 null，這一點不能省。
+     *
+     * SocialiteManager::formatRedirectUrl() 的回傳型別是 string，拿到 null 會在
+     * 「建構 driver 的當下」就丟 TypeError——早於任何 ->redirectUrl() 覆寫，所以
+     * 呼叫端補不回來。POST /v1/oauth/{provider}/redirect 一律以請求帶進來的
+     * redirect 覆寫這個值，config 這份純粹是為了讓 driver 建得起來。
+     */
     'facebook' => [
         'client_id'     => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect'      => env('FACEBOOK_REDIRECT_URI'),
+        'redirect'      => env('FACEBOOK_REDIRECT_URI', ''),
     ],
     'google' => [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect'      => env('GOOGLE_REDIRECT_URI'),
+        'redirect'      => env('GOOGLE_REDIRECT_URI', ''),
     ],
 
     'rapidapi' => [
