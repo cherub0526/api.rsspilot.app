@@ -445,6 +445,104 @@
             }
         },
         "/v1/custom-prompts/{promptId}": {
+            "get": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Show one custom prompt",
+                "operationId": "api.v1.custom-prompts.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/promptId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Replace a custom prompt",
+                "operationId": "api.v1.custom-prompts.update",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/promptId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "學習筆記摘要"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
             "delete": {
                 "tags": [
                     "CustomPrompts"
@@ -453,13 +551,7 @@
                 "operationId": "api.v1.custom-prompts.destroy",
                 "parameters": [
                     {
-                        "name": "promptId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer",
-                            "example": 12
-                        }
+                        "$ref": "#/components/parameters/promptId"
                     }
                 ],
                 "responses": {
@@ -3701,6 +3793,16 @@
                 "schema": {
                     "type": "string",
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "promptId": {
+                "name": "promptId",
+                "in": "path",
+                "description": "Custom prompt ID",
+                "required": true,
+                "schema": {
+                    "type": "integer",
+                    "example": 12
                 }
             },
             "sourceId": {

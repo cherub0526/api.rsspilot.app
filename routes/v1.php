@@ -102,6 +102,14 @@ Route::group('/oauth', function () {
 Route::group('/custom-prompts', function () {
     Route::get('/', ['as' => 'index', 'uses' => CustomPromptsController::class . '@index']);
     Route::post('/', ['as' => 'store', 'uses' => CustomPromptsController::class . '@store']);
+    Route::get('/{promptId:[0-9]+}', [
+        'as'   => 'show',
+        'uses' => CustomPromptsController::class . '@show',
+    ]);
+    Route::put('/{promptId:[0-9]+}', [
+        'as'   => 'update',
+        'uses' => CustomPromptsController::class . '@update',
+    ]);
     Route::delete('/{promptId:[0-9]+}', [
         'as'   => 'destroy',
         'uses' => CustomPromptsController::class . '@destroy',

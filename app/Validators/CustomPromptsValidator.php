@@ -42,4 +42,18 @@ class CustomPromptsValidator extends BaseValidator
 
         return $this;
     }
+
+    /**
+     * PUT 是整筆取代而不是局部更新，兩個欄位都必填，規則與新增相同。
+     * 仍然分成兩個方法：日後兩者要分頭調整時不必先拆。
+     */
+    public function setUpdateRules(): self
+    {
+        $this->rules = [
+            'title'   => 'required|string|max:255',
+            'content' => 'required|string|max:' . self::CONTENT_MAX_LENGTH,
+        ];
+
+        return $this;
+    }
 }

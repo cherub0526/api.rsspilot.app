@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1;
 
 use Hypervel\Http\Request;
+use App\Models\CustomPrompt;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\OpenApi\Responses\Http422;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
+use App\OpenApi\Parameters\Path\PromptId;
 use App\Validators\CustomPromptsValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
@@ -113,6 +115,92 @@ class CustomPromptsController extends AbstractController
     /**
      * @throws NotFoundHttpException
      */
+    #[OAT\Get(
+        path: '/v1/custom-prompts/{promptId}',
+        operationId: 'api.v1.custom-prompts.show',
+        summary: 'Show one custom prompt',
+        security: [['bearerAuth' => []]],
+        tags: ['CustomPrompts'],
+        parameters: [
+            new OAT\Parameter(ref: PromptId::class),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OAT\JsonContent(ref: CustomPromptSchema::class)
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+        ]
+    )]
+    public function show(Request $request, string $promptId): CustomPromptResource
+    {
+        return new CustomPromptResource($this->findOrFail($request, $promptId));
+    }
+
+    /**
+     * @throws InvalidRequestException
+     * @throws NotFoundHttpException
+     */
+    #[OAT\Put(
+        path: '/v1/custom-prompts/{promptId}',
+        operationId: 'api.v1.custom-prompts.update',
+        summary: 'Replace a custom prompt',
+        security: [['bearerAuth' => []]],
+        requestBody: new OAT\RequestBody(
+            required: true,
+            content: new OAT\JsonContent(
+                required: ['title', 'content'],
+                properties: [
+                    new OAT\Property(property: 'title', type: 'string', maxLength: 255, example: '學習筆記摘要'),
+                    new OAT\Property(
+                        property: 'content',
+                        type: 'string',
+                        example: '請以學習筆記的風格整理這部影片的重點…'
+                    ),
+                ]
+            )
+        ),
+        tags: ['CustomPrompts'],
+        parameters: [
+            new OAT\Parameter(ref: PromptId::class),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'Updated',
+                content: new OAT\JsonContent(ref: CustomPromptSchema::class)
+            ),
+            new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
+            new OAT\Response(ref: Http422::class, response: 422),
+        ]
+    )]
+    public function update(Request $request, string $promptId): CustomPromptResource
+    {
+        $params = $request->only(['title', 'content']);
+
+        $validator = (new CustomPromptsValidator($params))->setUpdateRules();
+
+        if (!$validator->passes()) {
+            throw new InvalidRequestException($validator->errors()->toArray());
+        }
+
+        // 先驗證再查：欄位不合法時不需要碰資料庫，也讓 422 的判斷不受 id 存不存在影響。
+        $prompt = $this->findOrFail($request, $promptId);
+
+        $prompt->update([
+            'title'   => $params['title'],
+            'content' => $params['content'],
+        ]);
+
+        return new CustomPromptResource($prompt);
+    }
+
+    /**
+     * @throws NotFoundHttpException
+     */
     #[OAT\Delete(
         path: '/v1/custom-prompts/{promptId}',
         operationId: 'api.v1.custom-prompts.destroy',
@@ -120,12 +208,7 @@ class CustomPromptsController extends AbstractController
         security: [['bearerAuth' => []]],
         tags: ['CustomPrompts'],
         parameters: [
-            new OAT\Parameter(
-                name: 'promptId',
-                in: 'path',
-                required: true,
-                schema: new OAT\Schema(type: 'integer', example: 12)
-            ),
+            new OAT\Parameter(ref: PromptId::class),
         ],
         responses: [
             new OAT\Response(response: 200, description: 'Deleted'),
@@ -135,13 +218,23 @@ class CustomPromptsController extends AbstractController
     )]
     public function destroy(Request $request, string $promptId): ResponseInterface
     {
-        // 別人的 id 與不存在的 id 走同一條 404：回應不該透露這筆資料存不存在。
+        $this->findOrFail($request, $promptId)->delete();
+
+        return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * 只在當前使用者的設定裡找。別人的 id 與不存在的 id 走同一條 404——
+     * 回應不該透露這筆資料存不存在。
+     *
+     * @throws NotFoundHttpException
+     */
+    private function findOrFail(Request $request, string $promptId): CustomPrompt
+    {
         if (!$prompt = $request->user()->customPrompts()->find($promptId)) {
             throw new NotFoundHttpException();
         }
 
-        $prompt->delete();
-
-        return response()->make(self::RESPONSE_OK);
+        return $prompt;
     }
 }

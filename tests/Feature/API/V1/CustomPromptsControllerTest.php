@@ -102,6 +102,86 @@ class CustomPromptsControllerTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function testShowReturnsTheOwnPrompt(): void
+    {
+        $user = $this->fakeLogin();
+        $prompt = $this->makePrompt($user);
+
+        $uri = route('api.v1.custom-prompts.show', ['promptId' => $prompt->getKey()]);
+
+        $this->json('GET', $uri)
+            ->assertStatus(200)
+            ->assertJsonPath('title', '學習筆記摘要')
+            ->assertJsonPath('content', '請以學習筆記的風格整理這部影片的重點。');
+    }
+
+    public function testShowDoesNotExposeSomeoneElsePrompt(): void
+    {
+        $this->fakeLogin();
+
+        $other = User::factory()->create();
+        $prompt = $this->makePrompt($other, '別人的設定');
+
+        $uri = route('api.v1.custom-prompts.show', ['promptId' => $prompt->getKey()]);
+
+        $this->json('GET', $uri)->assertStatus(404);
+    }
+
+    public function testShowRequiresAuthentication(): void
+    {
+        $user = User::factory()->create();
+        $prompt = $this->makePrompt($user);
+
+        $uri = route('api.v1.custom-prompts.show', ['promptId' => $prompt->getKey()]);
+
+        $this->json('GET', $uri)->assertStatus(401);
+    }
+
+    public function testUpdateReplacesTheOwnPrompt(): void
+    {
+        $user = $this->fakeLogin();
+        $prompt = $this->makePrompt($user);
+
+        $uri = route('api.v1.custom-prompts.update', ['promptId' => $prompt->getKey()]);
+
+        $this->json('PUT', $uri, [
+            'title'   => '改過的標題',
+            'content' => '改過的內容。',
+        ])->assertStatus(200)->assertJsonPath('title', '改過的標題');
+
+        $fresh = $prompt->fresh();
+
+        $this->assertSame('改過的標題', $fresh->title);
+        $this->assertSame('改過的內容。', $fresh->content);
+    }
+
+    public function testUpdateRejectsMissingFields(): void
+    {
+        $user = $this->fakeLogin();
+        $prompt = $this->makePrompt($user);
+
+        $uri = route('api.v1.custom-prompts.update', ['promptId' => $prompt->getKey()]);
+
+        $this->json('PUT', $uri, [])->assertStatus(422);
+    }
+
+    public function testUpdateDoesNotTouchSomeoneElsePrompt(): void
+    {
+        $this->fakeLogin();
+
+        $other = User::factory()->create();
+        $prompt = $this->makePrompt($other, '別人的設定');
+
+        $uri = route('api.v1.custom-prompts.update', ['promptId' => $prompt->getKey()]);
+
+        $this->json('PUT', $uri, [
+            'title'   => '被改掉了',
+            'content' => '被改掉了。',
+        ])->assertStatus(404);
+
+        $this->assertSame('別人的設定', $prompt->fresh()->title);
+    }
+
     public function testDestroyRemovesTheOwnPrompt(): void
     {
         $user = $this->fakeLogin();
