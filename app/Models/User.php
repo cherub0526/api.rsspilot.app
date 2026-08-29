@@ -64,6 +64,11 @@ class User extends Authenticatable
         return $this->hasMany(Oauth::class, 'user_id', 'id');
     }
 
+    public function customPrompts(): HasMany
+    {
+        return $this->hasMany(CustomPrompt::class, 'user_id', 'id');
+    }
+
     public function rss()
     {
         return $this->belongsToMany(

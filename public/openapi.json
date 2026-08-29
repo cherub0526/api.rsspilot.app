@@ -352,6 +352,134 @@
                 }
             }
         },
+        "/v1/custom-prompts": {
+            "get": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "List the current user custom prompts",
+                "operationId": "api.v1.custom-prompts.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CustomPromptResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Create a custom prompt",
+                "operationId": "api.v1.custom-prompts.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "學習筆記摘要"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/custom-prompts/{promptId}": {
+            "delete": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Delete a custom prompt",
+                "operationId": "api.v1.custom-prompts.destroy",
+                "parameters": [
+                    {
+                        "name": "promptId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "example": 12
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/feedbacks": {
             "post": {
                 "tags": [
@@ -3040,6 +3168,33 @@
                 },
                 "type": "object"
             },
+            "CustomPromptResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "12"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "學習筆記摘要"
+                    },
+                    "content": {
+                        "type": "string",
+                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "MediaResource": {
                 "properties": {
                     "id": {
@@ -3634,6 +3789,10 @@
         {
             "name": "Auth",
             "description": "Auth"
+        },
+        {
+            "name": "CustomPrompts",
+            "description": "CustomPrompts"
         },
         {
             "name": "Feedbacks",

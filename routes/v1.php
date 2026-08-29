@@ -19,6 +19,7 @@ use App\Http\Controllers\API\V1\Auth\RefreshController;
 use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
+use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
@@ -97,6 +98,15 @@ Route::group('/oauth', function () {
         'uses' => CallbackController::class . '@store',
     ]);
 }, ['as' => 'oauth']);
+
+Route::group('/custom-prompts', function () {
+    Route::get('/', ['as' => 'index', 'uses' => CustomPromptsController::class . '@index']);
+    Route::post('/', ['as' => 'store', 'uses' => CustomPromptsController::class . '@store']);
+    Route::delete('/{promptId:[0-9]+}', [
+        'as'   => 'destroy',
+        'uses' => CustomPromptsController::class . '@destroy',
+    ]);
+}, ['as' => 'custom-prompts', 'middleware' => ['auth']]);
 
 Route::group('/users', function () {
     Route::get(

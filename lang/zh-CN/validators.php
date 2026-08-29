@@ -103,6 +103,18 @@ return [
             'string'   => '网址必须是字符串。',
         ],
     ],
+    'custom_prompts' => [
+        'title' => [
+            'required' => '标题为必填。',
+            'string'   => '标题必须是字符串。',
+            'max'      => '标题不得超过 :max 个字符。',
+        ],
+        'content' => [
+            'required' => '内容为必填。',
+            'string'   => '内容必须是字符串。',
+            'max'      => '内容不得超过 :max 个字符。',
+        ],
+    ],
     'oauth' => [
         'provider' => [
             'required' => '提供者为必填。',

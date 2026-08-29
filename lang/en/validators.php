@@ -103,6 +103,18 @@ return [
             'string'   => 'URL must be a string.',
         ],
     ],
+    'custom_prompts' => [
+        'title' => [
+            'required' => 'Title is required.',
+            'string'   => 'Title must be a string.',
+            'max'      => 'Title may not be greater than :max characters.',
+        ],
+        'content' => [
+            'required' => 'Content is required.',
+            'string'   => 'Content must be a string.',
+            'max'      => 'Content may not be greater than :max characters.',
+        ],
+    ],
     'oauth' => [
         'provider' => [
             'required' => 'Provider is required.',

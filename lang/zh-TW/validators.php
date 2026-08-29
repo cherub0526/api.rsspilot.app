@@ -103,6 +103,18 @@ return [
             'string'   => '網址必須是字串。',
         ],
     ],
+    'custom_prompts' => [
+        'title' => [
+            'required' => '標題為必填。',
+            'string'   => '標題必須是字串。',
+            'max'      => '標題不得超過 :max 個字元。',
+        ],
+        'content' => [
+            'required' => '內容為必填。',
+            'string'   => '內容必須是字串。',
+            'max'      => '內容不得超過 :max 個字元。',
+        ],
+    ],
     'oauth' => [
         'provider' => [
             'required' => '提供者為必填。',
