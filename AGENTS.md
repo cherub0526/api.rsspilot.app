@@ -21,6 +21,21 @@ for YouTube content, with Stripe subscription management.
 
 Project lore lives in `docs/lore/` — consult it before planning or bug-fixing, and capture implicit knowledge into it.
 
+## Development Rules
+
+分層規則放在 `.claude/rules/`，各檔開頭的 `paths` 標明適用範圍。動到對應檔案前先讀：
+
+| 規則 | 適用 |
+|------|------|
+| `.claude/rules/api.md` | Controller 設計、回傳型別、錯誤處理 |
+| `.claude/rules/routes.md` | 路由命名、Controller 對應、middleware 位置 |
+| `.claude/rules/models.md` | Eloquent Model 結構、關聯、協程注意事項 |
+| `.claude/rules/resources.md` | API Resource 輸出格式與型別轉換 |
+| `.claude/rules/validators.md` | Validator 結構、語系 key、DB 長度判準 |
+| `.claude/rules/openapi.md` | OpenAPI Attributes 與 Schema 放置 |
+| `.claude/rules/testing.md` | 測試類型、命名、mock 慣例 |
+| `.claude/rules/database/migrations.md` | Migration 模板、comment 規範、Seeder |
+
 ## Before Building Something That May Already Exist
 
 Search the codebase before implementing a requested feature. If something similar already exists — a util, a service, a constant table, a template, a job — **stop before writing code** and:
@@ -145,12 +160,16 @@ __('validators.auth.invalid_credentials')
 __('mails.reset_password.subject')
 ```
 
+語系 key 的命名規則（`validators.{feature}.{field}.{rule}` 與 `controllers.*` 的分工）、
+三份 lang 檔必須同步的要求，詳見 `.claude/rules/validators.md`。
+
 ### Authentication
 
 - JWT-based with `auth('jwt')` guard
 - Token TTL: configurable via `config('jwt.ttl')` in minutes
 - Social OAuth via Hypervel Socialite (Facebook, Google)
-- Middleware: `'middleware' => ['auth']` on protected routes
+- Middleware: `'middleware' => ['auth']` on protected routes — 一律宣告在 routes 檔，
+  不在 Controller 內設定；路由命名與 Controller 對應規則見 `.claude/rules/routes.md`
 
 ### Stripe Integration
 
@@ -178,24 +197,28 @@ Stripe is the current payment provider. Paddle code is still present for legacy 
 **Migrations**:
 
 - Extend `App\Utils\BaseMigration` (not Illuminate's Migration class)
+- 模板、comment 規範、主鍵與索引慣例詳見 `.claude/rules/database/migrations.md`
 
 **Models**:
 
 - Extend `App\Models\Model` (base model with common config)
 - User model extends `Hypervel\Foundation\Auth\User`
 - Define `$fillable`, `$casts`, relationships explicitly
+- 屬性一律是 typed property、關聯必須寫滿 key — 詳見 `.claude/rules/models.md`
 
 **Controllers**:
 
-- Extend `App\Http\Controllers\API\AbstractController`
+- Extend `App\Http\Controllers\AbstractController`
 - Type hint: `Hypervel\Http\Request`
 - Return type: `\Psr\Http\Message\ResponseInterface`
 - Use `response()->json()` for JSON responses
+- 薄 Controller 的界線、驗證串接與錯誤處理詳見 `.claude/rules/api.md`
 
 **Responses**:
 
 - Use API Resources for structured output (e.g., `UserResource`, `MediaResource`)
 - Follow PSR-7 interface pattern
+- `$wrap`、型別轉換、`whenLoaded` 排序規則詳見 `.claude/rules/resources.md`
 
 **Error Handling**:
 
@@ -209,3 +232,4 @@ Stripe is the current payment provider. Paddle code is still present for legacy 
 - Use `RefreshDatabase` trait for database tests
 - Helper functions in `tests/helpers.php`
 - Bootstrap: `tests/bootstrap.php`
+- 測試命名（`testPascalCase`）、`route()` 取 URI、外部服務 mock 慣例詳見 `.claude/rules/testing.md`
