@@ -109,10 +109,29 @@ class AuthControllerTest extends TestCase
         $params = [
             'account'  => fake()->userName(),
             'email'    => fake()->email(),
-            'password' => 'password',
+            'password' => 'Password@123',
         ];
         $this->json('POST', $uri, $params)->assertStatus(422)
             ->assertJsonPath('messages.password', [$messages['password.confirmed']]);
+
+        $params = [
+            'account'               => fake()->userName(),
+            'email'                 => fake()->email(),
+            'password'              => 'password123',
+            'password_confirmation' => 'password123',
+        ];
+        $this->json('POST', $uri, $params)->assertStatus(422)
+            ->assertJsonPath('messages.password', [$messages['password.regex']]);
+
+        $longPassword = 'P@ssw0rd' . str_repeat('a', 57);
+        $params = [
+            'account'               => fake()->userName(),
+            'email'                 => fake()->email(),
+            'password'              => $longPassword,
+            'password_confirmation' => $longPassword,
+        ];
+        $this->json('POST', $uri, $params)->assertStatus(422)
+            ->assertJsonPath('messages.password', [$messages['password.max']]);
     }
 
     public function testRegisterSuccess()
@@ -121,8 +140,8 @@ class AuthControllerTest extends TestCase
         $params = [
             'account'               => 'newuser',
             'email'                 => 'newuser@example.com',
-            'password'              => 'password123',
-            'password_confirmation' => 'password123',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
         ];
 
         $this->json('POST', $uri, $params)
@@ -146,8 +165,8 @@ class AuthControllerTest extends TestCase
         $params = [
             'account'               => 'existinguser',
             'email'                 => 'newemail@example.com',
-            'password'              => 'password123',
-            'password_confirmation' => 'password123',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
         ];
 
         $this->json('POST', $uri, $params)

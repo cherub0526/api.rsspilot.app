@@ -55,6 +55,8 @@ return [
             'required'  => 'Password is required.',
             'string'    => 'Password must be a string.',
             'min'       => 'Password must be at least 8 characters.',
+            'max'       => 'Password must not exceed 64 characters.',
+            'regex'     => 'Password must contain at least one uppercase letter, one lowercase letter, and one special character.',
             'confirmed' => 'Password confirmation does not match.',
         ],
         'password_confirmation' => [
