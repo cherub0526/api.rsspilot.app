@@ -44,18 +44,61 @@ use Hyperf\Database\Schema\Blueprint;  // 不是 Illuminate\Database\Schema\Blue
 use Hypervel\Support\Facades\DB;       // 資料修正用
 ```
 
-## 主鍵與外鍵
+## 主鍵一律用 ULID
 
-本專案兩種主鍵並存，**照被關聯的資料表選**：
+**新建的資料表，主鍵一律是 ULID，沒有例外：**
 
-| 情況 | 寫法 |
-|------|------|
-| ULID 主鍵的表（`media`、`sources`、`users`…） | `$table->ulid('id')->primary();` |
-| 自增主鍵的表 | `$table->bigIncrements('id');` |
-| 指向 ULID 表的外鍵 | `$table->foreignUlid('media_id')->index()` |
-| 指向自增表的外鍵 | `$table->unsignedBigInteger('plan_id')->index()` |
+```php
+$table->ulid('id')->primary();
+```
 
-**不建立 DB 外鍵約束。** 全專案的 migration 沒有任何 `->foreign()`，只有欄位 + `index()`。
+**不要用** `bigIncrements()`、`increments()`、`id()`。
+
+對應的 Model 必須 `use HasUlids`，否則寫入時不會自動產生 id、直接違反 NOT NULL：
+
+```php
+use Hypervel\Database\Eloquent\Concerns\HasUlids;
+
+class Order extends Model
+{
+    use HasUlids;
+}
+```
+
+### 為什麼
+
+- ULID 在 client 端就能產生，不必等資料庫回傳，也不必為了拿 id 而先寫入
+- 主鍵不洩漏「總共有幾筆」與「建立順序的間距」，這兩件事在對外 API 上是資訊洩漏
+- 本專案的 id 會直接出現在 URL（`/v1/media/{mediaId}`）與 API 回應中，自增值可被枚舉
+- ULID 內含時間戳，仍然可依主鍵排序，不會失去自增值唯一的好處
+
+### 連帶的三件事
+
+| 面向 | 做法 | 規則 |
+|------|------|------|
+| 外鍵 | `$table->foreignUlid('media_id')->index()` | 本檔下一節 |
+| 路由參數 | `'/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}'` | `../routes.md` |
+| Resource 輸出 | `strval($this->resource->id)`，**不是** `intval()` | `../resources.md` |
+
+### 既有的自增主鍵是歷史包袱，不要回頭改
+
+這 7 張表的主鍵是 `bigIncrements`：
+
+```
+oauths  paddles  stripes  settings  configs  chat_usages  jobs
+```
+
+（`jobs` 是框架的佇列表，不歸我們管。）
+
+**不要為了一致性去改它們。** 改主鍵型別要重建整張表、轉換既有資料、同步所有指向它的
+外鍵欄位，而這些表都已經部署在正式環境。除非有獨立的理由，維持現狀。
+
+指向這些表的外鍵沿用 `$table->unsignedBigInteger('plan_id')->index()`——**照被關聯的
+那張表選**，不是照這條規則選。
+
+## 不建立 DB 外鍵約束
+
+全專案的 migration 沒有任何 `->foreign()`，只有欄位 + `index()`。
 關聯完整性由應用層負責——新增 migration 時沿用這個做法，不要單獨引入 FK constraint。
 
 ## 欄位型態
@@ -107,7 +150,7 @@ $table->comment('用一句中文說明此 table 的業務用途');
 ### 規則 2：每個非標準欄位必須有 `->comment()`
 
 **豁免（不需要 comment）：**
-- `$table->ulid('id')->primary()` / `$table->bigIncrements('id')`
+- `$table->ulid('id')->primary()`（既有表的 `bigIncrements('id')` 同樣豁免）
 - `$this->timestampsWithIndex(...)`（已內建 comment）
 - `$table->softDeletes()`
 - `$table->rememberToken()`
@@ -141,7 +184,7 @@ return new class extends BaseMigration {
     public function up(): void
     {
         Schema::create('{table_name}', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->ulid('id')->primary();
             $table->foreignUlid('user_id')->index()->comment('使用者 ID');
             $table->string('status', 32)->comment('狀態：ACTIVE / EXPIRED');
             $table->unsignedInteger('count')->default(0)->comment('計數');
