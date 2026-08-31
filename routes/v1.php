@@ -9,6 +9,7 @@ use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\PlansController;
 use App\Http\Controllers\API\V1\UsersController;
 use App\Http\Controllers\API\V1\SourcesController;
+use App\Http\Controllers\API\V1\AiModelsController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
@@ -98,6 +99,10 @@ Route::group('/oauth', function () {
         'uses' => CallbackController::class . '@store',
     ]);
 }, ['as' => 'oauth']);
+
+Route::group('/ai-models', function () {
+    Route::get('/', ['as' => 'index', 'uses' => AiModelsController::class . '@index']);
+}, ['as' => 'ai-models', 'middleware' => ['auth']]);
 
 Route::group('/custom-prompts', function () {
     Route::get('/', ['as' => 'index', 'uses' => CustomPromptsController::class . '@index']);

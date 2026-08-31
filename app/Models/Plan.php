@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Hyperf\Database\Model\Builder;
+use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
@@ -23,9 +24,9 @@ class Plan extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
-    public const string AI_QUALITY_PRO      = 'pro';
+    public const string AI_QUALITY_PRO = 'pro';
     public const string AI_QUALITY_ADVANCED = 'advanced';
-    public const string AI_QUALITY_DEEP     = 'deep';
+    public const string AI_QUALITY_DEEP = 'deep';
 
     public const bool DOWNLOAD_ENABLED_DEFAULT = false;
     public const bool AGENT_ENABLED_DEFAULT = false;
@@ -88,5 +89,29 @@ class Plan extends Model
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /**
+     * 這個方案能使用的 AI 模型。
+     *
+     * 這是「誰能用哪些模型」的唯一授權來源——ai_models 沒有層級欄位，前端的
+     * 分組也是從這個關聯推導的（見 create_plan_ai_models_table 的說明）。
+     *
+     * 用 UlidBelongsToMany：中介表主鍵是 ULID，原生的 attach() 不會產生 id。
+     */
+    public function aiModels(): UlidBelongsToMany
+    {
+        $instance = $this->newRelatedInstance(AiModel::class);
+
+        return (new UlidBelongsToMany(
+            $instance->newQuery(),
+            $this,
+            'plan_ai_models',
+            'plan_id',
+            'ai_model_id',
+            $this->getKeyName(),
+            $instance->getKeyName(),
+            'aiModels'
+        ))->withTimestamps();
     }
 }
