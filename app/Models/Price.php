@@ -63,4 +63,26 @@ class Price extends Model
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
+
+    /**
+     * Stripe price 的金額（以美分為單位）。
+     *
+     * prices.price 一律是未稅 USD（見 docs/lore/subscription/pitfalls.md）。
+     */
+    public function stripeUnitAmount(): int
+    {
+        return (int) round((float) $this->price * 100);
+    }
+
+    /**
+     * Stripe price 的 recurring 參數，對應 unit 欄位。
+     */
+    public function stripeRecurring(): array
+    {
+        return match ($this->unit) {
+            self::UNIT_QUARTERLY => ['interval' => 'month', 'interval_count' => 3],
+            self::UNIT_ANNUALLY  => ['interval' => 'year', 'interval_count' => 1],
+            default              => ['interval' => 'month', 'interval_count' => 1],
+        };
+    }
 }
