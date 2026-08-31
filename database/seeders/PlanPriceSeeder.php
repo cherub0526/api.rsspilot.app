@@ -35,7 +35,7 @@ class PlanPriceSeeder extends Seeder
                 'title'                  => 'Pro',
                 'channel_limit'          => 3,
                 'video_limit'            => 20,
-                'chat_limit'             => 30,
+                'chat_limit'             => 20,
                 'download_enabled'       => true,
                 'agent_enabled'          => false,
                 'advanced_model_enabled' => true,
