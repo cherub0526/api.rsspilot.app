@@ -53,7 +53,7 @@ class PlanPriceSeeder extends Seeder
                 'chat_limit'             => 50,
                 'download_enabled'       => true,
                 'agent_enabled'          => true,
-                'advanced_model_enabled' => false,
+                'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
                 'ai_quality'             => Plan::AI_QUALITY_DEEP,
                 'prices'                 => [
