@@ -13,8 +13,7 @@ class CustomPromptResource extends JsonResource
     public function toArray(): array
     {
         return [
-            // 主鍵是 bigIncrements，但沿用專案其他 Resource 的做法統一轉字串輸出，
-            // 免得呼叫端在 number 與 string 之間各自猜。
+            // 主鍵是 ULID，本來就是字串；仍統一走 strval 與專案其他 Resource 一致。
             'id'         => strval($this->resource->id),
             'title'      => strval($this->resource->getAttribute('title') ?? ''),
             'content'    => strval($this->resource->getAttribute('content') ?? ''),

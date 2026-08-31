@@ -12,8 +12,8 @@ use OpenApi\Attributes as OAT;
     in: 'path',
     required: true,
     schema: new OAT\Schema(
-        type: 'integer',
-        example: 12
+        type: 'string',
+        example: '01k9v7m2q8n4r6t0w3y5z7b1c9'
     )
 )]
 class PromptId

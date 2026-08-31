@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Hyperf\Database\Model\Relations\BelongsTo;
+use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 class CustomPrompt extends Model
 {
+    use HasUlids;
     use HasFactory;
 
     protected ?string $table = 'custom_prompts';

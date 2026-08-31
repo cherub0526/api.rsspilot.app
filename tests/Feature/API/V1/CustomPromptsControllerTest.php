@@ -213,7 +213,7 @@ class CustomPromptsControllerTest extends TestCase
     {
         $this->fakeLogin();
 
-        $uri = route('api.v1.custom-prompts.destroy', ['promptId' => 999999]);
+        $uri = route('api.v1.custom-prompts.destroy', ['promptId' => '01000000000000000000000000']);
 
         $this->json('DELETE', $uri)->assertStatus(404);
     }

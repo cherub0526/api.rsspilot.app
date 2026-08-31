@@ -3264,7 +3264,7 @@
                 "properties": {
                     "id": {
                         "type": "string",
-                        "example": "12"
+                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
                     },
                     "title": {
                         "type": "string",
@@ -3801,8 +3801,8 @@
                 "description": "Custom prompt ID",
                 "required": true,
                 "schema": {
-                    "type": "integer",
-                    "example": 12
+                    "type": "string",
+                    "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
                 }
             },
             "sourceId": {

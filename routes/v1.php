@@ -102,15 +102,15 @@ Route::group('/oauth', function () {
 Route::group('/custom-prompts', function () {
     Route::get('/', ['as' => 'index', 'uses' => CustomPromptsController::class . '@index']);
     Route::post('/', ['as' => 'store', 'uses' => CustomPromptsController::class . '@store']);
-    Route::get('/{promptId:[0-9]+}', [
+    Route::get('/{promptId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'   => 'show',
         'uses' => CustomPromptsController::class . '@show',
     ]);
-    Route::put('/{promptId:[0-9]+}', [
+    Route::put('/{promptId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'   => 'update',
         'uses' => CustomPromptsController::class . '@update',
     ]);
-    Route::delete('/{promptId:[0-9]+}', [
+    Route::delete('/{promptId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'   => 'destroy',
         'uses' => CustomPromptsController::class . '@destroy',
     ]);
