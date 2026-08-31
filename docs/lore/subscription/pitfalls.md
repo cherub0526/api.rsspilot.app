@@ -45,3 +45,24 @@ What breaks, why, and what to do instead.
 - 月費 × 12 與年費要對得起來（正常年繳折扣是 17%，也就是送兩個月）。差距大到不合理就是幣別搞混了，不是折扣策略。
 - 實際向使用者收的多幣別價格是金流商（目前為 Stripe）那邊在管的，這張表存的是基準值。改這裡不等於改了 Stripe 上的價格。
 - 這個數字是**未稅**基準。Stripe 不是 Merchant of Record，稅金要在結帳時外加，別把含稅價寫進這張表（見 `business-rules.md` 的稅務責任轉移）。
+
+## Stripe 的 Product 與 Price 建出來就刪不掉，清理只能靠封存
+
+`code:` `app/Console/Commands/Stripe/Sync.php` → `repointPrice`、`app/Observers/StripePriceObserver.php` → `updated` · `updated:` `2026-08-30` · `status:` `active`
+
+Stripe API 對這兩種物件的刪除支援，比直覺想的少很多：
+
+| 動作 | 結果 |
+|---|---|
+| `DELETE /v1/products/:id` | 只有該 product **從來沒掛過 price** 才成功，否則回 `This product cannot be deleted because it has one or more user-created prices.` |
+| `DELETE /v1/prices/:id` | **這個 endpoint 不存在**，回 `Unrecognized request URL` |
+
+關鍵在於 product 的判定看的是「price 存不存在」，**不是「price 啟不啟用」**——把 price 跟 product 都設成 `active=false` 之後再刪，一樣被擋。而 price 又永遠拿不掉，所以結論是：**Stripe 上的 product / price 一旦建立就是永久的**。
+
+實務上要記住三件事：
+
+- 任何「清掉舊方案 / 清掉測試殘留」的需求，能做的只有 `active=false` 封存。不要規劃刪除流程，也不要假設測試環境可以清乾淨。Dashboard 在測試模式下的「Delete product」確實刪得掉（會連 price 一起清），但 API 沒有對應能力——**Dashboard 做得到不等於可以自動化**。
+- 因此**改價一律是三步：建新 price → 改寫 `stripes` 映射 → 封存舊 price**，沒有「更新 price 金額」這種操作。少了封存那步，舊價格會繼續出現在結帳頁；少了改映射那步，`stripes` 會一直指著舊金額。2026-08 盤點時 Pro / Advance 四筆映射全部對不上（DB 12.99/129/24.99/249，Stripe 還是 5/50/10/100），成因就是 `prices.price` 被改過但這三步一步都沒做。
+- Model 的 observer 每次 `created` 都會在 Stripe 建新 product。測試與 seeder 反覆跑的結果是測試環境累積了 200+ 個同名的重複 product，而且**清不掉、只能封存**。要驗證同步邏輯時優先用 `stripe:sync --dry-run`，不要靠反覆重建資料試。
+
+與上一條的分工：上一條講「改 `prices.price` 不等於改了 Stripe 上的價格」，這條講「改 Stripe 上的價格只能用新增取代修改」。
