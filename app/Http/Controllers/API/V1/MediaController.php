@@ -252,8 +252,11 @@ class MediaController extends AbstractController
             return;
         }
 
+        // subDays(29) 而不是 30：下界取 startOfDay、上界取 endOfDay，兩端都含，
+        // 所以 29 天前到今天剛好是 30 個日期。用 30 會變成 31 天，與定價頁寫的
+        // 「每 30 天」對不上。
         $used = $user->media()
-            ->whereBetween('userables.created_at', [now()->subDays(30)->startOfDay(), now()->endOfDay()])
+            ->whereBetween('userables.created_at', [now()->subDays(29)->startOfDay(), now()->endOfDay()])
             ->count();
 
         if ($used >= $plan->video_limit) {
