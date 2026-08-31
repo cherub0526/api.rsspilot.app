@@ -311,6 +311,12 @@ class ChatController
             'session_id' => $sessionId,
             'role'       => $role,
             'content'    => $content,
+            // 目前的回覆只有純文字，所以片段就是單一 text。thinking 與 tool_call
+            // 要等 agent 能力接上來才會出現在這個陣列裡，屆時 content 仍是文字投影。
+            'parts' => [[
+                'type' => ChatMessage::PART_TEXT,
+                'text' => $content,
+            ]],
             'created_at' => now(),
         ]);
     }
