@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1;
 
+use App\Models\AiModel;
 use Hypervel\Http\Request;
 use App\Models\CustomPrompt;
 use OpenApi\Attributes as OAT;
@@ -17,6 +18,7 @@ use App\Validators\CustomPromptsValidator;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\Http\Resources\CustomPromptResource;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 use App\OpenApi\Schemas\CustomPromptResource as CustomPromptSchema;
 
@@ -28,6 +30,13 @@ use App\OpenApi\Schemas\CustomPromptResource as CustomPromptSchema;
  */
 class CustomPromptsController extends AbstractController
 {
+    use ResolvesUserPlan;
+
+    /**
+     * 四支端點都回傳同一組關聯，集中一份免得某支漏載入，讓 Resource 靜靜少掉 key。
+     */
+    private const RELATIONS = ['model', 'sources'];
+
     #[OAT\Get(
         path: '/v1/custom-prompts',
         operationId: 'api.v1.custom-prompts.index',
@@ -55,6 +64,7 @@ class CustomPromptsController extends AbstractController
     {
         $prompts = $request->user()
             ->customPrompts()
+            ->with(self::RELATIONS)
             ->orderByDesc('id')
             ->get();
 
@@ -96,7 +106,7 @@ class CustomPromptsController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['title', 'content']);
+        $params = $request->only(['title', 'content', 'model_id', 'source_ids']);
 
         $validator = (new CustomPromptsValidator($params))->setStoreRules();
 
@@ -105,11 +115,16 @@ class CustomPromptsController extends AbstractController
         }
 
         $prompt = $request->user()->customPrompts()->create([
-            'title'   => $params['title'],
-            'content' => $params['content'],
+            'title'    => $params['title'],
+            'content'  => $params['content'],
+            'model_id' => $this->resolveModelId($request, $params['model_id'] ?? null),
         ]);
 
-        return (new CustomPromptResource($prompt))->toResponse()->withStatus(201);
+        $prompt->sources()->sync($this->resolveSourceIds($request, $params['source_ids'] ?? []));
+
+        return (new CustomPromptResource($prompt->load(self::RELATIONS)))
+            ->toResponse()
+            ->withStatus(201);
     }
 
     /**
@@ -179,7 +194,7 @@ class CustomPromptsController extends AbstractController
     )]
     public function update(Request $request, string $promptId): CustomPromptResource
     {
-        $params = $request->only(['title', 'content']);
+        $params = $request->only(['title', 'content', 'model_id', 'source_ids']);
 
         $validator = (new CustomPromptsValidator($params))->setUpdateRules();
 
@@ -191,11 +206,15 @@ class CustomPromptsController extends AbstractController
         $prompt = $this->findOrFail($request, $promptId);
 
         $prompt->update([
-            'title'   => $params['title'],
-            'content' => $params['content'],
+            'title'    => $params['title'],
+            'content'  => $params['content'],
+            'model_id' => $this->resolveModelId($request, $params['model_id'] ?? null),
         ]);
 
-        return new CustomPromptResource($prompt);
+        // PUT 是整筆取代：沒送 source_ids 就是清空，不是保持原狀。
+        $prompt->sources()->sync($this->resolveSourceIds($request, $params['source_ids'] ?? []));
+
+        return new CustomPromptResource($prompt->load(self::RELATIONS));
     }
 
     /**
@@ -224,6 +243,62 @@ class CustomPromptsController extends AbstractController
     }
 
     /**
+     * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
+     * 否則一律當成「不指定」。
+     *
+     * 方案檢查不能只做在 GET /v1/ai-models 上——那只是讓選單不顯示，直接 POST
+     * 一個沒授權的 id 仍然會存進去。授權要在寫入這一端擋。
+     *
+     * 不擋下請求而是靜默退回 null：模型可能在使用者開著表單的期間被下架、方案也
+     * 可能剛好到期，那不是他填錯了，把整筆儲存擋掉只會讓人不知道該改什麼。
+     * 沒有模型時推論端會退回系統預設（見 OpenRouterModels::for()）。
+     */
+    private function resolveModelId(Request $request, ?string $modelId): ?string
+    {
+        if ($modelId === null || $modelId === '') {
+            return null;
+        }
+
+        $plan = $this->userPlan($request);
+
+        if ($plan === null) {
+            return null;
+        }
+
+        $allowed = AiModel::query()
+            ->where('enabled', true)
+            ->whereKey($modelId)
+            ->whereHas('plans', fn ($query) => $query->whereKey($plan->getKey()))
+            ->exists();
+
+        return $allowed ? $modelId : null;
+    }
+
+    /**
+     * 過濾出「確實是這個使用者訂閱的」來源。
+     *
+     * custom_prompt_sources 沒有 user_id，中介表本身擋不住掛上別人的 source，
+     * 所以授權在這裡做：拿使用者的訂閱關聯去交集，不在裡面的直接丟掉。
+     * 同樣不擋請求——來源可能在填表期間被取消訂閱。
+     *
+     * @param array<int, mixed> $sourceIds
+     * @return array<int, string>
+     */
+    private function resolveSourceIds(Request $request, array $sourceIds): array
+    {
+        if ($sourceIds === []) {
+            return [];
+        }
+
+        return $request->user()
+            ->sources()
+            ->whereIn('sources.id', array_map('strval', $sourceIds))
+            ->pluck('sources.id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+    }
+
+    /**
      * 只在當前使用者的設定裡找。別人的 id 與不存在的 id 走同一條 404——
      * 回應不該透露這筆資料存不存在。
      *
@@ -231,7 +306,7 @@ class CustomPromptsController extends AbstractController
      */
     private function findOrFail(Request $request, string $promptId): CustomPrompt
     {
-        if (!$prompt = $request->user()->customPrompts()->find($promptId)) {
+        if (!$prompt = $request->user()->customPrompts()->with(self::RELATIONS)->find($promptId)) {
             throw new NotFoundHttpException();
         }
 

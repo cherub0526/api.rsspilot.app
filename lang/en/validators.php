@@ -114,6 +114,13 @@ return [
             'string'   => 'Content must be a string.',
             'max'      => 'Content may not be greater than :max characters.',
         ],
+        'model_id' => [
+            'size' => 'The model ID format is invalid.',
+        ],
+        'source_ids' => [
+            'array' => 'Applied sources must be an array.',
+            'max'   => 'You may apply at most :max sources.',
+        ],
     ],
     'oauth' => [
         'provider' => [

@@ -15,6 +15,43 @@
         }
     ],
     "paths": {
+        "/v1/ai-models": {
+            "get": {
+                "tags": [
+                    "AiModels"
+                ],
+                "summary": "List the AI models a user can pick",
+                "operationId": "api.v1.ai-models.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/AiModelResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/auth/forgot-password": {
             "post": {
                 "tags": [
@@ -3145,6 +3182,42 @@
     },
     "components": {
         "schemas": {
+            "AiModelResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Claude 3.5 Sonnet"
+                    },
+                    "supports_thinking": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "min_plan": {
+                        "description": "Lowest plan that includes this model, derived from plan_ai_models. Null when the plans relation was not eager loaded, or no plan includes it.",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                            },
+                            "title": {
+                                "type": "string",
+                                "example": "Pro"
+                            },
+                            "sort": {
+                                "type": "integer",
+                                "example": 1
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "CaptionResource": {
                 "properties": {
                     "id": {
@@ -3195,8 +3268,63 @@
                         "example": "user"
                     },
                     "content": {
+                        "description": "Plain-text projection of the text parts.",
                         "type": "string",
                         "example": "What is this video about?"
+                    },
+                    "parts": {
+                        "description": "Ordered parts that make up this turn. Always present; messages stored before parts existed are returned as a single text part.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "text",
+                                        "thinking",
+                                        "tool_call",
+                                        "tool_result"
+                                    ],
+                                    "example": "text"
+                                },
+                                "text": {
+                                    "description": "text / thinking",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "id": {
+                                    "description": "tool_call",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "name": {
+                                    "description": "tool_call",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "input": {
+                                    "description": "tool_call",
+                                    "type": "object",
+                                    "nullable": true
+                                },
+                                "tool_call_id": {
+                                    "description": "tool_result",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "output": {
+                                    "description": "tool_result",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "is_error": {
+                                    "description": "tool_result",
+                                    "type": "boolean",
+                                    "nullable": true
+                                }
+                            },
+                            "type": "object"
+                        }
                     },
                     "created_at": {
                         "type": "string",
@@ -3273,6 +3401,22 @@
                     "content": {
                         "type": "string",
                         "example": "請以學習筆記的風格整理這部影片的重點…"
+                    },
+                    "model": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/AiModelResource"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Only present when eager loaded. Null when the config has no model pinned."
+                    },
+                    "sources": {
+                        "description": "Channels / playlists this config applies to. Only present when eager loaded.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SourceResource"
+                        }
                     },
                     "created_at": {
                         "type": "string",
@@ -3888,6 +4032,10 @@
         }
     },
     "tags": [
+        {
+            "name": "AiModels",
+            "description": "AiModels"
+        },
         {
             "name": "Auth",
             "description": "Auth"

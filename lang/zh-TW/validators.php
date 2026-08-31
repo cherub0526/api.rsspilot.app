@@ -114,6 +114,13 @@ return [
             'string'   => '內容必須是字串。',
             'max'      => '內容不得超過 :max 個字元。',
         ],
+        'model_id' => [
+            'size' => '模型 ID 格式不正確。',
+        ],
+        'source_ids' => [
+            'array' => '套用來源必須是陣列。',
+            'max'   => '套用來源最多 :max 個。',
+        ],
     ],
     'oauth' => [
         'provider' => [

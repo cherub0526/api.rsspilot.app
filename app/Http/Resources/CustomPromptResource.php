@@ -19,6 +19,10 @@ class CustomPromptResource extends JsonResource
             'content'    => strval($this->resource->getAttribute('content') ?? ''),
             'created_at' => $this->resource->getAttribute('created_at')?->toIso8601String(),
             'updated_at' => $this->resource->getAttribute('updated_at')?->toIso8601String(),
+            // 關聯欄位一律排在本體欄位之後（見 .claude/rules/resources.md）。
+            // 未 eager load 時這兩個 key 會整個消失，呼叫端不能假設它們一定存在。
+            'model'   => $this->whenLoaded('model', fn () => new AiModelResource($this->resource->model)),
+            'sources' => SourceResource::collection($this->whenLoaded('sources')),
         ];
     }
 }
