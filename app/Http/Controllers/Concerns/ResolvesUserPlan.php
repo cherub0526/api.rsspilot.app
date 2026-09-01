@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Plan;
+use App\Models\AiModel;
 use Hypervel\Http\Request;
 use App\Services\SubscriptionService;
 
@@ -23,5 +24,36 @@ trait ResolvesUserPlan
         return $service->getUserSubscriptionPlan(
             $service->getUserSubscription((string) $request->user()->getKey())
         );
+    }
+
+    /**
+     * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
+     * 否則一律回 null 當成「不指定」。
+     *
+     * 方案檢查不能只做在 GET /v1/ai-models 上——那只是讓選單不顯示，直接送一個
+     * 沒授權的 id 仍然會被接受。授權要在每個接收 model_id 的端點都擋。
+     *
+     * 不擋下請求而是靜默退回 null：模型可能在使用者開著表單的期間被下架、方案也
+     * 可能剛好到期，那不是他填錯了。沒有模型時推論端會退回系統預設。
+     */
+    protected function allowedModelId(Request $request, ?string $modelId): ?string
+    {
+        if ($modelId === null || $modelId === '') {
+            return null;
+        }
+
+        $plan = $this->userPlan($request);
+
+        if ($plan === null) {
+            return null;
+        }
+
+        $allowed = AiModel::query()
+            ->where('enabled', true)
+            ->whereKey($modelId)
+            ->whereHas('plans', fn ($query) => $query->whereKey($plan->getKey()))
+            ->exists();
+
+        return $allowed ? $modelId : null;
     }
 }

@@ -7,6 +7,7 @@ namespace App\Utils\AI;
 use App\Models\Config;
 use App\Services\Prompts\SummaryTemplate;
 use App\Services\Prompts\CustomPromptTemplate;
+use App\Services\Prompts\SummaryPreviewTemplate;
 use App\Services\FollowUpQuestions\NeuronFollowUpQuestions;
 
 /**
@@ -39,6 +40,7 @@ class OpenRouterModels
         NeuronFollowUpQuestions::class,
         SummaryTemplate::class,
         CustomPromptTemplate::class,
+        SummaryPreviewTemplate::class,
     ];
 
     /**

@@ -11,6 +11,9 @@ return [
             'provider_not_configured' => '該登入方式尚未設定。',
             'exchange_failed'         => '授權驗證失敗，請重新登入。',
         ],
+        'custom_prompts' => [
+            'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
+        ],
         'media' => [
             'not_found'           => '找不到指定的媒體。',
             'caption_not_found'   => '找不到指定的字幕。',
@@ -104,6 +107,10 @@ return [
         ],
     ],
     'custom_prompts' => [
+        'media_id' => [
+            'required' => '請選擇要試跑的影片。',
+            'size'     => '影片 ID 格式不正確。',
+        ],
         'title' => [
             'required' => '標題為必填。',
             'string'   => '標題必須是字串。',

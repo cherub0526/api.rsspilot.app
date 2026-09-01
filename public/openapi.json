@@ -389,6 +389,88 @@
                 }
             }
         },
+        "/v1/custom-prompts/preview": {
+            "post": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Run a prompt against one video and return the summary preview",
+                "operationId": "api.v1.custom-prompts.preview.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "media_id",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "media_id": {
+                                        "type": "string",
+                                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理重點。"
+                                    },
+                                    "model_id": {
+                                        "description": "Falls back to the system default when omitted, or when the plan does not allow it.",
+                                        "type": "string",
+                                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Preview generated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "sections": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "heading": {
+                                                        "type": "string",
+                                                        "example": "主要論點"
+                                                    },
+                                                    "items": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/custom-prompts": {
             "get": {
                 "tags": [
@@ -1098,65 +1180,6 @@
                         "$ref": "#/components/responses/429"
                     }
                 }
-            }
-        },
-        "/v1/media/{mediaId}/custom-prompt": {
-            "post": {
-                "tags": [
-                    "Media"
-                ],
-                "summary": "Run a custom prompt against a media caption",
-                "operationId": "api.v1.media.custom-prompt.store",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/mediaId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "prompt"
-                                ],
-                                "properties": {
-                                    "prompt": {
-                                        "type": "string",
-                                        "example": "影片中出現了哪些食物？"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Custom prompt result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "text": {
-                                            "type": "string",
-                                            "example": "影片中出現了拉麵、壽司和天婦羅。"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
             }
         },
         "/v1/media/{mediaId}/summaries": {

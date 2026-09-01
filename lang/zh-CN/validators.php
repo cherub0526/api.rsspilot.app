@@ -11,6 +11,9 @@ return [
             'provider_not_configured' => '该登录方式尚未设置。',
             'exchange_failed'         => '授权验证失败，请重新登录。',
         ],
+        'custom_prompts' => [
+            'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
+        ],
         'media' => [
             'not_found'           => '找不到指定的媒体。',
             'caption_not_found'   => '找不到指定的字幕。',
@@ -104,6 +107,10 @@ return [
         ],
     ],
     'custom_prompts' => [
+        'media_id' => [
+            'required' => '请选择要试跑的视频。',
+            'size'     => '视频 ID 格式不正确。',
+        ],
         'title' => [
             'required' => '标题为必填。',
             'string'   => '标题必须是字符串。',

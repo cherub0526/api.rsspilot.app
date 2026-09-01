@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1;
 
-use App\Models\AiModel;
 use Hypervel\Http\Request;
 use App\Models\CustomPrompt;
 use OpenApi\Attributes as OAT;
@@ -117,7 +116,7 @@ class CustomPromptsController extends AbstractController
         $prompt = $request->user()->customPrompts()->create([
             'title'    => $params['title'],
             'content'  => $params['content'],
-            'model_id' => $this->resolveModelId($request, $params['model_id'] ?? null),
+            'model_id' => $this->allowedModelId($request, $params['model_id'] ?? null),
         ]);
 
         $prompt->sources()->sync($this->resolveSourceIds($request, $params['source_ids'] ?? []));
@@ -208,7 +207,7 @@ class CustomPromptsController extends AbstractController
         $prompt->update([
             'title'    => $params['title'],
             'content'  => $params['content'],
-            'model_id' => $this->resolveModelId($request, $params['model_id'] ?? null),
+            'model_id' => $this->allowedModelId($request, $params['model_id'] ?? null),
         ]);
 
         // PUT 是整筆取代：沒送 source_ids 就是清空，不是保持原狀。
@@ -240,38 +239,6 @@ class CustomPromptsController extends AbstractController
         $this->findOrFail($request, $promptId)->delete();
 
         return response()->make(self::RESPONSE_OK);
-    }
-
-    /**
-     * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
-     * 否則一律當成「不指定」。
-     *
-     * 方案檢查不能只做在 GET /v1/ai-models 上——那只是讓選單不顯示，直接 POST
-     * 一個沒授權的 id 仍然會存進去。授權要在寫入這一端擋。
-     *
-     * 不擋下請求而是靜默退回 null：模型可能在使用者開著表單的期間被下架、方案也
-     * 可能剛好到期，那不是他填錯了，把整筆儲存擋掉只會讓人不知道該改什麼。
-     * 沒有模型時推論端會退回系統預設（見 OpenRouterModels::for()）。
-     */
-    private function resolveModelId(Request $request, ?string $modelId): ?string
-    {
-        if ($modelId === null || $modelId === '') {
-            return null;
-        }
-
-        $plan = $this->userPlan($request);
-
-        if ($plan === null) {
-            return null;
-        }
-
-        $allowed = AiModel::query()
-            ->where('enabled', true)
-            ->whereKey($modelId)
-            ->whereHas('plans', fn ($query) => $query->whereKey($plan->getKey()))
-            ->exists();
-
-        return $allowed ? $modelId : null;
     }
 
     /**

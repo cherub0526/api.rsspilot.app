@@ -11,6 +11,9 @@ return [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
             'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
+        'custom_prompts' => [
+            'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
+        ],
         'media' => [
             'not_found'           => 'Media not found.',
             'caption_not_found'   => 'Caption not found.',
@@ -104,6 +107,10 @@ return [
         ],
     ],
     'custom_prompts' => [
+        'media_id' => [
+            'required' => 'Please pick a video to test with.',
+            'size'     => 'The video ID format is invalid.',
+        ],
         'title' => [
             'required' => 'Title is required.',
             'string'   => 'Title must be a string.',

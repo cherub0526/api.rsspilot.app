@@ -29,6 +29,7 @@ use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
+use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
@@ -107,6 +108,11 @@ Route::group('/ai-models', function () {
 Route::group('/custom-prompts', function () {
     Route::get('/', ['as' => 'index', 'uses' => CustomPromptsController::class . '@index']);
     Route::post('/', ['as' => 'store', 'uses' => CustomPromptsController::class . '@store']);
+    // 靜態段必須排在 /{promptId} 之前，否則 preview 會被當成 id 吃掉。
+    Route::post('/preview', [
+        'as'   => 'preview.store',
+        'uses' => PreviewController::class . '@store',
+    ]);
     Route::get('/{promptId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'   => 'show',
         'uses' => CustomPromptsController::class . '@show',

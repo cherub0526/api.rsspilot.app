@@ -29,15 +29,17 @@ class CustomPromptsValidator extends BaseValidator
         parent::__construct($params);
 
         $this->messages = [
-            'title.required'   => __('validators.custom_prompts.title.required'),
-            'title.string'     => __('validators.custom_prompts.title.string'),
-            'title.max'        => __('validators.custom_prompts.title.max'),
-            'content.required' => __('validators.custom_prompts.content.required'),
-            'content.string'   => __('validators.custom_prompts.content.string'),
-            'content.max'      => __('validators.custom_prompts.content.max'),
-            'model_id.size'    => __('validators.custom_prompts.model_id.size'),
-            'source_ids.array' => __('validators.custom_prompts.source_ids.array'),
-            'source_ids.max'   => __('validators.custom_prompts.source_ids.max'),
+            'title.required'    => __('validators.custom_prompts.title.required'),
+            'title.string'      => __('validators.custom_prompts.title.string'),
+            'title.max'         => __('validators.custom_prompts.title.max'),
+            'content.required'  => __('validators.custom_prompts.content.required'),
+            'content.string'    => __('validators.custom_prompts.content.string'),
+            'content.max'       => __('validators.custom_prompts.content.max'),
+            'media_id.required' => __('validators.custom_prompts.media_id.required'),
+            'media_id.size'     => __('validators.custom_prompts.media_id.size'),
+            'model_id.size'     => __('validators.custom_prompts.model_id.size'),
+            'source_ids.array'  => __('validators.custom_prompts.source_ids.array'),
+            'source_ids.max'    => __('validators.custom_prompts.source_ids.max'),
         ];
     }
 
@@ -55,6 +57,21 @@ class CustomPromptsValidator extends BaseValidator
     public function setUpdateRules(): self
     {
         $this->rules = self::baseRules();
+
+        return $this;
+    }
+
+    /**
+     * 試跑一份設定用。content 與儲存時同一組規則——試得動的內容就該存得下來，
+     * 兩邊長度上限不同只會讓人在儲存那一步才發現不行。
+     */
+    public function setPreviewRules(): self
+    {
+        $this->rules = [
+            'media_id' => 'required|string|size:26',
+            'content'  => 'required|string|max:' . self::CONTENT_MAX_LENGTH,
+            'model_id' => 'sometimes|nullable|string|size:26',
+        ];
 
         return $this;
     }
