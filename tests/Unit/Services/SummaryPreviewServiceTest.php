@@ -21,60 +21,77 @@ class SummaryPreviewServiceTest extends TestCase
         return new SummaryPreviewService();
     }
 
-    public function testParsesWellFormedSections(): void
+    /**
+     * 命名避開 TestCase 既有的 public json()（那是發 HTTP 請求用的）。
+     */
+    private function encode(array $payload): string
     {
-        $sections = $this->service()->parseSections(json_encode([
-            'sections' => [
-                ['heading' => '主要論點', 'items' => ['第一點', '第二點']],
-            ],
-        ], JSON_UNESCAPED_UNICODE));
-
-        $this->assertSame([['heading' => '主要論點', 'items' => ['第一點', '第二點']]], $sections);
+        return json_encode($payload, JSON_UNESCAPED_UNICODE);
     }
 
-    public function testDropsSectionsWithoutItems(): void
+    public function testParsesTheSameShapeAsStoredSummaries(): void
     {
-        // 只有標題、底下空白的區塊在畫面上像是壞了。
-        $sections = $this->service()->parseSections(json_encode([
-            'sections' => [
-                ['heading' => '空的', 'items' => []],
-                ['heading' => '有內容', 'items' => ['一句話']],
+        $summary = $this->service()->parseSummary($this->encode([
+            'short_summary' => '一句話總結。',
+            'long_summary'  => [
+                'content'    => '完整的長摘要。',
+                'key_points' => ['重點一', '重點二'],
+                'keywords'   => ['AI', '工作流程'],
             ],
-        ], JSON_UNESCAPED_UNICODE));
+        ]));
 
-        $this->assertCount(1, $sections);
-        $this->assertSame('有內容', $sections[0]['heading']);
+        $this->assertSame('一句話總結。', $summary['short_summary']);
+        $this->assertSame('完整的長摘要。', $summary['long_summary']['content']);
+        $this->assertSame(['重點一', '重點二'], $summary['long_summary']['key_points']);
+        $this->assertSame(['AI', '工作流程'], $summary['long_summary']['keywords']);
     }
 
-    public function testTrimsAndDropsBlankItems(): void
+    public function testMissingListsBecomeEmptyArrays(): void
     {
-        $sections = $this->service()->parseSections(json_encode([
-            'sections' => [['heading' => 'x', 'items' => ['  有內容  ', '   ', '']]],
-        ], JSON_UNESCAPED_UNICODE));
+        // key_points 與 keywords 是附加資訊，缺了不影響這次試跑能不能看。
+        $summary = $this->service()->parseSummary($this->encode([
+            'short_summary' => '一句話總結。',
+            'long_summary'  => ['content' => '長摘要。'],
+        ]));
 
-        $this->assertSame(['有內容'], $sections[0]['items']);
+        $this->assertSame([], $summary['long_summary']['key_points']);
+        $this->assertSame([], $summary['long_summary']['keywords']);
+    }
+
+    public function testAcceptsAResponseWithOnlyALongSummary(): void
+    {
+        $summary = $this->service()->parseSummary($this->encode([
+            'long_summary' => ['content' => '只有長摘要。'],
+        ]));
+
+        $this->assertSame('', $summary['short_summary']);
+        $this->assertSame('只有長摘要。', $summary['long_summary']['content']);
+    }
+
+    public function testTrimsAndDropsBlankListItems(): void
+    {
+        $summary = $this->service()->parseSummary($this->encode([
+            'short_summary' => 'x',
+            'long_summary'  => ['content' => 'y', 'keywords' => ['  AI  ', '   ', '']],
+        ]));
+
+        $this->assertSame(['AI'], $summary['long_summary']['keywords']);
     }
 
     public function testRejectsOutputThatIsNotJson(): void
     {
         $this->expectException(InvalidRequestException::class);
 
-        $this->service()->parseSections('這不是 JSON');
+        $this->service()->parseSummary('這不是 JSON');
     }
 
-    public function testRejectsJsonWithoutASectionsKey(): void
+    public function testRejectsWhenBothSummariesAreEmpty(): void
     {
         $this->expectException(InvalidRequestException::class);
 
-        $this->service()->parseSections(json_encode(['short_summary' => 'x']));
-    }
-
-    public function testRejectsWhenEverySectionIsEmpty(): void
-    {
-        $this->expectException(InvalidRequestException::class);
-
-        $this->service()->parseSections(json_encode([
-            'sections' => [['heading' => '空的', 'items' => []]],
-        ], JSON_UNESCAPED_UNICODE));
+        $this->service()->parseSummary($this->encode([
+            'short_summary' => '   ',
+            'long_summary'  => ['content' => ''],
+        ]));
     }
 }

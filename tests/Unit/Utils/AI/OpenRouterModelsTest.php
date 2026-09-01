@@ -29,7 +29,6 @@ class OpenRouterModelsTest extends TestCase
             'App/Services/FollowUpQuestions/NeuronFollowUpQuestions' => $default,
             'App/Services/Prompts/SummaryTemplate'                   => $default,
             'App/Services/Prompts/CustomPromptTemplate'              => $default,
-            'App/Services/Prompts/SummaryPreviewTemplate'            => $default,
         ], OpenRouterModels::defaults());
     }
 

@@ -21,12 +21,12 @@ class SummaryPreviewService
 {
     /**
      * @param string $providerModel 空字串代表依模板查系統預設（見 OpenRouterModels::for()）
-     * @return array<int, array{heading: string, items: array<int, string>}>
+     * @return array<string, mixed> 與 summaries.text 相同的結構
      * @throws InvalidRequestException
      */
     public function preview(string $prompt, string $captions, string $language, string $providerModel = ''): array
     {
-        $template = TemplateFactory::create('summary_preview', [
+        $template = TemplateFactory::create('customPrompt', [
             'system_prompt'    => $prompt,
             'user_prompt'      => $captions,
             'respond_language' => $language,
@@ -43,59 +43,66 @@ class SummaryPreviewService
             throw new InvalidRequestException($this->failure());
         }
 
-        return $this->parseSections($content);
+        return $this->parseSummary($content);
     }
 
     /**
-     * 把模型回應解析成段落。
+     * 把模型回應解析成摘要結構。
+     *
+     * 形狀刻意與 summaries.text 一致（short_summary + long_summary），試跑看到的
+     * 東西就是之後真的存下來的東西；前端也能直接沿用既有的渲染。
      *
      * 模型可能沒照指示回 JSON——那是它的問題，不是呼叫端填錯了，但對使用者而言
      * 一樣是沒有結果，所以走同一則訊息而不是拋 500。
      *
-     * 沒有任何項目的段落直接丟掉：一個只有標題、底下空白的區塊在畫面上像是壞了。
+     * 判準是「長短摘要至少有一個有內容」：key_points 與 keywords 是附加資訊，
+     * 缺了不影響這次試跑能不能看。
      *
-     * @return array<int, array{heading: string, items: array<int, string>}>
+     * @return array<string, mixed>
      * @throws InvalidRequestException
      */
-    public function parseSections(string $content): array
+    public function parseSummary(string $content): array
     {
         $decoded = json_decode($content, true);
-        $sections = is_array($decoded) ? ($decoded['sections'] ?? null) : null;
 
-        if (!is_array($sections)) {
+        if (!is_array($decoded)) {
             throw new InvalidRequestException($this->failure());
         }
 
-        $parsed = [];
+        $short = trim((string) ($decoded['short_summary'] ?? ''));
+        $long = is_array($decoded['long_summary'] ?? null) ? $decoded['long_summary'] : [];
+        $longContent = trim((string) ($long['content'] ?? ''));
 
-        foreach ($sections as $section) {
-            if (!is_array($section)) {
-                continue;
-            }
-
-            $items = array_values(array_filter(
-                array_map(
-                    static fn ($item): string => is_scalar($item) ? trim((string) $item) : '',
-                    is_array($section['items'] ?? null) ? $section['items'] : []
-                ),
-                static fn (string $item): bool => $item !== ''
-            ));
-
-            if ($items === []) {
-                continue;
-            }
-
-            $parsed[] = [
-                'heading' => trim((string) ($section['heading'] ?? '')),
-                'items'   => $items,
-            ];
-        }
-
-        if ($parsed === []) {
+        if ($short === '' && $longContent === '') {
             throw new InvalidRequestException($this->failure());
         }
 
-        return $parsed;
+        return [
+            'short_summary' => $short,
+            'long_summary'  => [
+                'content'    => $longContent,
+                'key_points' => $this->stringList($long['key_points'] ?? null),
+                'keywords'   => $this->stringList($long['keywords'] ?? null),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function stringList(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(
+                static fn ($item): string => is_scalar($item) ? trim((string) $item) : '',
+                $value
+            ),
+            static fn (string $item): bool => $item !== ''
+        ));
     }
 
     /**

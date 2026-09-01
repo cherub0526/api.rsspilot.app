@@ -22,7 +22,6 @@ class TemplateFactory
         'caption'             => CaptionTemplate::class,
         'analysis'            => AnalysisTemplate::class,
         'customPrompt'        => CustomPromptTemplate::class,
-        'summary_preview'     => SummaryPreviewTemplate::class,
         'follow_up_questions' => FollowUpQuestionsTemplate::class,
     ];
 

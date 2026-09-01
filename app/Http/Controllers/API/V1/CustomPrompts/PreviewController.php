@@ -22,6 +22,9 @@ use App\Http\Controllers\Concerns\ResolvesUserPlan;
  *
  * 不落地任何東西：使用者還在調 prompt 的階段，這裡只回傳這次的產出讓他看效果。
  * 要保存得走 POST /v1/custom-prompts。
+ *
+ * 自訂摘要是付費功能，方案沒開通就擋在最前面——這一支每次呼叫都會真的送推論，
+ * 不擋等於讓免費方案免費用掉我們的成本。
  */
 class PreviewController extends AbstractController
 {
@@ -59,20 +62,23 @@ class PreviewController extends AbstractController
                 description: 'Preview generated',
                 content: new OAT\JsonContent(
                     properties: [
+                        new OAT\Property(property: 'short_summary', type: 'string', example: '一句話總結。'),
                         new OAT\Property(
-                            property: 'sections',
-                            type: 'array',
-                            items: new OAT\Items(
-                                properties: [
-                                    new OAT\Property(property: 'heading', type: 'string', example: '主要論點'),
-                                    new OAT\Property(
-                                        property: 'items',
-                                        type: 'array',
-                                        items: new OAT\Items(type: 'string')
-                                    ),
-                                ],
-                                type: 'object'
-                            )
+                            property: 'long_summary',
+                            properties: [
+                                new OAT\Property(property: 'content', type: 'string', example: '完整的長摘要。'),
+                                new OAT\Property(
+                                    property: 'key_points',
+                                    type: 'array',
+                                    items: new OAT\Items(type: 'string')
+                                ),
+                                new OAT\Property(
+                                    property: 'keywords',
+                                    type: 'array',
+                                    items: new OAT\Items(type: 'string')
+                                ),
+                            ],
+                            type: 'object'
                         ),
                     ]
                 )
@@ -83,6 +89,8 @@ class PreviewController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
+        $this->assertCustomSummaryEnabled($request);
+
         $params = $request->only(['media_id', 'content', 'model_id']);
 
         $validator = (new CustomPromptsValidator($params))->setPreviewRules();
@@ -94,14 +102,15 @@ class PreviewController extends AbstractController
         $media = $this->findMedia($request, (string) $params['media_id']);
         $captions = $this->captionsOf($media);
 
-        $sections = app(SummaryPreviewService::class)->preview(
+        $summary = app(SummaryPreviewService::class)->preview(
             (string) $params['content'],
             $captions,
             (string) $request->user()->aiLanguageName(),
             $this->providerModel($request, $params['model_id'] ?? null)
         );
 
-        return response()->json(['sections' => $sections]);
+        // 形狀與 summaries.text 一致，前端可以沿用既有的摘要渲染。
+        return response()->json($summary);
     }
 
     /**
