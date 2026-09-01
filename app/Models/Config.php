@@ -12,6 +12,9 @@ class Config extends Model
 
     public const KEY_VIDEOTRANSCRIBER = 'videotranscriber';
 
+    /** class → OpenRouter 模型的對照表，見 App\Utils\AI\OpenRouterModels */
+    public const KEY_OPENROUTER_MODELS = 'openrouter_models';
+
     protected ?string $table = 'configs';
 
     /**

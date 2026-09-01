@@ -38,7 +38,7 @@ class StreamController
      */
     #[OAT\Get(
         path: '/v1/media/{mediaId}/chat/stream',
-        operationId: 'api.v1.media.chat.stream',
+        operationId: 'api.v1.media.chat.stream.show',
         summary: 'SSE long connection to receive AI reply tokens',
         tags: ['Media'],
         parameters: [

@@ -339,6 +339,89 @@ class VideoTranscriberStartJobTest extends TestCase
         $this->assertFalse($job->job->isReleased());
     }
 
+    public function testReleasesForRetryWhenTheRemoteIsAtCapacity(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code' => 100000,
+                'data' => ['type' => 3, 'title' => 'Test Video', 'audio_time' => 139],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code'    => 164002,
+                'message' => 'You have 5 tasks in processing. Please try again later.',
+                'data'    => null,
+            ], 200),
+        ]);
+
+        $media = $this->createMedia();
+
+        $job = new VideoTranscriberStartJob($media);
+        $job->job = new FakeJob();
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+
+        // 滿載是暫時的，不是這筆的問題——標記失敗會讓它再也不會自己回來。
+        $this->assertSame(Media::STATUS_CREATED, $media->status);
+        $this->assertTrue($job->job->isReleased());
+        $this->assertSame(60, $job->job->releaseDelay);
+
+        // 回應仍要留存：否則「被擋下」與「從來沒開始」在資料上分不出來。
+        $record = VideoTranscription::where('media_id', $media->id)->first();
+        $this->assertSame(164002, $record->start_transcription['code']);
+    }
+
+    public function testDoesNotCallTheApiWhenAlreadyAtTheLocalLimit(): void
+    {
+        Http::fake();
+
+        Media::factory()->count(5)->create(['status' => Media::STATUS_TRANSCRIBING]);
+
+        $media = $this->createMedia();
+
+        $job = new VideoTranscriberStartJob($media);
+        $job->job = new FakeJob();
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_CREATED, $media->status);
+        $this->assertTrue($job->job->isReleased());
+        $this->assertSame(60, $job->job->releaseDelay);
+
+        // 主動閘門的重點就是連呼叫都不發出去。
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('video_transcriptions', 0);
+    }
+
+    public function testProceedsWhenBelowTheLocalLimit(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code' => 100000,
+                'data' => ['type' => 3, 'title' => 'Test Video', 'audio_time' => 139],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code' => 100000,
+                'data' => ['event_id' => 'event-1', 'audio_id' => 'audio-1'],
+            ], 200),
+        ]);
+
+        Media::factory()->count(4)->create(['status' => Media::STATUS_TRANSCRIBING]);
+
+        $media = $this->createMedia();
+
+        $job = new VideoTranscriberStartJob($media);
+        $job->job = new FakeJob();
+
+        $job->handle(new VideoTranscriberClient());
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
+        $this->assertFalse($job->job->isReleased());
+    }
+
     public function testUniqueIdIsScopedToTheMedia(): void
     {
         $media = $this->createMedia();

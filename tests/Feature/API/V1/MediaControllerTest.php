@@ -8,6 +8,7 @@ use Tests\TestCase;
 use App\Models\User;
 use App\Models\Media;
 use App\Models\Source;
+use App\Models\Summary;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -98,6 +99,61 @@ class MediaControllerTest extends TestCase
         $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->json('GET', route('api.v1.media.show', ['mediaId' => $media->id]))->assertStatus(404);
+    }
+
+    /**
+     * short_summary 與 /summaries、chat 取同一份摘要，見 Media::summaryFor()。
+     */
+    public function testShowUsesTheUsersOwnSummaryForShortSummary(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $user->setting()->create(['data' => ['locale' => 'zh-TW']]);
+
+        $media = Media::factory()->create();
+        $user->media()->attach($media->id);
+
+        Summary::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'zh-TW',
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['short_summary' => 'shared zh'],
+        ]);
+        Summary::factory()->create([
+            'media_id' => $media->id,
+            'user_id'  => $user->id,
+            'locale'   => 'zh-TW',
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['short_summary' => 'mine zh'],
+        ]);
+
+        $this->json('GET', route('api.v1.media.show', ['mediaId' => $media->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('short_summary', 'mine zh');
+    }
+
+    /**
+     * 重跑摘要會先建一筆 status=created、text 還是 null 的資料列。原本的三元只
+     * 判斷有沒有資料列，撈到它就是對 null 取索引 —— 在這個專案是 500。
+     */
+    public function testShowReturnsAnEmptyShortSummaryWhileASummaryIsStillPending(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $media = Media::factory()->create();
+        $user->media()->attach($media->id);
+
+        Summary::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'en',
+            'status'   => Summary::STATUS_CREATED,
+            'text'     => null,
+        ]);
+
+        $this->json('GET', route('api.v1.media.show', ['mediaId' => $media->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('short_summary', '');
     }
 
     public function testShowSucceedsForFreeSourceMedia(): void

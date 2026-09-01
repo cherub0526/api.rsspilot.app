@@ -13,7 +13,7 @@ return new class extends BaseMigration {
     public function up(): void
     {
         Schema::create('custom_prompts', function (Blueprint $table) {
-            $table->bigIncrements('id');
+            $table->ulid('id')->primary();
             $table->foreignUlid('user_id')->index()->comment('使用者 ID');
             $table->string('title')->comment('標題');
             $table->text('content')->comment('內容');

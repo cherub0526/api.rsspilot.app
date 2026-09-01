@@ -64,9 +64,10 @@ class CaptionsController
             throw new NotFoundHttpException();
         }
 
-        $source = $media->source()->first();
-
-        if (!$source || !$source->isAccessibleBy($request->user())) {
+        // 存取權限一律以 media 為準（Media::isAccessibleBy）：使用者可以不訂閱
+        // 任何來源、直接把單支影片加進自己的影片庫，那種 media 在 user_sources
+        // 裡沒有對應的列，用來源訂閱判斷會誤判成無權存取。
+        if (!$media->isAccessibleBy($request->user())) {
             throw new NotFoundHttpException();
         }
 
@@ -105,9 +106,10 @@ class CaptionsController
             throw new NotFoundHttpException();
         }
 
-        $source = $media->source()->first();
-
-        if (!$source || !$source->isAccessibleBy($request->user())) {
+        // 存取權限一律以 media 為準（Media::isAccessibleBy）：使用者可以不訂閱
+        // 任何來源、直接把單支影片加進自己的影片庫，那種 media 在 user_sources
+        // 裡沒有對應的列，用來源訂閱判斷會誤判成無權存取。
+        if (!$media->isAccessibleBy($request->user())) {
             throw new NotFoundHttpException();
         }
 

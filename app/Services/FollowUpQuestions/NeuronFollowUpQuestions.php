@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\FollowUpQuestions;
 
 use NeuronAI\Agent\Agent;
+use App\Utils\AI\OpenRouterModels;
 use NeuronAI\Providers\OpenAILike;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\AIProviderInterface;
@@ -46,7 +47,7 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
         return new OpenAILike(
             baseUri: (string) config('ai.openrouter.base_uri'),
             key: (string) config('ai.openrouter.api_key'),
-            model: (string) config('ai.default_model'),
+            model: OpenRouterModels::for(self::class),
         );
     }
 }

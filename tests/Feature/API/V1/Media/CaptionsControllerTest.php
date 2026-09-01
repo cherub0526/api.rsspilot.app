@@ -68,7 +68,30 @@ class CaptionsControllerTest extends TestCase
         $this->assertEquals($secondary->id, $response->json('data.1.id'));
     }
 
-    public function testIndexSucceedsWhenUserSubscribedToSource(): void
+    public function testIndexSucceedsWhenTheMediaIsInTheUsersLibrary(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $source = Source::factory()->create(['free' => false]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+        Caption::factory()->create(['media_id' => $media->id]);
+
+        $user->media()->syncWithoutDetaching([$media->id]);
+
+        $this->json('GET', route('api.v1.media.captions.index', ['mediaId' => $media->id]))
+            ->assertStatus(200);
+    }
+
+    /**
+     * 存取權以 media 為準，訂閱來源本身不再直接授權。
+     *
+     * 正常流程下訂閱會由 SubscriptionService::syncSourceMediaToUserables() 把
+     * 該來源的影片寫進使用者的影片庫，所以這個狀態不常見；但那個方法受 30 天
+     * 影片額度限制，額度用完時一列都不會寫——那些影片就不在影片庫裡，也就不
+     * 該讀得到字幕。
+     */
+    public function testIndexReturns404WhenSubscribedButTheMediaIsNotInTheLibrary(): void
     {
         /** @var User $user */
         $user = $this->fakeLogin();
@@ -80,7 +103,7 @@ class CaptionsControllerTest extends TestCase
         $user->sources()->attach($source->id, ['notify' => true]);
 
         $this->json('GET', route('api.v1.media.captions.index', ['mediaId' => $media->id]))
-            ->assertStatus(200);
+            ->assertStatus(404);
     }
 
     // ================================================================

@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PlanPriceSeeder::class,
+            OpenRouterModelsSeeder::class,
         ]);
     }
 }

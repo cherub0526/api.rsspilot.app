@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Utils\Const\ISO6391;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasOne;
 use Hyperf\Database\Model\Relations\HasMany;
@@ -142,5 +143,51 @@ class Media extends Model
     public function videoTranscription(): HasOne
     {
         return $this->hasOne(VideoTranscription::class, 'media_id', 'id');
+    }
+
+    /**
+     * 這位使用者該看到的摘要。
+     *
+     * 一支影片可以有多筆摘要：使用者自己重跑的（`user_id` 有值）與全站共用的
+     * （`user_id` 為 null），各語系又各一筆。挑選順序：
+     *
+     * 1. 自己的摘要，且語系等於介面語系
+     * 2. 全站共用的摘要，且語系等於介面語系
+     * 3. 全站共用的第一筆
+     *
+     * 使用者沒有語系設定時（`settings` 資料列尚未建立，或存的值已不在白名單內，
+     * 見 `User::uiLocale()`），第 1 順位退化成「只要是自己的就用」——否則自己
+     * 產的摘要會因為沒設定語系而拿不到，反而回全站共用那份。
+     *
+     * `settings.data.locale` 存的是 `zh-TW`，摘要早期沿用字幕的 `zh_tw`，兩者
+     * 字面不相等，所以比對前一律過 `ISO6391::normalize()`；寫入端也已改成存
+     * 正規化後的值，既有資料由 `normalize_summaries_locale` 遷移洗過。
+     *
+     * `$completedOnly` 目前每個呼叫端都開著：重跑摘要會先建一筆 `status=created`、
+     * `text` 還是 null 的資料列，沒過濾就會挑到空殼——拿去餵 AI 是空的參考資料，
+     * 顯示給使用者則是把畫面上原本看得到的摘要清空。留成參數而不是寫死，是因為
+     * `SummaryResource` 會把 `status` 回給前端，未來若要讓前端看見「產生中」，
+     * 關掉它就是那個行為。
+     */
+    public function summaryFor(User $user, bool $completedOnly = false): ?Summary
+    {
+        // 同一組條件仍可能命中多筆（重跑摘要會再建一列），一律取最新的——
+        // 沒有排序就是資料庫的插入順序，等於重跑完還是拿到舊內容。
+        $query = fn () => $completedOnly
+            ? $this->summaries()->where('status', Summary::STATUS_COMPLETED)->orderByDesc('created_at')
+            : $this->summaries()->orderByDesc('created_at');
+
+        $locale = $user->uiLocale();
+
+        if ($locale === null) {
+            return $query()->where('user_id', $user->getKey())->first()
+                ?? $query()->whereNull('user_id')->first();
+        }
+
+        $locale = ISO6391::normalize($locale);
+
+        return $query()->where('user_id', $user->getKey())->where('locale', $locale)->first()
+            ?? $query()->whereNull('user_id')->where('locale', $locale)->first()
+            ?? $query()->whereNull('user_id')->first();
     }
 }

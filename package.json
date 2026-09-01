@@ -1,0 +1,9 @@
+{
+  "name": "api-rsspilot-app",
+  "private": true,
+  "type": "module",
+  "description": "只為了 Railway IaC 而存在。.railway/railway.ts 匯入 railway/iac，Railway CLI 會用 node --experimental-strip-types 直接執行該檔，因此這個套件必須實際安裝在 node_modules。應用程式本身是 PHP，沒有其他 JS 相依。",
+  "devDependencies": {
+    "railway": "^3.11.0"
+  }
+}

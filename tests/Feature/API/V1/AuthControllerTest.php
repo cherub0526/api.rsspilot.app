@@ -94,7 +94,7 @@ class AuthControllerTest extends TestCase
     public function testRegisterValidation()
     {
         $messages = (new AuthValidator([]))->getMessages();
-        $uri = route('api.v1.auth.register');
+        $uri = route('api.v1.auth.register.store');
 
         $this->json('POST', $uri)->assertStatus(422)->assertJsonStructure([
             'messages' => [
@@ -109,20 +109,39 @@ class AuthControllerTest extends TestCase
         $params = [
             'account'  => fake()->userName(),
             'email'    => fake()->email(),
-            'password' => 'password',
+            'password' => 'Password@123',
         ];
         $this->json('POST', $uri, $params)->assertStatus(422)
             ->assertJsonPath('messages.password', [$messages['password.confirmed']]);
+
+        $params = [
+            'account'               => fake()->userName(),
+            'email'                 => fake()->email(),
+            'password'              => 'password123',
+            'password_confirmation' => 'password123',
+        ];
+        $this->json('POST', $uri, $params)->assertStatus(422)
+            ->assertJsonPath('messages.password', [$messages['password.regex']]);
+
+        $longPassword = 'P@ssw0rd' . str_repeat('a', 57);
+        $params = [
+            'account'               => fake()->userName(),
+            'email'                 => fake()->email(),
+            'password'              => $longPassword,
+            'password_confirmation' => $longPassword,
+        ];
+        $this->json('POST', $uri, $params)->assertStatus(422)
+            ->assertJsonPath('messages.password', [$messages['password.max']]);
     }
 
     public function testRegisterSuccess()
     {
-        $uri = route('api.v1.auth.register');
+        $uri = route('api.v1.auth.register.store');
         $params = [
             'account'               => 'newuser',
             'email'                 => 'newuser@example.com',
-            'password'              => 'password123',
-            'password_confirmation' => 'password123',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
         ];
 
         $this->json('POST', $uri, $params)
@@ -142,12 +161,12 @@ class AuthControllerTest extends TestCase
     public function testRegisterWithExistingAccount()
     {
         User::factory()->create(['account' => 'existinguser']);
-        $uri = route('api.v1.auth.register');
+        $uri = route('api.v1.auth.register.store');
         $params = [
             'account'               => 'existinguser',
             'email'                 => 'newemail@example.com',
-            'password'              => 'password123',
-            'password_confirmation' => 'password123',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
         ];
 
         $this->json('POST', $uri, $params)
@@ -157,7 +176,7 @@ class AuthControllerTest extends TestCase
 
     public function testLogoutWithoutToken()
     {
-        $uri = route('api.v1.auth.logout');
+        $uri = route('api.v1.auth.logout.store');
         $this->json('POST', $uri)->assertStatus(401);
     }
 
@@ -166,7 +185,7 @@ class AuthControllerTest extends TestCase
         $user = User::factory()->create();
         $token = auth('jwt')->login($user);
 
-        $uri = route('api.v1.auth.logout');
+        $uri = route('api.v1.auth.logout.store');
         $this->withToken($token)->json('POST', $uri)
             ->assertStatus(200)
             ->assertContent('OK.');
@@ -174,7 +193,7 @@ class AuthControllerTest extends TestCase
 
     public function testRefreshWithoutToken()
     {
-        $uri = route('api.v1.auth.refresh');
+        $uri = route('api.v1.auth.refresh.store');
         $this->json('POST', $uri)->assertStatus(401);
     }
 
@@ -183,7 +202,7 @@ class AuthControllerTest extends TestCase
         $user = User::factory()->create();
         $token = auth('jwt')->login($user);
 
-        $uri = route('api.v1.auth.refresh');
+        $uri = route('api.v1.auth.refresh.store');
         $response = $this->withToken($token)->json('POST', $uri);
 
         $response->assertStatus(200)

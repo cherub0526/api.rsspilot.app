@@ -48,11 +48,6 @@ class Source extends Model
         'free'           => 'boolean',
     ];
 
-    public function isAccessibleBy(User $user): bool
-    {
-        return $this->free || (bool) $user->sources()->find($this->id);
-    }
-
     public function scopeActive($query)
     {
         return $query->where('status', self::STATUS_ACTIVE);

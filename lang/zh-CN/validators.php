@@ -7,10 +7,18 @@ return [
         'auth' => [
             'invalid_credentials' => '帐号或密码无效。',
         ],
+        'oauth' => [
+            'provider_not_configured' => '该登录方式尚未设置。',
+            'exchange_failed'         => '授权验证失败，请重新登录。',
+        ],
+        'custom_prompts' => [
+            'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
+            'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
+        ],
         'media' => [
-            'not_found'          => '找不到指定的媒体。',
-            'caption_not_found'  => '找不到指定的字幕。',
-            'invalid_url'        => '无效的 YouTube 影片网址。',
+            'not_found'           => '找不到指定的媒体。',
+            'caption_not_found'   => '找不到指定的字幕。',
+            'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
         ],
         'chat' => [
@@ -47,14 +55,16 @@ return [
             'unique'   => '帐号已存在。',
         ],
         'email' => [
-            'required' => '电子邮建为必填。',
-            'email'    => '电子邮建格式无效。',
-            'max'      => '电子邮建长度不能超过 255 个字符。',
+            'required' => '电子邮件为必填。',
+            'email'    => '电子邮件格式无效。',
+            'max'      => '电子邮件长度不能超过 255 个字符。',
         ],
         'password' => [
             'required'  => '密码为必填。',
             'string'    => '密码必须是字符串。',
             'min'       => '密码长度至少需要 8 个字符。',
+            'max'       => '密码长度不能超过 64 个字符。',
+            'regex'     => '密码必须包含至少一个大写英文字母、一个小写英文字母与一个特殊符号。',
             'confirmed' => '确认密码不相符。',
         ],
         'password_confirmation' => [
@@ -97,6 +107,29 @@ return [
             'string'   => '网址必须是字符串。',
         ],
     ],
+    'custom_prompts' => [
+        'media_id' => [
+            'required' => '请选择要试跑的视频。',
+            'size'     => '视频 ID 格式不正确。',
+        ],
+        'title' => [
+            'required' => '标题为必填。',
+            'string'   => '标题必须是字符串。',
+            'max'      => '标题不得超过 :max 个字符。',
+        ],
+        'content' => [
+            'required' => '内容为必填。',
+            'string'   => '内容必须是字符串。',
+            'max'      => '内容不得超过 :max 个字符。',
+        ],
+        'model_id' => [
+            'size' => '模型 ID 格式不正确。',
+        ],
+        'source_ids' => [
+            'array' => '应用来源必须是数组。',
+            'max'   => '应用来源最多 :max 个。',
+        ],
+    ],
     'oauth' => [
         'provider' => [
             'required' => '提供者为必填。',
@@ -104,6 +137,12 @@ return [
         ],
         'code' => [
             'required' => '代码为必填。',
+        ],
+        'redirect' => [
+            'required' => '跳转网址为必填。',
+            'string'   => '跳转网址必须是字符串。',
+            'url'      => '跳转网址格式不正确。',
+            'max'      => '跳转网址不得超过 :max 个字符。',
         ],
     ],
     'rss' => [
@@ -148,8 +187,8 @@ return [
             'string'   => '名称必须是字符串。',
         ],
         'email' => [
-            'required' => '电子邮建为必填。',
-            'email'    => '电子邮建格式无效。',
+            'required' => '电子邮件为必填。',
+            'email'    => '电子邮件格式无效。',
         ],
     ],
 
@@ -246,9 +285,9 @@ return [
                 'string'   => 'text.short_summary 必须是字符串。',
             ],
             'long_summary' => [
-                'required'   => 'text.long_summary 字段为必填项。',
-                'array'      => 'text.long_summary 必须是数组。',
-                'content'    => [
+                'required' => 'text.long_summary 字段为必填项。',
+                'array'    => 'text.long_summary 必须是数组。',
+                'content'  => [
                     'required' => 'text.long_summary.content 字段为必填项。',
                     'string'   => 'text.long_summary.content 必须是字符串。',
                 ],

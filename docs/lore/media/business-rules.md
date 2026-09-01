@@ -63,3 +63,54 @@ The rule, the reasoning, and edge cases.
 重用既有 media 時**不** dispatch：它要嘛已經跑完、要嘛正在跑，再送一次只是重複付轉錄費用。`VideoTranscriberStartJob` 的 `ShouldBeUnique` 只防「同時」，不防「跑完又跑一次」。
 
 代價是：若那筆舊資料卡在 `transcribe_failed`，接手的新使用者也拿不到內容。重試失敗的轉錄是 `videotranscriber:start --id` 的職責，不是這個端點的。
+
+## 影片的存取權以 userables 為準，不是來源訂閱
+
+`code:` `app/Models/Media.php` → `isAccessibleBy()` · `updated:` `2026-08-29` · `status:` `active`
+
+判斷只有兩條，任一成立即可存取：
+
+1. **使用者的影片庫裡有這支影片**（`userables` 樞紐，`$user->media()`）
+2. 使用者沒有它，但**該影片的來源 `free = true`**
+
+實測全矩陣：
+
+| `source.free` | 在影片庫 | 結果 |
+|---|---|---|
+| true | 是 | 可存取 |
+| true | 否 | 可存取 |
+| false | 是 | 可存取 |
+| false | 否 | 404 |
+| 無 source | 是 | 可存取 |
+| 無 source | 否 | 404 |
+
+`source` 為 null 時第 2 條直接是 false（`$this->source?->free ?? false`），所以未歸屬任何來源的影片只能靠影片庫授權——這正是「不訂閱來源、直接加單支影片」那條路徑要的行為。
+
+### 為什麼不是看來源訂閱
+
+使用者可以**不訂閱任何來源、直接把單支影片加進影片庫**。那種影片在 `user_sources` 裡沒有對應的列，用來源訂閱判斷會誤判成無權存取。
+
+反過來也不對稱：訂閱來源時 `SubscriptionService::syncSourceMediaToUserables()` 會把該來源的影片寫進影片庫，**但受 30 天影片額度限制**——額度用完就一列都不寫。那些影片本來就沒進使用者的影片庫，自然也不該讀得到字幕或摘要。
+
+### 用詞陷阱
+
+「訂閱」在這個專案有兩個意思，混用過一次就出過事：
+
+- **訂閱來源** = `user_sources` 樞紐（`$user->sources()`）
+- **擁有影片** = `userables` 樞紐（`$user->media()`）
+
+存取權看的是後者。
+
+### 曾經有三套不同的判斷
+
+2026-08-29 收斂前，同一個概念散在三處且互不等價：
+
+| 端點 | 當時的判斷 |
+|---|---|
+| `media/{id}`、`media/{id}/chat/*` | `Media::isAccessibleBy`（正確的那套） |
+| `media/{id}/captions*` | `Source::isAccessibleBy`——看**來源訂閱** |
+| `media/{id}/summaries*` | `$user->media()->find()`——看綁定但**不看 free** |
+
+症狀是同一個使用者對同一支影片，captions 看得到、chat 回 404，或免費來源的影片有字幕卻沒有摘要。全部改為呼叫 `Media::isAccessibleBy`。
+
+新增需要授權的端點時直接呼叫它，不要另外寫一份。

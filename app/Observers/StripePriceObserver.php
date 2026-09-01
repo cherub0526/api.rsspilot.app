@@ -14,21 +14,12 @@ class StripePriceObserver
     {
         $stripe = new StripeClient();
 
-        [$interval, $intervalCount] = match ($price->unit) {
-            Price::UNIT_QUARTERLY => ['month', 3],
-            Price::UNIT_ANNUALLY  => ['year', 1],
-            default               => ['month', 1],
-        };
-
         try {
             $stripePrice = $stripe->prices()->create([
-                'product'        => $price->plan->stripe->stripe_id,
-                'unit_amount'    => (int) ($price->price * 100),
-                'currency'       => 'usd',
-                'recurring'      => [
-                    'interval'       => $interval,
-                    'interval_count' => $intervalCount,
-                ],
+                'product'     => $price->plan->stripe->stripe_id,
+                'unit_amount' => $price->stripeUnitAmount(),
+                'currency'    => 'usd',
+                'recurring'   => $price->stripeRecurring(),
             ]);
 
             $price->stripe()->create([
@@ -36,6 +27,41 @@ class StripePriceObserver
                 'stripe_id'     => $stripePrice->id,
                 'stripe_detail' => $stripePrice->toArray(),
             ]);
+        } catch (Exception $e) {
+        }
+    }
+
+    /**
+     * Stripe 的 Price 不可修改，改價只能「建新的 → 封存舊的 → 改寫映射」。
+     * 少了這段，prices.price 改過之後 stripes 會一直指著舊金額。
+     */
+    public function updated(Price $price): void
+    {
+        if (!$price->wasChanged(['price', 'unit'])) {
+            return;
+        }
+
+        if (!$price->stripe()->exists() || !$price->plan?->stripe()->exists()) {
+            return;
+        }
+
+        $stripe = new StripeClient();
+        $oldStripePriceId = $price->stripe->stripe_id;
+
+        try {
+            $stripePrice = $stripe->prices()->create([
+                'product'     => $price->plan->stripe->stripe_id,
+                'unit_amount' => $price->stripeUnitAmount(),
+                'currency'    => 'usd',
+                'recurring'   => $price->stripeRecurring(),
+            ]);
+
+            $price->stripe->update([
+                'stripe_id'     => $stripePrice->id,
+                'stripe_detail' => $stripePrice->toArray(),
+            ]);
+
+            $stripe->prices()->update($oldStripePriceId, ['active' => false]);
         } catch (Exception $e) {
         }
     }

@@ -33,6 +33,14 @@ class User extends Authenticatable
      */
     public const string DEFAULT_AI_LANGUAGE = 'en';
 
+    /**
+     * 對應 users 資料表的 varchar(255)。社群登入帶進來的名稱與頭像網址寫入前依此截斷——
+     * 測試環境是 sqlite，不會因為超長而失敗，MySQL 會。
+     */
+    public const int NAME_MAX_LENGTH = 255;
+
+    public const int AVATAR_MAX_LENGTH = 255;
+
     protected array $with = ['paddle'];
 
     protected ?string $table = 'users';
@@ -54,6 +62,11 @@ class User extends Authenticatable
     public function oauths(): HasMany
     {
         return $this->hasMany(Oauth::class, 'user_id', 'id');
+    }
+
+    public function customPrompts(): HasMany
+    {
+        return $this->hasMany(CustomPrompt::class, 'user_id', 'id');
     }
 
     public function rss()

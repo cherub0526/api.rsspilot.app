@@ -202,4 +202,29 @@ class ISO6391
     {
         return array_search($code, self::LANGUAGES);
     }
+
+    /**
+     * 把各種寫法的語言代碼收斂成這張表使用的形式。
+     *
+     * 同一個語言在專案裡有兩種寫法：`settings.data.locale` 存的是這張表的
+     * `zh-TW`（連字號、地區大寫），而字幕與摘要沿用 `Caption::LOCAL_ZH_TW`
+     * 的 `zh_tw`（底線、全小寫）。兩者字面不相等，直接比對只有 `en` 這種沒有
+     * 地區碼的會中——摘要要依使用者語系挑選就必須先過這一層。
+     *
+     * 查不到的代碼原樣回傳，不猜也不丟例外：這裡的角色是正規化，不是驗證。
+     * 帶地區但整組查不到時（例如 `zh-HK`）退回語言本身（`zh`），因為地區
+     * 變體對不上通常仍屬同一語言，比整個對不到有用。
+     */
+    public static function normalize(string $code): string
+    {
+        $parts = explode('-', str_replace('_', '-', trim($code)), 2);
+        $language = strtolower($parts[0]);
+        $candidate = isset($parts[1]) ? $language . '-' . strtoupper($parts[1]) : $language;
+
+        if (in_array($candidate, self::LANGUAGES, true)) {
+            return $candidate;
+        }
+
+        return in_array($language, self::LANGUAGES, true) ? $language : $code;
+    }
 }

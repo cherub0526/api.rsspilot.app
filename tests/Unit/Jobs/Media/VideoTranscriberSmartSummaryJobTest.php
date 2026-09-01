@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Jobs\Media;
 
 use Tests\TestCase;
+use App\Models\User;
 use App\Models\Media;
 use RuntimeException;
 use App\Models\Caption;
@@ -157,6 +158,65 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
                 && str_contains($text, "Transcript Content:\nthe transcript")
                 && str_contains($text, 'written exclusively in English,');
         });
+    }
+
+    public function testSendsTheTimestampedTranscriptWhenTheCaptionHasSegments(): void
+    {
+        $this->fakeStream($this->summaryJson('# Title'));
+
+        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => Caption::LOCAL_EN,
+            'primary'  => true,
+            'text'     => 'first second',
+            'segments' => [
+                ['start' => 0.0, 'end' => 4.0, 'text' => 'first'],
+                ['start' => 40.0, 'end' => 44.0, 'text' => 'second'],
+            ],
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        Http::assertSent(function ($request) {
+            if (!str_contains($request->url(), '/summary/completions')) {
+                return true;
+            }
+
+            return str_contains(
+                $request->data()['text'],
+                "Transcript Content:\n[00:00:00 ~ 00:00:04] first\n[00:00:40 ~ 00:00:44] second"
+            );
+        });
+    }
+
+    /**
+     * 使用者自己的摘要（user_id 有值）跟全站共用那筆是不同的資料列，重跑排程
+     * 不能把前者蓋掉——firstOrCreate 只認 user_id 為 null 的那筆。
+     */
+    public function testDoesNotOverwriteAUsersOwnSummaryForTheSameLocale(): void
+    {
+        $this->fakeStream($this->summaryJson('# Shared'));
+
+        $media = $this->transcribedMediaWithCaption();
+        $user = User::factory()->create();
+
+        $mine = Summary::factory()->create([
+            'media_id' => $media->id,
+            'user_id'  => $user->id,
+            'locale'   => Caption::LOCAL_EN,
+            'status'   => Summary::STATUS_COMPLETED,
+            'text'     => ['short_summary' => 'mine', 'long_summary' => ['content' => '# Mine']],
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $this->assertSame('# Mine', $mine->refresh()->text['long_summary']['content']);
+        $this->assertSame(
+            '# Shared',
+            $media->summaries()->whereNull('user_id')->first()->text['long_summary']['content']
+        );
+        $this->assertSame(2, $media->summaries()->count());
     }
 
     public function testTheLanguageCodeIsResolvedIntoThePrompt(): void

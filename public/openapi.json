@@ -15,6 +15,43 @@
         }
     ],
     "paths": {
+        "/v1/ai-models": {
+            "get": {
+                "tags": [
+                    "AiModels"
+                ],
+                "summary": "List the AI models a user can pick",
+                "operationId": "api.v1.ai-models.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/AiModelResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/auth/forgot-password": {
             "post": {
                 "tags": [
@@ -144,43 +181,38 @@
                 }
             }
         },
-        "/v1/auth": {
+        "/v1/auth/logout": {
             "post": {
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Login and obtain access token",
-                "operationId": "api.v1.auth.store",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "account",
-                                    "password"
-                                ],
-                                "properties": {
-                                    "account": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "minLength": 6,
-                                        "example": "johndoe"
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "minLength": 8,
-                                        "example": "secret123"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
+                "summary": "Log the current user out",
+                "operationId": "api.v1.auth.logout.store",
                 "responses": {
                     "200": {
-                        "description": "Access token issued",
+                        "description": "OK."
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/auth/refresh": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Exchange the current access token for a new one",
+                "operationId": "api.v1.auth.refresh.store",
+                "responses": {
+                    "200": {
+                        "description": "New access token issued",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -203,10 +235,15 @@
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
+                    "401": {
+                        "$ref": "#/components/responses/401"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/auth/register": {
@@ -215,7 +252,7 @@
                     "Auth"
                 ],
                 "summary": "Register a new user",
-                "operationId": "api.v1.auth.register",
+                "operationId": "api.v1.auth.register.store",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -285,6 +322,380 @@
                         "$ref": "#/components/responses/400"
                     }
                 }
+            }
+        },
+        "/v1/auth": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Login and obtain access token",
+                "operationId": "api.v1.auth.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "account",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "account": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "minLength": 6,
+                                        "example": "johndoe"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "minLength": 8,
+                                        "example": "secret123"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/custom-prompts/preview": {
+            "post": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Run a prompt against one video and return the summary preview",
+                "operationId": "api.v1.custom-prompts.preview.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "media_id",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "media_id": {
+                                        "type": "string",
+                                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理重點。"
+                                    },
+                                    "model_id": {
+                                        "description": "Falls back to the system default when omitted, or when the plan does not allow it.",
+                                        "type": "string",
+                                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9",
+                                        "nullable": true
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Preview generated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "short_summary": {
+                                            "type": "string",
+                                            "example": "一句話總結。"
+                                        },
+                                        "long_summary": {
+                                            "properties": {
+                                                "content": {
+                                                    "type": "string",
+                                                    "example": "完整的長摘要。"
+                                                },
+                                                "key_points": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "keywords": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/custom-prompts": {
+            "get": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "List the current user custom prompts",
+                "operationId": "api.v1.custom-prompts.index",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CustomPromptResource"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Create a custom prompt",
+                "operationId": "api.v1.custom-prompts.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "學習筆記摘要"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/custom-prompts/{promptId}": {
+            "get": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Show one custom prompt",
+                "operationId": "api.v1.custom-prompts.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/promptId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "put": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Replace a custom prompt",
+                "operationId": "api.v1.custom-prompts.update",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/promptId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "title",
+                                    "content"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 255,
+                                        "example": "學習筆記摘要"
+                                    },
+                                    "content": {
+                                        "type": "string",
+                                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomPromptResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "tags": [
+                    "CustomPrompts"
+                ],
+                "summary": "Delete a custom prompt",
+                "operationId": "api.v1.custom-prompts.destroy",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/promptId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/feedbacks": {
@@ -434,7 +845,7 @@
                 ],
                 "summary": "Generate follow-up questions from the last AI answer",
                 "description": "GET /v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups.\n\n依這個 session 最後一則 AI 回應產生延伸問題；還沒有任何 AI 回應時改用影片\n摘要當素材。刻意做成獨立端點而不是掛在 chat 回應裡：前端在答案顯示完之後\n才來要，主流程的延遲不受影響。\n\n不計入每日 chat 額度——使用者只是看「可以接著問什麼」，還沒真的發問，\n光看建議就燒掉免費方案 3 次中的 1 次會讓功能沒人敢用。成本改由路由上的\nthrottle 中介層擋。但額度已經用盡時就不產生了：問題產出來也按不下去，\n只是白付一次推論的錢。",
-                "operationId": "api.v1.media.chat.sessions.followUps",
+                "operationId": "api.v1.media.chat.sessions.follow-ups.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -632,7 +1043,7 @@
                 ],
                 "summary": "SSE long connection to receive AI reply tokens",
                 "description": "GET /v1/media/{mediaId}/chat/stream.\n\n建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。\n\n流程：\n 1. 開啟長連線，送出 connected 事件\n 2. 為此連線建立專屬 Swoole Channel\n 3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent\n    （依 userId + mediaId 過濾，只接收屬於自己的事件）\n 4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈",
-                "operationId": "api.v1.media.chat.stream",
+                "operationId": "api.v1.media.chat.stream.show",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/mediaId"
@@ -776,65 +1187,6 @@
                         "$ref": "#/components/responses/429"
                     }
                 }
-            }
-        },
-        "/v1/media/{mediaId}/custom-prompt": {
-            "post": {
-                "tags": [
-                    "Media"
-                ],
-                "summary": "Run a custom prompt against a media caption",
-                "operationId": "api.v1.media.custom-prompt.store",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/mediaId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "prompt"
-                                ],
-                                "properties": {
-                                    "prompt": {
-                                        "type": "string",
-                                        "example": "影片中出現了哪些食物？"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Custom prompt result",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "text": {
-                                            "type": "string",
-                                            "example": "影片中出現了拉麵、壽司和天婦羅。"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
             }
         },
         "/v1/media/{mediaId}/summaries": {
@@ -1053,34 +1405,126 @@
                 ]
             }
         },
-        "/v1/auth/oauth/callback": {
+        "/v1/oauth/{provider}/callback": {
             "post": {
                 "tags": [
                     "Auth"
                 ],
-                "summary": "Handle OAuth provider callback and bind social account",
-                "operationId": "api.v1.auth.oauth.callback",
+                "summary": "Exchange the provider authorization code for an access token",
+                "operationId": "api.v1.oauth.callback.store",
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "description": "OAuth provider. Only `google` is wired up right now.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "google",
+                                "facebook"
+                            ],
+                            "example": "google"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "provider",
-                                    "code"
+                                    "code",
+                                    "redirect"
                                 ],
                                 "properties": {
-                                    "provider": {
-                                        "type": "string",
-                                        "enum": [
-                                            "facebook",
-                                            "google"
-                                        ],
-                                        "example": "google"
-                                    },
                                     "code": {
+                                        "description": "The authorization code the provider sent to the redirect URL.",
                                         "type": "string",
                                         "example": "4/0AfJohXl..."
+                                    },
+                                    "redirect": {
+                                        "description": "Must be byte-for-byte the value sent to /v1/oauth/{provider}/redirect. The provider rejects the exchange when the two differ.",
+                                        "type": "string",
+                                        "format": "uri",
+                                        "maxLength": 255,
+                                        "example": "https://rsspilot.app/oauth/google/callback"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Access token issued",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "access_token": {
+                                            "type": "string",
+                                            "example": "eyJ0eXAiOiJKV1Qi..."
+                                        },
+                                        "token_type": {
+                                            "type": "string",
+                                            "example": "bearer"
+                                        },
+                                        "expires_in": {
+                                            "type": "integer",
+                                            "example": 3600
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                }
+            }
+        },
+        "/v1/oauth/{provider}/redirect": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Build the provider authorization URL to start an OAuth sign-in",
+                "operationId": "api.v1.oauth.redirect.store",
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "description": "OAuth provider. Only `google` is wired up right now.",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "google",
+                                "facebook"
+                            ],
+                            "example": "google"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "redirect"
+                                ],
+                                "properties": {
+                                    "redirect": {
+                                        "description": "Where the provider sends the user back to. Must be registered with the provider beforehand.",
+                                        "type": "string",
+                                        "format": "uri",
+                                        "maxLength": 255,
+                                        "example": "https://rsspilot.app/oauth/callback"
                                     }
                                 },
                                 "type": "object"
@@ -1090,7 +1534,48 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "OAuth account bound successfully"
+                        "description": "Authorization URL",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "url": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "example": "https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=https%3A%2F%2Frsspilot.app%2Foauth%2Fcallback&scope=openid+profile+email&response_type=code"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                }
+            }
+        },
+        "/v1/plans": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "List available subscription plans",
+                "operationId": "api.v1.plans.index",
+                "responses": {
+                    "200": {
+                        "description": "List of active subscription plans",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlanResource"
+                                    }
+                                }
+                            }
+                        }
                     },
                     "400": {
                         "$ref": "#/components/responses/400"
@@ -1732,31 +2217,157 @@
                 ]
             }
         },
-        "/v1/plans": {
+        "/v1/subscriptions/checkout-session": {
             "get": {
                 "tags": [
-                    "Plans"
+                    "Subscriptions"
                 ],
-                "summary": "List available subscription plans",
-                "operationId": "api.v1.plans.index",
+                "summary": "Retrieve Stripe Checkout Session status after redirect",
+                "operationId": "api.v1.subscriptions.checkout-session.index",
+                "parameters": [
+                    {
+                        "name": "session_id",
+                        "in": "query",
+                        "description": "Stripe Checkout Session ID",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "cs_live_xxx"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "List of active subscription plans",
+                        "description": "Session status with subscribed plan and billing info",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/PlanResource"
-                                    }
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "open",
+                                                "complete",
+                                                "expired"
+                                            ],
+                                            "example": "complete"
+                                        },
+                                        "customer_email": {
+                                            "type": "string",
+                                            "example": "user@example.com",
+                                            "nullable": true
+                                        },
+                                        "plan": {
+                                            "$ref": "#/components/schemas/PlanResource"
+                                        },
+                                        "billing": {
+                                            "description": "Present only when status=complete",
+                                            "properties": {
+                                                "period_start": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-05-30T00:00:00+00:00"
+                                                },
+                                                "period_end": {
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-06-30T00:00:00+00:00"
+                                                },
+                                                "amount": {
+                                                    "type": "number",
+                                                    "format": "float",
+                                                    "example": 9.99,
+                                                    "nullable": true
+                                                },
+                                                "currency": {
+                                                    "type": "string",
+                                                    "example": "USD",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
                                 }
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "description": "Session not found or does not belong to user"
                     }
-                }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/usage": {
+            "get": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Get subscription usage statistics for the past 30 days",
+                "operationId": "api.v1.subscriptions.usage.index",
+                "responses": {
+                    "200": {
+                        "description": "Usage statistics",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "properties": {
+                                                "plan": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "type": "integer",
+                                                            "example": 10
+                                                        },
+                                                        "media": {
+                                                            "type": "integer",
+                                                            "example": 100
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "usage": {
+                                                    "properties": {
+                                                        "channels": {
+                                                            "type": "integer",
+                                                            "example": 3
+                                                        },
+                                                        "media": {
+                                                            "type": "integer",
+                                                            "example": 42
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/subscriptions": {
@@ -1965,159 +2576,6 @@
                     },
                     "404": {
                         "description": "Subscription not found"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/subscriptions/usage": {
-            "get": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Get subscription usage statistics for the past 30 days",
-                "operationId": "api.v1.subscriptions.usage",
-                "responses": {
-                    "200": {
-                        "description": "Usage statistics",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "data": {
-                                            "properties": {
-                                                "plan": {
-                                                    "properties": {
-                                                        "channels": {
-                                                            "type": "integer",
-                                                            "example": 10
-                                                        },
-                                                        "media": {
-                                                            "type": "integer",
-                                                            "example": 100
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                },
-                                                "usage": {
-                                                    "properties": {
-                                                        "channels": {
-                                                            "type": "integer",
-                                                            "example": 3
-                                                        },
-                                                        "media": {
-                                                            "type": "integer",
-                                                            "example": 42
-                                                        }
-                                                    },
-                                                    "type": "object"
-                                                }
-                                            },
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/subscriptions/checkout-session": {
-            "get": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Retrieve Stripe Checkout Session status after redirect",
-                "operationId": "api.v1.subscriptions.checkout-session",
-                "parameters": [
-                    {
-                        "name": "session_id",
-                        "in": "query",
-                        "description": "Stripe Checkout Session ID",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "example": "cs_live_xxx"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Session status with subscribed plan and billing info",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "enum": [
-                                                "open",
-                                                "complete",
-                                                "expired"
-                                            ],
-                                            "example": "complete"
-                                        },
-                                        "customer_email": {
-                                            "type": "string",
-                                            "example": "user@example.com",
-                                            "nullable": true
-                                        },
-                                        "plan": {
-                                            "$ref": "#/components/schemas/PlanResource"
-                                        },
-                                        "billing": {
-                                            "description": "Present only when status=complete",
-                                            "properties": {
-                                                "period_start": {
-                                                    "type": "string",
-                                                    "format": "date-time",
-                                                    "example": "2026-05-30T00:00:00+00:00"
-                                                },
-                                                "period_end": {
-                                                    "type": "string",
-                                                    "format": "date-time",
-                                                    "example": "2026-06-30T00:00:00+00:00"
-                                                },
-                                                "amount": {
-                                                    "type": "number",
-                                                    "format": "float",
-                                                    "example": 9.99,
-                                                    "nullable": true
-                                                },
-                                                "currency": {
-                                                    "type": "string",
-                                                    "example": "USD",
-                                                    "nullable": true
-                                                }
-                                            },
-                                            "type": "object",
-                                            "nullable": true
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    },
-                    "404": {
-                        "description": "Session not found or does not belong to user"
                     }
                 },
                 "security": [
@@ -2754,6 +3212,42 @@
     },
     "components": {
         "schemas": {
+            "AiModelResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Claude 3.5 Sonnet"
+                    },
+                    "supports_thinking": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "min_plan": {
+                        "description": "Lowest plan that includes this model, derived from plan_ai_models. Null when the plans relation was not eager loaded, or no plan includes it.",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                            },
+                            "title": {
+                                "type": "string",
+                                "example": "Pro"
+                            },
+                            "sort": {
+                                "type": "integer",
+                                "example": 1
+                            }
+                        },
+                        "type": "object",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
             "CaptionResource": {
                 "properties": {
                     "id": {
@@ -2804,8 +3298,63 @@
                         "example": "user"
                     },
                     "content": {
+                        "description": "Plain-text projection of the text parts.",
                         "type": "string",
                         "example": "What is this video about?"
+                    },
+                    "parts": {
+                        "description": "Ordered parts that make up this turn. Always present; messages stored before parts existed are returned as a single text part.",
+                        "type": "array",
+                        "items": {
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "text",
+                                        "thinking",
+                                        "tool_call",
+                                        "tool_result"
+                                    ],
+                                    "example": "text"
+                                },
+                                "text": {
+                                    "description": "text / thinking",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "id": {
+                                    "description": "tool_call",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "name": {
+                                    "description": "tool_call",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "input": {
+                                    "description": "tool_call",
+                                    "type": "object",
+                                    "nullable": true
+                                },
+                                "tool_call_id": {
+                                    "description": "tool_result",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "output": {
+                                    "description": "tool_result",
+                                    "type": "string",
+                                    "nullable": true
+                                },
+                                "is_error": {
+                                    "description": "tool_result",
+                                    "type": "boolean",
+                                    "nullable": true
+                                }
+                            },
+                            "type": "object"
+                        }
                     },
                     "created_at": {
                         "type": "string",
@@ -2865,6 +3414,49 @@
                         "type": "string",
                         "format": "date-time",
                         "example": "2026-05-29T10:05:00Z"
+                    }
+                },
+                "type": "object"
+            },
+            "CustomPromptResource": {
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "學習筆記摘要"
+                    },
+                    "content": {
+                        "type": "string",
+                        "example": "請以學習筆記的風格整理這部影片的重點…"
+                    },
+                    "model": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/AiModelResource"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Only present when eager loaded. Null when the config has no model pinned."
+                    },
+                    "sources": {
+                        "description": "Channels / playlists this config applies to. Only present when eager loaded.",
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SourceResource"
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -3275,6 +3867,27 @@
                     }
                 }
             },
+            "422": {
+                "description": "Invalid request parameters",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "properties": {
+                                "messages": {
+                                    "description": "驗證失敗的實際回應。\n\n`App\\Exceptions\\InvalidRequestException::render()` 回的是 422 加上 `messages`\n這個鍵（不是 400、也不是 `errors`）——`$statusCode` 與 `render()` 兩處都寫死了。\n既有端點多半沿用 Http400，那份與執行期行為對不上；新端點請用這一份。",
+                                    "type": "object",
+                                    "example": {
+                                        "redirect": [
+                                            "導轉網址為必填。"
+                                        ]
+                                    }
+                                }
+                            },
+                            "type": "object"
+                        }
+                    }
+                }
+            },
             "429": {
                 "description": "Daily AI chat quota exhausted for the current plan",
                 "headers": {
@@ -3354,6 +3967,16 @@
                 "schema": {
                     "type": "string",
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "promptId": {
+                "name": "promptId",
+                "in": "path",
+                "description": "Custom prompt ID",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
                 }
             },
             "sourceId": {
@@ -3440,8 +4063,16 @@
     },
     "tags": [
         {
+            "name": "AiModels",
+            "description": "AiModels"
+        },
+        {
             "name": "Auth",
             "description": "Auth"
+        },
+        {
+            "name": "CustomPrompts",
+            "description": "CustomPrompts"
         },
         {
             "name": "Feedbacks",
@@ -3450,6 +4081,10 @@
         {
             "name": "Media",
             "description": "Media"
+        },
+        {
+            "name": "Plans",
+            "description": "Plans"
         },
         {
             "name": "Popularies",
@@ -3466,10 +4101,6 @@
         {
             "name": "Sources",
             "description": "Sources"
-        },
-        {
-            "name": "Plans",
-            "description": "Plans"
         },
         {
             "name": "Subscriptions",

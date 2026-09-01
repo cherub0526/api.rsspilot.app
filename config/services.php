@@ -36,15 +36,23 @@ return [
         ],
     ],
 
+    /*
+     * `redirect` 的預設值是空字串而不是 null，這一點不能省。
+     *
+     * SocialiteManager::formatRedirectUrl() 的回傳型別是 string，拿到 null 會在
+     * 「建構 driver 的當下」就丟 TypeError——早於任何 ->redirectUrl() 覆寫，所以
+     * 呼叫端補不回來。POST /v1/oauth/{provider}/redirect 一律以請求帶進來的
+     * redirect 覆寫這個值，config 這份純粹是為了讓 driver 建得起來。
+     */
     'facebook' => [
         'client_id'     => env('FACEBOOK_CLIENT_ID'),
         'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-        'redirect'      => env('FACEBOOK_REDIRECT_URI'),
+        'redirect'      => env('FACEBOOK_REDIRECT_URI', ''),
     ],
     'google' => [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect'      => env('GOOGLE_REDIRECT_URI'),
+        'redirect'      => env('GOOGLE_REDIRECT_URI', ''),
     ],
 
     'rapidapi' => [
@@ -61,6 +69,18 @@ return [
         // in once observed; 401/403 are always treated as expired regardless.
         'unauthorized_codes' => array_values(array_filter(
             array_map('trim', explode(',', (string) env('VIDEOTRANSCRIBER_UNAUTHORIZED_CODES', ''))),
+            fn (string $code) => $code !== ''
+        )),
+
+        // 對方帳號允許的同時轉錄數。超過時 startTranscription 不會失敗，而是
+        // 回 busy_codes 裡的代碼。做成設定是因為這是對方的方案限制，升級就會變。
+        'max_concurrent' => (int) env('VIDEOTRANSCRIBER_MAX_CONCURRENT', 5),
+
+        // Business `code` values that mean "at capacity, retry later" — 與
+        // unauthorized_codes 同樣的處理方式：API 回 200 帶代碼，不是 HTTP 錯誤。
+        // 這類代碼代表「現在滿了」而不是「這筆壞了」，必須退回重試而不是標記失敗。
+        'busy_codes' => array_values(array_filter(
+            array_map('trim', explode(',', (string) env('VIDEOTRANSCRIBER_BUSY_CODES', '164002'))),
             fn (string $code) => $code !== ''
         )),
     ],

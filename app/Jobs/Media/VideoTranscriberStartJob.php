@@ -27,12 +27,41 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
     protected const int MAX_ATTEMPTS = 12;
 
     /**
+     * 遠端滿載時的重試間隔。比認證那條短很多——等的是別人的轉錄跑完，
+     * 通常幾分鐘內就會空出名額。
+     */
+    protected const int BUSY_RETRY_DELAY_SECONDS = 60;
+
+    /**
+     * 塞車重試的總時限。刻意壓在 uniqueFor（3600）之內：超過的話唯一鎖會先
+     * 過期，同一筆 media 就可能被重複派工。
+     */
+    protected const int RETRY_UNTIL_SECONDS = 3000;
+
+    /**
      * Must cover every release() this job can make, otherwise the worker fails
      * the job on the second attempt instead of letting it retry.
+     *
+     * 注意：一旦定義了 retryUntil()，worker 就完全不看這個值
+     * （vendor/hypervel/queue/src/Worker.php:563 的 `! $retryUntil &&`）。
+     * 保留它是為了留下意圖，實際的次數上限由 releaseForAuthRetry() 自己的
+     * attempts() 檢查把關。
      */
     public int $tries = self::MAX_ATTEMPTS;
 
     public int $uniqueFor = 3600;
+
+    /**
+     * 用時間上限取代次數上限。
+     *
+     * 塞車時要退回重試幾次是無法預先知道的——取決於前面那些轉錄多久跑完。
+     * 用次數當預算會讓「排隊太久」被誤判成「這筆轉錄失敗」，而其實什麼都
+     * 沒壞。時間上限才貼近「等到有名額為止」的語意。
+     */
+    public function retryUntil(): int
+    {
+        return time() + self::RETRY_UNTIL_SECONDS;
+    }
 
     protected Media $media;
 
@@ -60,6 +89,14 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
      */
     public function handle(VideoTranscriberClient $client): void
     {
+        // 主動閘門：名額滿了就別浪費 getUrlInfo 與 startTranscription 兩趟
+        // 呼叫。下面仍然保留對 busy code 的處理，因為這個計數是本地推估的，
+        // 會跟遠端漂移（media 被刪、fetch 沒跑成功都會讓計數卡住）。
+        if ($this->transcribingCount() >= $this->maxConcurrent()) {
+            $this->release(self::BUSY_RETRY_DELAY_SECONDS);
+            return;
+        }
+
         $videoId = $this->media->video_detail['yt:videoId'];
         $url = sprintf('https://www.youtube.com/watch?v=%s', $videoId);
 
@@ -103,7 +140,16 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
         $this->saveTranscription(['start_transcription' => $startTranscription]);
 
-        if (($startTranscription['code'] ?? null) !== 100000) {
+        $code = $startTranscription['code'] ?? null;
+
+        // 滿載是暫時的，不是這筆的問題。標記失敗會讓 media 再也不會自己
+        // 回來，只因為當下剛好排在第六個。
+        if ($this->isBusyCode($code)) {
+            $this->release(self::BUSY_RETRY_DELAY_SECONDS);
+            return;
+        }
+
+        if ($code !== 100000) {
             $this->markTranscribeFailed();
             return;
         }
@@ -162,6 +208,37 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         }
 
         $this->release(self::AUTH_RETRY_DELAY_SECONDS);
+    }
+
+    /**
+     * 本地推估的在途轉錄數。遠端的上限算的是「處理中的任務」，而那正好對應
+     * 到停在 transcribing 的 media——它們要等 VideoTranscriberFetchJob 取回
+     * 結果才會離開這個狀態。
+     */
+    private function transcribingCount(): int
+    {
+        return Media::query()
+            ->where('status', Media::STATUS_TRANSCRIBING)
+            ->count();
+    }
+
+    private function maxConcurrent(): int
+    {
+        return (int) config('services.videotranscriber.max_concurrent', 5);
+    }
+
+    private function isBusyCode(mixed $code): bool
+    {
+        if (!is_numeric($code)) {
+            return false;
+        }
+
+        $busyCodes = array_map(
+            'intval',
+            (array) config('services.videotranscriber.busy_codes', [])
+        );
+
+        return in_array((int) $code, $busyCodes, true);
     }
 
     private function markTranscribeFailed(): void

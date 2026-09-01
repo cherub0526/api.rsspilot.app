@@ -7,10 +7,18 @@ return [
         'auth' => [
             'invalid_credentials' => '帳號或密碼無效。',
         ],
+        'oauth' => [
+            'provider_not_configured' => '該登入方式尚未設定。',
+            'exchange_failed'         => '授權驗證失敗，請重新登入。',
+        ],
+        'custom_prompts' => [
+            'plan_required'  => '自訂 AI 摘要需要 Pro 以上的方案。',
+            'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
+        ],
         'media' => [
-            'not_found'          => '找不到指定的媒體。',
-            'caption_not_found'  => '找不到指定的字幕。',
-            'invalid_url'        => '無效的 YouTube 影片網址。',
+            'not_found'           => '找不到指定的媒體。',
+            'caption_not_found'   => '找不到指定的字幕。',
+            'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
         ],
         'chat' => [
@@ -55,6 +63,8 @@ return [
             'required'  => '密碼為必填。',
             'string'    => '密碼必須是字串。',
             'min'       => '密碼長度至少需要 8 個字元。',
+            'max'       => '密碼長度不能超過 64 個字元。',
+            'regex'     => '密碼必須包含至少一個大寫英文字母、一個小寫英文字母與一個特殊符號。',
             'confirmed' => '確認密碼不相符。',
         ],
         'password_confirmation' => [
@@ -97,6 +107,29 @@ return [
             'string'   => '網址必須是字串。',
         ],
     ],
+    'custom_prompts' => [
+        'media_id' => [
+            'required' => '請選擇要試跑的影片。',
+            'size'     => '影片 ID 格式不正確。',
+        ],
+        'title' => [
+            'required' => '標題為必填。',
+            'string'   => '標題必須是字串。',
+            'max'      => '標題不得超過 :max 個字元。',
+        ],
+        'content' => [
+            'required' => '內容為必填。',
+            'string'   => '內容必須是字串。',
+            'max'      => '內容不得超過 :max 個字元。',
+        ],
+        'model_id' => [
+            'size' => '模型 ID 格式不正確。',
+        ],
+        'source_ids' => [
+            'array' => '套用來源必須是陣列。',
+            'max'   => '套用來源最多 :max 個。',
+        ],
+    ],
     'oauth' => [
         'provider' => [
             'required' => '提供者為必填。',
@@ -104,6 +137,12 @@ return [
         ],
         'code' => [
             'required' => '代碼為必填。',
+        ],
+        'redirect' => [
+            'required' => '導轉網址為必填。',
+            'string'   => '導轉網址必須是字串。',
+            'url'      => '導轉網址格式不正確。',
+            'max'      => '導轉網址不得超過 :max 個字元。',
         ],
     ],
     'rss' => [
@@ -245,9 +284,9 @@ return [
                 'string'   => 'text.short_summary 必須是字串。',
             ],
             'long_summary' => [
-                'required'   => 'text.long_summary 欄位為必填項。',
-                'array'      => 'text.long_summary 必須是陣列。',
-                'content'    => [
+                'required' => 'text.long_summary 欄位為必填項。',
+                'array'    => 'text.long_summary 必須是陣列。',
+                'content'  => [
                     'required' => 'text.long_summary.content 欄位為必填項。',
                     'string'   => 'text.long_summary.content 必須是字串。',
                 ],

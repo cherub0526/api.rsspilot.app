@@ -136,7 +136,7 @@ class ChatFollowUpsTest extends TestCase
 
     private function fetch(Media $media, string $sessionId)
     {
-        return $this->json('GET', route('api.v1.media.chat.sessions.follow-ups', [
+        return $this->json('GET', route('api.v1.media.chat.sessions.follow-ups.show', [
             'mediaId'   => $media->id,
             'sessionId' => $sessionId,
         ]));
