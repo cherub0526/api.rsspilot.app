@@ -433,23 +433,30 @@
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "sections": {
-                                            "type": "array",
-                                            "items": {
-                                                "properties": {
-                                                    "heading": {
-                                                        "type": "string",
-                                                        "example": "主要論點"
-                                                    },
+                                        "short_summary": {
+                                            "type": "string",
+                                            "example": "一句話總結。"
+                                        },
+                                        "long_summary": {
+                                            "properties": {
+                                                "content": {
+                                                    "type": "string",
+                                                    "example": "完整的長摘要。"
+                                                },
+                                                "key_points": {
+                                                    "type": "array",
                                                     "items": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "string"
-                                                        }
+                                                        "type": "string"
                                                     }
                                                 },
-                                                "type": "object"
-                                            }
+                                                "keywords": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
+                                            "type": "object"
                                         }
                                     },
                                     "type": "object"

@@ -12,6 +12,7 @@ return [
             'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
         'custom_prompts' => [
+            'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
         ],
         'media' => [

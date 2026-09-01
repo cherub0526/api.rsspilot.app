@@ -23,19 +23,36 @@ class CustomPromptRelationsTest extends TestCase
 {
     use RefreshDatabase;
 
-    /**
-     * 沒有訂閱時的預設方案（月費 0），並把指定模型掛上去。
-     */
-    private function freePlanWith(array $models = []): Plan
-    {
-        $plan = Plan::factory()->create(['title' => 'Free', 'sort' => 0]);
-        $plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+    private Plan $plan;
 
+    /**
+     * 自訂摘要是付費功能，寫入端點會擋方案沒開通的使用者，所以每個案例都得先有
+     * 一個開通的方案。SubscriptionService 是用「有一筆月費 0 的價格」認免費方案
+     * 的，fixture 必須長成那樣。
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->plan = Plan::factory()->create([
+            'title'                  => 'Pro',
+            'custom_summary_enabled' => true,
+            'sort'                   => 0,
+        ]);
+        $this->plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+    }
+
+    /**
+     * 把模型掛到方案上。另建一個方案會讓「認免費方案」的查詢有兩個候選，
+     * 所以一律用 setUp 建好的那一個。
+     */
+    private function planAllows(array $models = []): Plan
+    {
         if ($models !== []) {
-            $plan->aiModels()->sync($models);
+            $this->plan->aiModels()->sync($models);
         }
 
-        return $plan;
+        return $this->plan;
     }
 
     private function subscribedSource(User $user): Source
@@ -58,7 +75,7 @@ class CustomPromptRelationsTest extends TestCase
     {
         $user = $this->fakeLogin();
         $model = AiModel::factory()->create(['name' => 'Claude 3.5 Sonnet']);
-        $this->freePlanWith([$model->getKey()]);
+        $this->planAllows([$model->getKey()]);
         $source = $this->subscribedSource($user);
 
         $response = $this->json('POST', route('api.v1.custom-prompts.store'), $this->payload([
@@ -90,7 +107,7 @@ class CustomPromptRelationsTest extends TestCase
         $this->fakeLogin();
 
         $outside = AiModel::factory()->create();
-        $this->freePlanWith();
+        $this->planAllows();
 
         // 選單不顯示它是不夠的——直接 POST 一個沒授權的 id 也要被擋。
         $this->json('POST', route('api.v1.custom-prompts.store'), $this->payload([
@@ -102,7 +119,7 @@ class CustomPromptRelationsTest extends TestCase
     {
         $this->fakeLogin();
         $model = AiModel::factory()->disabled()->create();
-        $this->freePlanWith([$model->getKey()]);
+        $this->planAllows([$model->getKey()]);
 
         // 模型可能在使用者開著表單的期間被下架，那不是他填錯了——
         // 靜默退回不指定，而不是把整筆儲存擋掉。
@@ -115,7 +132,7 @@ class CustomPromptRelationsTest extends TestCase
     {
         $user = $this->fakeLogin();
         $model = AiModel::factory()->create();
-        $this->freePlanWith([$model->getKey()]);
+        $this->planAllows([$model->getKey()]);
         $source = $this->subscribedSource($user);
 
         $created = $this->json('POST', route('api.v1.custom-prompts.store'), $this->payload([

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
+use App\Models\Price;
 use App\Models\CustomPrompt;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -16,6 +18,22 @@ use Hypervel\Foundation\Testing\RefreshDatabase;
 class CustomPromptsControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * 自訂摘要是付費功能，store 與 update 會擋方案沒開通的使用者。這個類別測的是
+     * 那之後的行為，所以先給一個開通的方案；擋下來的情形由 CustomPromptPlanGateTest 測。
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $plan = Plan::factory()->create([
+            'title'                  => 'Pro',
+            'custom_summary_enabled' => true,
+            'sort'                   => 0,
+        ]);
+        $plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+    }
 
     private function makePrompt(User $user, string $title = '學習筆記摘要'): CustomPrompt
     {

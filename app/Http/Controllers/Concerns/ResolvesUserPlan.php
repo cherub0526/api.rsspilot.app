@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\AiModel;
 use Hypervel\Http\Request;
 use App\Services\SubscriptionService;
+use App\Exceptions\InvalidRequestException;
 
 /**
  * 取得使用者「當下生效」的方案。
@@ -23,6 +24,30 @@ trait ResolvesUserPlan
 
         return $service->getUserSubscriptionPlan(
             $service->getUserSubscription((string) $request->user()->getKey())
+        );
+    }
+
+    /**
+     * 自訂 AI 摘要是付費功能，擋下方案沒開通的使用者。
+     *
+     * 判準用 plans.custom_summary_enabled 而不是「方案是不是 Pro 以上」——
+     * 那個欄位本來就是產品用來表達這件事的，寫死方案名稱會讓日後新增方案或
+     * 調整權益時，程式與資料各說各話。
+     *
+     * 沒有方案時一併擋下：無從判斷權益的預設是不給。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertCustomSummaryEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('custom_summary_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.custom_prompts.plan_required')]]
         );
     }
 

@@ -12,6 +12,7 @@ return [
             'exchange_failed'         => '授权验证失败，请重新登录。',
         ],
         'custom_prompts' => [
+            'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
         ],
         'media' => [

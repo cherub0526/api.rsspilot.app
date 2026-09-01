@@ -25,6 +25,22 @@ class PreviewControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * 試跑是付費功能，方案沒開通會擋在最前面。這個類別測的是它之後的行為，
+     * 所以每個案例都先給一個開通的方案；擋下來的情形由 CustomPromptPlanGateTest 測。
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $plan = Plan::factory()->create([
+            'title'                  => 'Pro',
+            'custom_summary_enabled' => true,
+            'sort'                   => 0,
+        ]);
+        $plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+    }
+
     private function uri(): string
     {
         return route('api.v1.custom-prompts.preview.store');
@@ -54,13 +70,28 @@ class PreviewControllerTest extends TestCase
      * 依 config 建的，沒有接縫可以替換。解析邏輯另由 SummaryPreviewServiceTest
      * 直接測。
      *
-     * @param array<int, array<string, mixed>> $sections
+     * @param array<string, mixed> $summary
      */
-    private function fakePreview(array $sections): void
+    private function fakePreview(array $summary): void
     {
-        $this->mock(SummaryPreviewService::class, function (MockInterface $mock) use ($sections) {
-            $mock->shouldReceive('preview')->andReturn($sections);
+        $this->mock(SummaryPreviewService::class, function (MockInterface $mock) use ($summary) {
+            $mock->shouldReceive('preview')->andReturn($summary);
         });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function summary(): array
+    {
+        return [
+            'short_summary' => '一句話總結。',
+            'long_summary'  => [
+                'content'    => '完整的長摘要。',
+                'key_points' => ['重點一'],
+                'keywords'   => ['AI'],
+            ],
+        ];
     }
 
     public function testStoreRequiresAuthentication(): void
@@ -103,24 +134,22 @@ class PreviewControllerTest extends TestCase
         ])->assertStatus(422);
     }
 
-    public function testStoreReturnsParsedSections(): void
+    public function testStoreReturnsTheSameShapeAsStoredSummaries(): void
     {
         $user = $this->fakeLogin();
         $media = $this->mediaWithCaption($user);
 
-        $this->fakePreview([
-            ['heading' => '主要論點', 'items' => ['第一點', '第二點']],
-            ['heading' => '結論', 'items' => ['總結']],
-        ]);
+        $this->fakePreview($this->summary());
 
+        // 與 summaries.text 同形狀，前端沿用既有的摘要渲染。
         $this->json('POST', $this->uri(), [
             'media_id' => $media->getKey(),
             'content'  => '請整理重點。',
         ])
             ->assertStatus(200)
-            ->assertJsonCount(2, 'sections')
-            ->assertJsonPath('sections.0.heading', '主要論點')
-            ->assertJsonPath('sections.0.items.1', '第二點');
+            ->assertJsonPath('short_summary', '一句話總結。')
+            ->assertJsonPath('long_summary.content', '完整的長摘要。')
+            ->assertJsonPath('long_summary.keywords.0', 'AI');
     }
 
     public function testAModelOutsideThePlanIsIgnoredRatherThanRejected(): void
@@ -129,10 +158,8 @@ class PreviewControllerTest extends TestCase
         $media = $this->mediaWithCaption($user);
 
         $outside = AiModel::factory()->create();
-        $plan = Plan::factory()->create(['title' => 'Free', 'sort' => 0]);
-        $plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
 
-        $this->fakePreview([['heading' => 'x', 'items' => ['y']]]);
+        $this->fakePreview($this->summary());
 
         // 方案沒授權就退回系統預設模型，而不是把整次試跑擋掉。
         $this->json('POST', $this->uri(), [

@@ -24,8 +24,12 @@ use App\OpenApi\Schemas\CustomPromptResource as CustomPromptSchema;
 /**
  * 使用者收藏的 prompt 設定。
  *
- * 三支端點一律經由 $request->user()->customPrompts() 取用，不直接查
+ * 五支端點一律經由 $request->user()->customPrompts() 取用，不直接查
  * CustomPrompt::find()——關聯本身就是授權邊界，別人的設定連查都查不到。
+ *
+ * 自訂摘要是付費功能，但只有「會產生新設定」的 store 與 update 擋方案；
+ * index / show / destroy 保持開放，否則付費過又降級的人會看不到、也刪不掉
+ * 自己的資料。
  */
 class CustomPromptsController extends AbstractController
 {
@@ -105,6 +109,8 @@ class CustomPromptsController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
+        $this->assertCustomSummaryEnabled($request);
+
         $params = $request->only(['title', 'content', 'model_id', 'source_ids']);
 
         $validator = (new CustomPromptsValidator($params))->setStoreRules();
@@ -193,6 +199,8 @@ class CustomPromptsController extends AbstractController
     )]
     public function update(Request $request, string $promptId): CustomPromptResource
     {
+        $this->assertCustomSummaryEnabled($request);
+
         $params = $request->only(['title', 'content', 'model_id', 'source_ids']);
 
         $validator = (new CustomPromptsValidator($params))->setUpdateRules();
