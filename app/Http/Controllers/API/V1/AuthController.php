@@ -28,10 +28,10 @@ class AuthController extends AbstractController
         requestBody: new OAT\RequestBody(
             required: true,
             content: new OAT\JsonContent(
-                required: ['account', 'password'],
+                required: ['email', 'password'],
                 properties: [
                     new OAT\Property(
-                        property: 'account',
+                        property: 'email',
                         type: 'string',
                         maxLength: 255,
                         minLength: 6,
@@ -68,7 +68,7 @@ class AuthController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['account', 'password']);
+        $params = $request->only(['email', 'password']);
 
         $v = new AuthValidator($params);
         $v->setStoreRules();
@@ -77,14 +77,47 @@ class AuthController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        if (!$this->guard()->attempt($params)) {
-            throw new InvalidRequestException(['password' => [__('validators.controllers.auth.invalid_credentials')]]);
-        }
-
+        // 密碼登入只認 local 帳號——同一個 email 可能同時存在 google / facebook 的
+        // 社群帳號，那些沒有密碼，不該被密碼流程撈到。
         $user = User::query()
-            ->where('account', $params['account'])
+            ->where('email', $params['email'])
             ->where('social_type', User::SOCIAL_TYPE_LOCAL)
             ->first();
+
+        if ($user === null) {
+            // 該 email 只有社群帳號 → 使用者其實從未設過密碼。回「密碼錯誤」會讓人
+            // 一直重打，所以給專屬代碼讓前端引導去設一組。
+            $hasSocial = User::query()->where('email', $params['email'])->exists();
+
+            if ($hasSocial) {
+                throw InvalidRequestException::withCode(
+                    'password_not_set',
+                    [],
+                    ['email' => [__('validators.controllers.auth.password_not_set')]]
+                );
+            }
+
+            throw new InvalidRequestException(
+                ['password' => [__('validators.controllers.auth.invalid_credentials')]]
+            );
+        }
+
+        if (!$this->guard()->attempt($params)) {
+            throw new InvalidRequestException(
+                ['password' => [__('validators.controllers.auth.invalid_credentials')]]
+            );
+        }
+
+        // 密碼對了但 email 沒驗過：不發 token，讓前端接回驗證流程並重寄。
+        // 既有使用者在遷移時已被 grandfather 成已驗證，所以這裡只會擋到
+        // 「註冊到一半跑掉」的人。
+        if ($user->email_verified_at === null) {
+            throw InvalidRequestException::withCode(
+                'email_unverified',
+                [],
+                ['email' => [__('validators.controllers.auth.email_unverified')]]
+            );
+        }
 
         return $this->responseAccessToken($this->guard()->login($user));
     }

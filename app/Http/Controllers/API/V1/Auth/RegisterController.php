@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Models\User;
 use Hypervel\Http\Request;
+use App\Services\EmailVerificationService;
 use OpenApi\Attributes as OAT;
 use App\Validators\AuthValidator;
 use App\OpenApi\Responses\Http400;
@@ -18,6 +19,10 @@ class RegisterController extends AbstractController
 {
     use IssuesAccessToken;
 
+    public function __construct(private readonly EmailVerificationService $verification)
+    {
+    }
+
     /**
      * @throws InvalidRequestException
      */
@@ -28,15 +33,8 @@ class RegisterController extends AbstractController
         requestBody: new OAT\RequestBody(
             required: true,
             content: new OAT\JsonContent(
-                required: ['account', 'email', 'password', 'password_confirmation'],
+                required: ['email', 'password', 'password_confirmation'],
                 properties: [
-                    new OAT\Property(
-                        property: 'account',
-                        type: 'string',
-                        maxLength: 255,
-                        minLength: 6,
-                        example: 'johndoe'
-                    ),
                     new OAT\Property(
                         property: 'email',
                         type: 'string',
@@ -62,26 +60,16 @@ class RegisterController extends AbstractController
         tags: ['Auth'],
         responses: [
             new OAT\Response(
-                response: 201,
-                description: 'User registered and access token issued',
-                content: new OAT\JsonContent(
-                    properties: [
-                        new OAT\Property(
-                            property: 'access_token',
-                            type: 'string',
-                            example: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
-                        ),
-                        new OAT\Property(property: 'token_type', type: 'string', example: 'bearer'),
-                        new OAT\Property(property: 'expires_in', type: 'integer', example: 3600),
-                    ]
-                )
+                response: 202,
+                description: '帳號已建立，驗證信已寄出。刻意不回 token——'
+                    . '要先通過 /v1/auth/verify 才算完成註冊。'
             ),
             new OAT\Response(ref: Http400::class, response: 400),
         ]
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['account', 'email', 'password', 'password_confirmation']);
+        $params = $request->only(['email', 'password', 'password_confirmation']);
 
         $v = new AuthValidator($params);
         $v->setRegisterRules();
@@ -90,23 +78,19 @@ class RegisterController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $user = User::query()
-            ->where('account', $params['account'])
-            ->where('social_type', User::SOCIAL_TYPE_LOCAL)
-            ->first();
+        $user = User::create([
+            // account 已不是登入識別，但欄位仍在（既有資料要保留）。
+            // 帶 email 進去讓舊資料的形狀不變，name 同理，之後使用者可在設定裡改。
+            'account'     => $params['email'],
+            'name'        => $params['email'],
+            'email'       => $params['email'],
+            'password'    => bcrypt($params['password']),
+            'social_type' => User::SOCIAL_TYPE_LOCAL,
+        ]);
 
-        if (!$user) {
-            $user = User::create([
-                'account'     => $params['account'],
-                'name'        => $params['account'],
-                'email'       => $params['email'],
-                'password'    => bcrypt($params['password']),
-                'social_type' => User::SOCIAL_TYPE_LOCAL,
-            ]);
-        }
+        $this->verification->issueFor($user);
 
-        $token = $this->guard()->login($user);
-
-        return $this->responseAccessToken($token, 201);
+        // 202 而不是 201：帳號建立了，但註冊還沒完成——要通過驗證才算。
+        return response()->json([], 202);
     }
 }

@@ -41,6 +41,7 @@ class SocialAccountService
     private function firstOrCreateUser(string $provider, SocialiteUser $socialUser): User
     {
         $providerId = (string) $socialUser->getId();
+        $email      = $socialUser->getEmail();
 
         $user = User::query()
             ->where('social_type', $provider)
@@ -51,16 +52,40 @@ class SocialAccountService
             return $user;
         }
 
+        // 同 email 即同一個帳號。provider 已經證明了這個信箱的所有權，所以直接
+        // 掛上去而不是另開一個使用者——否則同一個人會有兩份訂閱與兩份對話紀錄。
+        //
+        // social_type 刻意不動：把 local 改成 google 會讓他原本的密碼登入失效
+        // （AuthController 的密碼流程只認 local）。密碼保留是決定 10 的一部分。
+        //
+        // users.email 現在有唯一索引，所以這一步不只是體驗——少了它，第二段的
+        // create 會直接撞上約束。
+        if ($email !== null && $email !== '') {
+            $existing = User::query()->where('email', $email)->first();
+
+            if ($existing) {
+                $existing->update([
+                    'provider_id'       => $existing->provider_id ?? $providerId,
+                    // provider 驗過這個信箱，補上驗證時間讓他不必再跑一次驗證碼
+                    'email_verified_at' => $existing->email_verified_at ?? now(),
+                ]);
+
+                return $existing->refresh();
+            }
+        }
+
         // 密碼欄位不可為 null，但社群帳號永遠不會走密碼登入；沿用 GoogleController
         // 既有做法以 provider_id 雜湊填充，讓兩支端點建出來的使用者形狀一致。
         return User::create([
-            'account'     => $providerId,
-            'password'    => bcrypt($providerId),
-            'name'        => $this->truncate($socialUser->getName(), User::NAME_MAX_LENGTH),
-            'email'       => $socialUser->getEmail(),
-            'social_type' => $provider,
-            'provider_id' => $providerId,
-            'avatar'      => $this->truncate($socialUser->getAvatar(), User::AVATAR_MAX_LENGTH),
+            'account'           => $providerId,
+            'password'          => bcrypt($providerId),
+            'name'              => $this->truncate($socialUser->getName(), User::NAME_MAX_LENGTH),
+            'email'             => $email,
+            'social_type'       => $provider,
+            'provider_id'       => $providerId,
+            'avatar'            => $this->truncate($socialUser->getAvatar(), User::AVATAR_MAX_LENGTH),
+            // 社群註冊不需要走驗證碼——provider 已經驗過信箱
+            'email_verified_at' => now(),
         ]);
     }
 

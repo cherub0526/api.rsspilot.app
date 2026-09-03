@@ -5,7 +5,13 @@ declare(strict_types=1);
 return [
     'controllers' => [
         'auth' => [
-            'invalid_credentials' => 'Invalid account or password.',
+            'invalid_credentials' => 'Invalid email or password.',
+            'email_unverified'    => 'This email has not been verified yet.',
+            'password_not_set'    => 'This account was created with Google and has no password.',
+            'code_invalid'        => 'That verification code is not correct.',
+            'code_expired'        => 'That verification code has expired. Please request a new one.',
+            'resend_throttled'    => 'Please wait before requesting another code.',
+            'verify_failed'       => 'Verification failed. Please try again.',
         ],
         'oauth' => [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
@@ -58,6 +64,15 @@ return [
             'required' => 'Email is required.',
             'email'    => 'Email format is invalid.',
             'max'      => 'Email must not exceed 255 characters.',
+                    'unique'   => 'This email is already registered.',
+        ],
+        'code' => [
+            'required' => 'Enter the verification code.',
+            'digits'   => 'The code must be 6 digits.',
+        ],
+        'token' => [
+            'required' => 'Verification token is missing.',
+            'string'   => 'Verification token is invalid.',
         ],
         'password' => [
             'required'  => 'Password is required.',

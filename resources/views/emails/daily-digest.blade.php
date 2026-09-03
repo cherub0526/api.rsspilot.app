@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Audistilizer — 每日摘要通知</title>
+  <title>RSSPilot — 每日摘要通知</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -312,8 +312,8 @@
 
     <div class="email-header">
       <div class="email-logo">
-        <img src="{{ asset('/logo.png') }}" alt="Audistilizer">
-        <span class="email-logo-name">Audistilizer</span>
+        <img src="{{ asset('/logo.png') }}" alt="RSSPilot">
+        <span class="email-logo-name">RSSPilot</span>
       </div>
       <p class="email-header-greeting">嗨，{{ $userName }}！今天是 {{ $date }}</p>
       <h1 class="email-header-title">今日新增了 {{ $videoCount }} 部影片摘要</h1>
@@ -386,7 +386,7 @@
     <div class="email-footer">
       <div class="footer-logo">
         <img src="{{ asset('/logo.png') }}" alt="">
-        <span class="footer-logo-name">Audistilizer</span>
+        <span class="footer-logo-name">RSSPilot</span>
       </div>
       <div class="footer-links">
         <a href="{{ $dashboardUrl }}">Dashboard</a>
@@ -397,7 +397,7 @@
         <span>·</span>
         <a href="{{ $privacyUrl }}">隱私政策</a>
       </div>
-      <p class="footer-copy">© {{ date('Y') }} Audistilizer. All rights reserved.</p>
+      <p class="footer-copy">© {{ date('Y') }} RSSPilot. All rights reserved.</p>
       <p class="footer-unsubscribe">
         不想再收到每日摘要通知？<a href="{{ $unsubscribeUrl }}">取消訂閱</a> 或 <a href="{{ $dashboardUrl }}">調整通知設定</a>
       </p>
