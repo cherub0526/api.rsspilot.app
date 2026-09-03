@@ -29,10 +29,10 @@ class ForgotPasswordController extends AbstractController
         requestBody: new OAT\RequestBody(
             required: true,
             content: new OAT\JsonContent(
-                required: ['account'],
+                required: ['email'],
                 properties: [
                     new OAT\Property(
-                        property: 'account',
+                        property: 'email',
                         type: 'string',
                         maxLength: 255,
                         minLength: 6,
@@ -61,7 +61,7 @@ class ForgotPasswordController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['account']);
+        $params = $request->only(['email']);
 
         $v = new ForgotPasswordValidator($params);
         $v->setStoreRules();
@@ -70,9 +70,12 @@ class ForgotPasswordController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        if (!$user = User::where('account', $params['account'])->first()) {
+        // 只找 local 帳號：社群帳號沒有密碼可重設
+        if (!$user = User::where('email', $params['email'])
+            ->where('social_type', User::SOCIAL_TYPE_LOCAL)
+            ->first()) {
             // To prevent user enumeration, we'll return a generic success response even if the user doesn't exist.
-            throw new InvalidRequestException(['account' => 'Account not found.']);
+            throw new InvalidRequestException(['email' => [__('validators.controllers.auth.invalid_credentials')]]);
         }
 
         $stringId = strval($user->id);

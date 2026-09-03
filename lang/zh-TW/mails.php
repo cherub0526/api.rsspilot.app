@@ -18,4 +18,17 @@ return [
         'alt_logo'      => 'Audistilizer 標誌',
         'footer_text'   => '&copy; :year Audistilizer Inc.',
     ],
+
+    'verify_email' => [
+        'subject'       => '你的 RSSPilot 驗證碼：:code',
+        'greeting'      => '您好，',
+        'line_1'        => '請輸入以下驗證碼完成註冊：',
+        'line_2'        => '此驗證碼將於 :count 分鐘後失效。',
+        'action'        => '直接完成驗證',
+        'action_hint'   => '或點擊下方按鈕，在瀏覽器中完成驗證（桌面版請改用上方的驗證碼）：',
+        'fallback_text' => '如果按鈕無法點擊，請複製以下連結貼到瀏覽器：',
+        'security_note' => '如果您沒有註冊 RSSPilot，請忽略此郵件，這組驗證碼會自動失效。',
+        'alt_logo'      => 'RSSPilot 標誌',
+        'footer_text'   => '&copy; :year RSSPilot',
+    ],
 ];

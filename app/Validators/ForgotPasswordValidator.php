@@ -11,10 +11,9 @@ class ForgotPasswordValidator extends BaseValidator
         parent::__construct($params);
 
         $this->messages = [
-            'account.required'   => __('validators.auth.account.required'),
-            'account.string'     => __('validators.auth.account.string'),
-            'account.min'        => __('validators.auth.account.min'),
-            'account.max'        => __('validators.auth.account.max'),
+            'email.required'     => __('validators.auth.email.required'),
+            'email.email'        => __('validators.auth.email.email'),
+            'email.max'          => __('validators.auth.email.max'),
             'expires.required'   => __('validators.auth.expires.required'),
             'expires.integer'    => __('validators.auth.expires.integer'),
             'id.required'        => __('validators.auth.id.required'),
@@ -29,7 +28,7 @@ class ForgotPasswordValidator extends BaseValidator
     public function setStoreRules(): self
     {
         $this->rules = [
-            'account' => 'required|string|min:6|max:255',
+            'email' => 'required|email|max:255',
         ];
 
         return $this;

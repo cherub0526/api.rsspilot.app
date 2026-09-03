@@ -19,7 +19,6 @@ class UserResource extends JsonResource
             'id'      => strval($this->resource->id),
             'name'    => strval($this->resource->name),
             'email'   => strval($this->resource->email),
-            'account' => strval($this->resource->account),
             'avatar'  => $this->resource->avatar
                 ? rtrim(config('app.cdn_url'), '/') . '/' . $this->resource->avatar
                 : null,

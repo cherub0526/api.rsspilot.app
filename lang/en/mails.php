@@ -18,4 +18,17 @@ return [
         'alt_logo'      => 'Audistilizer logo',
         'footer_text'   => '&copy; :year Audistilizer Inc.',
     ],
+
+    'verify_email' => [
+        'subject'       => 'Your RSSPilot verification code: :code',
+        'greeting'      => 'Hello,',
+        'line_1'        => 'Enter this code to finish signing up:',
+        'line_2'        => 'The code expires in :count minutes.',
+        'action'        => 'Verify in the browser',
+        'action_hint'   => 'Or use the button below to verify in your browser (on desktop, enter the code above instead):',
+        'fallback_text' => 'If the button does not work, copy this link into your browser:',
+        'security_note' => 'If you did not sign up for RSSPilot, ignore this email and the code will expire on its own.',
+        'alt_logo'      => 'RSSPilot logo',
+        'footer_text'   => '&copy; :year RSSPilot',
+    ],
 ];

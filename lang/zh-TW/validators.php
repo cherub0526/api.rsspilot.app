@@ -5,7 +5,13 @@ declare(strict_types=1);
 return [
     'controllers' => [
         'auth' => [
-            'invalid_credentials' => '帳號或密碼無效。',
+            'invalid_credentials' => '電子郵件或密碼無效。',
+            'email_unverified'    => '此電子郵件尚未完成驗證。',
+            'password_not_set'    => '此帳號是以 Google 建立的，尚未設定密碼。',
+            'code_invalid'        => '驗證碼不正確。',
+            'code_expired'        => '驗證碼已失效，請重新寄送。',
+            'resend_throttled'    => '請稍候再重新寄送驗證碼。',
+            'verify_failed'       => '驗證失敗，請稍後再試。',
         ],
         'oauth' => [
             'provider_not_configured' => '該登入方式尚未設定。',
@@ -58,6 +64,15 @@ return [
             'required' => '電子郵件為必填。',
             'email'    => '電子郵件格式無效。',
             'max'      => '電子郵件長度不能超過 255 個字元。',
+                    'unique'   => '此電子郵件已被註冊。',
+        ],
+        'code' => [
+            'required' => '請輸入驗證碼。',
+            'digits'   => '驗證碼必須是 6 位數字。',
+        ],
+        'token' => [
+            'required' => '缺少驗證憑證。',
+            'string'   => '驗證憑證格式不正確。',
         ],
         'password' => [
             'required'  => '密碼為必填。',

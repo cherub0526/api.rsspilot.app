@@ -32,7 +32,7 @@ class ForgotPasswordControllerTest extends TestCase
 
         $this->json('POST', $uri)
             ->assertStatus(422)
-            ->assertJsonPath('messages.account', [$messages['account.required']]);
+            ->assertJsonPath('messages.email', [$messages['email.required']]);
     }
 
     public function testStoreValidationAccountTooShort(): void
@@ -41,9 +41,9 @@ class ForgotPasswordControllerTest extends TestCase
 
         $messages = (new ForgotPasswordValidator([]))->getMessages();
 
-        $this->json('POST', $uri, ['account' => 'abc'])
+        $this->json('POST', $uri, ['email' => 'not-an-email'])
             ->assertStatus(422)
-            ->assertJsonPath('messages.account', [$messages['account.min']]);
+            ->assertJsonPath('messages.email', [$messages['email.email']]);
     }
 
     public function testStoreValidationAccountTooLong(): void
@@ -52,9 +52,9 @@ class ForgotPasswordControllerTest extends TestCase
 
         $messages = (new ForgotPasswordValidator([]))->getMessages();
 
-        $this->json('POST', $uri, ['account' => str_repeat('a', 256)])
+        $this->json('POST', $uri, ['email' => str_repeat('a', 250) . '@example.com'])
             ->assertStatus(422)
-            ->assertJsonPath('messages.account', [$messages['account.max']]);
+            ->assertJsonPath('messages.email', [$messages['email.max']]);
     }
 
     public function testStoreWithNonExistentAccount(): void
@@ -63,9 +63,9 @@ class ForgotPasswordControllerTest extends TestCase
 
         $uri = route('api.v1.auth.forgot-password.store');
 
-        $this->json('POST', $uri, ['account' => 'nonexistent_user'])
+        $this->json('POST', $uri, ['email' => 'nonexistent@example.com'])
             ->assertStatus(422)
-            ->assertJsonPath('messages.account', 'Account not found.');
+            ->assertJsonPath('messages.email', [__('validators.controllers.auth.invalid_credentials')]);
 
         Mail::assertNothingSent();
     }
@@ -75,13 +75,13 @@ class ForgotPasswordControllerTest extends TestCase
         Mail::fake();
 
         User::factory()->create([
-            'account' => 'validuser',
+            'email' => 'validuser@example.com',
             'email'   => 'validuser@example.com',
         ]);
 
         $uri = route('api.v1.auth.forgot-password.store');
 
-        $this->json('POST', $uri, ['account' => 'validuser'])
+        $this->json('POST', $uri, ['email' => 'validuser@example.com'])
             ->assertStatus(200)
             ->assertJsonPath('message', __('passwords.sent'));
 
@@ -107,7 +107,7 @@ class ForgotPasswordControllerTest extends TestCase
 
     public function testUpdateWithInvalidToken(): void
     {
-        $user = User::factory()->create(['account' => 'validuser2']);
+        $user = User::factory()->create(['email' => 'validuser2@example.com']);
 
         $uri = route('api.v1.auth.forgot-password.update');
 
@@ -125,7 +125,7 @@ class ForgotPasswordControllerTest extends TestCase
 
     public function testUpdateValidationPasswordTooShort(): void
     {
-        $user = User::factory()->create(['account' => 'validuser3']);
+        $user = User::factory()->create(['email' => 'validuser3@example.com']);
         $token = Hash::make(strval($user->id));
 
         $uri = route('api.v1.auth.forgot-password.update');
@@ -142,7 +142,7 @@ class ForgotPasswordControllerTest extends TestCase
 
     public function testUpdateValidationPasswordMismatch(): void
     {
-        $user = User::factory()->create(['account' => 'validuser4']);
+        $user = User::factory()->create(['email' => 'validuser4@example.com']);
         $token = Hash::make(strval($user->id));
 
         $uri = route('api.v1.auth.forgot-password.update');
@@ -160,7 +160,7 @@ class ForgotPasswordControllerTest extends TestCase
     public function testUpdateSuccess(): void
     {
         $user = User::factory()->create([
-            'account'  => 'validuser5',
+            'email'    => 'validuser5@example.com',
             'password' => Hash::make('oldpassword'),
         ]);
         $token = Hash::make(strval($user->id));
