@@ -32,7 +32,8 @@ class UsersControllerTest extends TestCase
             ->assertJsonPath('id', $user->id)
             ->assertJsonPath('name', $user->name)
             ->assertJsonPath('email', $user->email)
-            ->assertJsonPath('account', (string) $user->account);
+            // account 已從輸出移除（email 取代它成為身分識別）
+            ->assertJsonMissingPath('account');
     }
 
     public function testIndexIncludesSettingWhenPresent(): void

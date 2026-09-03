@@ -85,7 +85,7 @@ class AvatarControllerTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonStructure([
-                'id', 'name', 'email', 'account', 'avatar',
+                'id', 'name', 'email', 'avatar',
             ]);
 
         $avatarUrl = $response->json('avatar');

@@ -86,9 +86,9 @@ class EmailVerificationService
      */
     public function verifyByCode(User $user, string $code): User
     {
-        $record = EmailVerificationCode::query()
+        /** @var null|EmailVerificationCode $record */
+        $record = EmailVerificationCode::usableQuery()
             ->where('user_id', $user->id)
-            ->usable()
             ->orderByDesc('created_at')
             ->first();
 
@@ -121,9 +121,9 @@ class EmailVerificationService
      */
     public function verifyByToken(string $token): User
     {
-        $record = EmailVerificationCode::query()
+        /** @var null|EmailVerificationCode $record */
+        $record = EmailVerificationCode::usableQuery()
             ->where('token', $token)
-            ->usable()
             ->first();
 
         if ($record === null) {

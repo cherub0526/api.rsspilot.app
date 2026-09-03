@@ -25,15 +25,26 @@ class VerifyControllerTest extends TestCase
         return User::factory()->unverified()->create(['email' => $email]);
     }
 
-    private function codeFor(User $user, array $overrides = []): EmailVerificationCode
+    /**
+     * $createdAt 要另外處理：created_at 不在 $fillable 裡，塞進 create() 會被
+     * 靜默忽略，記錄仍是 now()——重寄冷卻讀的正是這個欄位。
+     */
+    private function codeFor(User $user, array $overrides = [], ?Carbon $createdAt = null): EmailVerificationCode
     {
-        return EmailVerificationCode::create(array_merge([
+        $record = EmailVerificationCode::create(array_merge([
             'user_id'    => $user->id,
             'code'       => '048213',
             'token'      => str_repeat('a', 64),
             'attempts'   => 0,
             'expires_at' => Carbon::now()->addMinutes(EmailVerificationCode::TTL_MINUTES),
         ], $overrides));
+
+        if ($createdAt !== null) {
+            EmailVerificationCode::query()->where('id', $record->id)->update(['created_at' => $createdAt]);
+            $record->refresh();
+        }
+
+        return $record;
     }
 
     public function testStoreValidation()
@@ -141,7 +152,7 @@ class VerifyControllerTest extends TestCase
         Mail::fake();
 
         $user = $this->pendingUser();
-        $old  = $this->codeFor($user, ['created_at' => Carbon::now()->subMinutes(5)]);
+        $old  = $this->codeFor($user, [], Carbon::now()->subMinutes(5));
 
         $this->json('POST', route('api.v1.auth.verify.resend.store'), [
             'email' => 'pending@example.com',

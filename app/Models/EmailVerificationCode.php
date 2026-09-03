@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\Carbon;
-use Hyperf\Database\Model\Builder;
+use Hypervel\Database\Eloquent\Builder;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 
@@ -14,6 +14,16 @@ use Hypervel\Database\Eloquent\Concerns\HasUlids;
  *
  * code（信中顯示的 6 位數）與 token（信件連結）指向同一筆，任一被使用即整筆作廢——
  * 這是「用掉一個另一個就失效」的實作位置。
+ *
+ * @property string $id
+ * @property string $user_id
+ * @property string $code
+ * @property string $token
+ * @property int $attempts
+ * @property \Carbon\Carbon $expires_at
+ * @property null|\Carbon\Carbon $consumed_at
+ * @property \Carbon\Carbon $created_at
+ * @property User $user
  */
 class EmailVerificationCode extends Model
 {
@@ -58,12 +68,21 @@ class EmailVerificationCode extends Model
         return $this->belongsTo(User::class, 'user_id', 'id');
     }
 
-    /** 尚可使用的憑證：未被用掉、未過期、錯誤次數未達上限。 */
-    public function scopeUsable(Builder $query): Builder
+    /**
+     * 尚可使用的憑證：未被用掉、未過期、錯誤次數未達上限。
+     *
+     * 刻意做成靜態查詢而不是 scope——本專案的 scope 是動態解析的，PHPStan 認不得，
+     * 呼叫端會多帶一個永遠不會被修掉的錯誤。
+     */
+    public static function usableQuery(): Builder
     {
-        return $query->whereNull('consumed_at')
+        $query = static::query();
+
+        $query->whereNull('consumed_at')
             ->where('expires_at', '>', Carbon::now())
             ->where('attempts', '<', self::MAX_ATTEMPTS);
+
+        return $query;
     }
 
     public function isExpired(): bool
