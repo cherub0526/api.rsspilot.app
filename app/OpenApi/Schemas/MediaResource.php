@@ -13,6 +13,16 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'url', type: 'string', example: 'https://www.youtube.com/embed/dQw4w9WgXcQ'),
         new OAT\Property(property: 'type', type: 'string', example: 'youtube'),
         new OAT\Property(property: 'title', type: 'string', example: 'Video Title'),
+        new OAT\Property(
+            property: 'status',
+            type: 'string',
+            description: '處理進度，見 App\\Models\\Media 的 STATUS_* 常數',
+            enum: [
+                'created', 'progress', 'transcribing', 'transcribed', 'transcribe_failed',
+                'summarizing', 'summarized', 'summarize_failed', 'ready', 'cancelled', 'failed',
+            ],
+            example: 'ready'
+        ),
         new OAT\Property(property: 'description', type: 'string', example: 'Video description'),
         new OAT\Property(property: 'thumbnail', type: 'string', example: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg'),
         new OAT\Property(property: 'published_at', type: 'string', format: 'date-time', example: '2024-01-01 12:00:00'),

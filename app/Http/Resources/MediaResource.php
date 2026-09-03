@@ -22,6 +22,7 @@ class MediaResource extends JsonResource
             'url'           => 'https://www.youtube.com/embed/' . ($this->resource->video_detail['yt:videoId'] ?? ''),
             'type'          => strval($this->resource->type),
             'title'         => strval($this->resource->title),
+            'status'        => strval($this->resource->status),
             'description'   => strval($this->resource->description),
             'thumbnail'     => strval($this->resource->thumbnail),
             'published_at'  => strval($this->resource->published_at),
