@@ -5,7 +5,13 @@ declare(strict_types=1);
 return [
     'controllers' => [
         'auth' => [
-            'invalid_credentials' => '帐号或密码无效。',
+            'invalid_credentials' => '电子邮件或密码无效。',
+            'email_unverified'    => '此电子邮件尚未完成验证。',
+            'password_not_set'    => '此账号是以 Google 建立的，尚未设定密码。',
+            'code_invalid'        => '验证码不正确。',
+            'code_expired'        => '验证码已失效，请重新发送。',
+            'resend_throttled'    => '请稍候再重新发送验证码。',
+            'verify_failed'       => '验证失败，请稍后再试。',
         ],
         'oauth' => [
             'provider_not_configured' => '该登录方式尚未设置。',
@@ -58,6 +64,15 @@ return [
             'required' => '电子邮件为必填。',
             'email'    => '电子邮件格式无效。',
             'max'      => '电子邮件长度不能超过 255 个字符。',
+                    'unique'   => '此电子邮件已被注册。',
+        ],
+        'code' => [
+            'required' => '请输入验证码。',
+            'digits'   => '验证码必须是 6 位数字。',
+        ],
+        'token' => [
+            'required' => '缺少验证凭证。',
+            'string'   => '验证凭证格式不正确。',
         ],
         'password' => [
             'required'  => '密码为必填。',

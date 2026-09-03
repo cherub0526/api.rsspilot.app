@@ -23,6 +23,7 @@ use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
+use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
@@ -71,6 +72,16 @@ Route::group('/auth', function () {
     Route::post(
         '/register',
         ['as' => 'register.store', 'uses' => RegisterController::class . '@store']
+    );
+
+    // 註冊驗證：不掛 auth——這兩支的存在前提就是還沒拿到 token。
+    Route::post(
+        '/verify',
+        ['as' => 'verify.store', 'uses' => VerifyController::class . '@store']
+    );
+    Route::post(
+        '/verify/resend',
+        ['as' => 'verify.resend.store', 'uses' => VerifyController::class . '@resend']
     );
 
     Route::post('/', ['as' => 'store', 'uses' => AuthController::class . '@store']);

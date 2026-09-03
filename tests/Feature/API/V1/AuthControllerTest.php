@@ -6,6 +6,8 @@ namespace Tests\Feature\API\V1;
 
 use Tests\TestCase;
 use App\Models\User;
+use App\Mail\VerifyEmailMail;
+use Hypervel\Support\Facades\Mail;
 use App\Validators\AuthValidator;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -28,7 +30,7 @@ class AuthControllerTest extends TestCase
 
         $this->json('POST', $uri)->assertStatus(422)->assertJsonStructure([
             'messages' => [
-                'account',
+                'email',
                 'password',
             ],
         ]);
@@ -36,14 +38,14 @@ class AuthControllerTest extends TestCase
         $messages = (new AuthValidator([]))->getMessages();
 
         $params = [
-            'account' => 'abc',
+            'email' => 'not-an-email',
         ];
         $this->json('POST', $uri, $params)->assertStatus(422)->assertJsonPath(
-            'messages.account',
-            [$messages['account.min']]
+            'messages.email',
+            [$messages['email.email']]
         );
 
-        $params['account'] = fake()->userName();
+        $params['email'] = fake()->safeEmail();
         $this->json('POST', $uri, $params)->assertStatus(422)->assertJsonPath(
             'messages.password',
             [$messages['password.required']]
@@ -54,12 +56,12 @@ class AuthControllerTest extends TestCase
     {
         $uri = route('api.v1.auth.store');
         User::factory()->create([
-            'account'  => 'testuser',
+            'email'    => 'testuser@example.com',
             'password' => bcrypt('password123'),
         ]);
 
         $params = [
-            'account'  => 'testuser',
+            'email'    => 'testuser@example.com',
             'password' => 'wrongpassword',
         ];
 
@@ -72,12 +74,12 @@ class AuthControllerTest extends TestCase
     {
         $uri = route('api.v1.auth.store');
         User::factory()->create([
-            'account'  => 'testuser',
+            'email'    => 'testuser@example.com',
             'password' => bcrypt('password123'),
         ]);
 
         $params = [
-            'account'  => 'testuser',
+            'email'    => 'testuser@example.com',
             'password' => 'password123',
         ];
 
@@ -98,25 +100,21 @@ class AuthControllerTest extends TestCase
 
         $this->json('POST', $uri)->assertStatus(422)->assertJsonStructure([
             'messages' => [
-                'account',
                 'email',
                 'password',
             ],
-        ])->assertJsonPath('messages.account', [$messages['account.required']])
-            ->assertJsonPath('messages.email', [$messages['email.required']])
+        ])->assertJsonPath('messages.email', [$messages['email.required']])
             ->assertJsonPath('messages.password', [$messages['password.required']]);
 
         $params = [
-            'account'  => fake()->userName(),
-            'email'    => fake()->email(),
+            'email'    => fake()->safeEmail(),
             'password' => 'Password@123',
         ];
         $this->json('POST', $uri, $params)->assertStatus(422)
             ->assertJsonPath('messages.password', [$messages['password.confirmed']]);
 
         $params = [
-            'account'               => fake()->userName(),
-            'email'                 => fake()->email(),
+            'email'                 => fake()->safeEmail(),
             'password'              => 'password123',
             'password_confirmation' => 'password123',
         ];
@@ -125,8 +123,7 @@ class AuthControllerTest extends TestCase
 
         $longPassword = 'P@ssw0rd' . str_repeat('a', 57);
         $params = [
-            'account'               => fake()->userName(),
-            'email'                 => fake()->email(),
+            'email'                 => fake()->safeEmail(),
             'password'              => $longPassword,
             'password_confirmation' => $longPassword,
         ];
@@ -136,42 +133,77 @@ class AuthControllerTest extends TestCase
 
     public function testRegisterSuccess()
     {
+        Mail::fake();
+
         $uri = route('api.v1.auth.register.store');
         $params = [
-            'account'               => 'newuser',
             'email'                 => 'newuser@example.com',
             'password'              => 'Password@123',
             'password_confirmation' => 'Password@123',
         ];
 
+        // 202 而不是 201，而且刻意不含 access_token——註冊還沒完成
         $this->json('POST', $uri, $params)
-            ->assertStatus(201)
-            ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
-            ]);
+            ->assertStatus(202)
+            ->assertJsonMissing(['access_token']);
 
         $this->assertDatabaseHas('users', [
-            'account' => 'newuser',
-            'email'   => 'newuser@example.com',
+            'email'             => 'newuser@example.com',
+            'email_verified_at' => null,
         ]);
+
+        $user = User::query()->where('email', 'newuser@example.com')->firstOrFail();
+        $this->assertDatabaseHas('email_verification_codes', ['user_id' => $user->id]);
+
+        Mail::assertSent(VerifyEmailMail::class);
     }
 
-    public function testRegisterWithExistingAccount()
+    public function testRegisterWithExistingEmail()
     {
-        User::factory()->create(['account' => 'existinguser']);
+        User::factory()->create(['email' => 'existing@example.com']);
         $uri = route('api.v1.auth.register.store');
         $params = [
-            'account'               => 'existinguser',
-            'email'                 => 'newemail@example.com',
+            'email'                 => 'existing@example.com',
             'password'              => 'Password@123',
             'password_confirmation' => 'Password@123',
         ];
 
         $this->json('POST', $uri, $params)
             ->assertStatus(422)
-            ->assertJsonPath('messages.account', [__('validators.auth.account.unique')]);
+            ->assertJsonPath('messages.email', [__('validators.auth.email.unique')]);
+    }
+
+    /** 註冊到一半跑掉的人再回來登入：不發 token，改回導驗證流程。 */
+    public function testStoreWithUnverifiedEmailReturnsCode()
+    {
+        User::factory()->unverified()->create([
+            'email'    => 'pending@example.com',
+            'password' => bcrypt('password123'),
+        ]);
+
+        $this->json('POST', route('api.v1.auth.store'), [
+            'email'    => 'pending@example.com',
+            'password' => 'password123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'email_unverified');
+    }
+
+    /** Google 建立、從未設過密碼的帳號：給專屬代碼而不是「密碼錯誤」。 */
+    public function testStoreWithGoogleOnlyAccountReturnsPasswordNotSet()
+    {
+        User::factory()->create([
+            'email'       => 'googleonly@example.com',
+            'social_type' => User::SOCIAL_TYPE_GOOGLE,
+            'provider_id' => '1234567890',
+        ]);
+
+        $this->json('POST', route('api.v1.auth.store'), [
+            'email'    => 'googleonly@example.com',
+            'password' => 'whatever123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'password_not_set');
     }
 
     public function testLogoutWithoutToken()

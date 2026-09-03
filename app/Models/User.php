@@ -14,6 +14,19 @@ use Hypervel\Database\Eloquent\Relations\HasMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 use Hypervel\Foundation\Auth\User as Authenticatable;
 
+/**
+ * @property string $id
+ * @property null|string $account
+ * @property string $name
+ * @property null|string $email
+ * @property null|\Carbon\Carbon $email_verified_at
+ * @property string $password
+ * @property null|string $social_type
+ * @property null|string $provider_id
+ * @property null|string $avatar
+ * @property \Carbon\Carbon $created_at
+ * @property \Carbon\Carbon $updated_at
+ */
 class User extends Authenticatable
 {
     use HasUlids;

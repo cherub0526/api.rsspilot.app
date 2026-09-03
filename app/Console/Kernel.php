@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console;
 
+use App\Console\Commands\Users\PurgeUnverified;
 use App\Console\Commands\Media\Notify;
 use App\Console\Commands\Sources\Sync;
 use Hypervel\Console\Scheduling\Schedule;
@@ -41,6 +42,11 @@ class Kernel extends ConsoleKernel
         // 當天 00:00 起加入的影片。
         $schedule->command(Notify::class)->dailyAt('09:00')
             ->name('media.notify')->onOneServer()->withoutOverlapping(30);
+
+        // 未驗證註冊的清除。這不只是資料整理——它界定了「搶註冊他人 email」
+        // 的接管窗口（見指令內的說明），期限不要放寬。
+        $schedule->command(PurgeUnverified::class)->dailyAt('03:00')
+            ->name('users.purge-unverified')->onOneServer()->withoutOverlapping(30);
     }
 
     public function commands(): void
