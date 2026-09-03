@@ -72,7 +72,7 @@
                                          style="display:block;width:36px;height:36px;object-fit:contain;">
                                 </td>
                                 <td style="vertical-align:middle;">
-                                    <span style="font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;color:#1a1a1a;letter-spacing:-0.025em;">Audistilizer</span>
+                                    <span style="font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;color:#1a1a1a;letter-spacing:-0.025em;">RSSPilot</span>
                                 </td>
                             </tr>
                         </table>
@@ -225,7 +225,7 @@
                                 <td align="center" style="padding-bottom:12px;">
                                     <img src="{{ asset('/logo.png') }}" width="20" height="20" alt=""
                                          style="display:inline-block;vertical-align:middle;width:20px;height:20px;object-fit:contain;margin-right:6px;opacity:0.5;">
-                                    <span style="font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;color:#94a3b8;vertical-align:middle;">Audistilizer</span>
+                                    <span style="font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;color:#94a3b8;vertical-align:middle;">RSSPilot</span>
                                 </td>
                             </tr>
                             <tr>

@@ -182,13 +182,13 @@ class ForgotPasswordControllerTest extends TestCase
         $this->assertTrue(Hash::check('newpassword123', $user->fresh()->password));
     }
 
-    public function testResetPasswordMailRendersWithAudistilizerBranding(): void
+    public function testResetPasswordMailRendersWithRSSPilotBranding(): void
     {
         $tokenUrl = 'http://api.example.com/v1/auth/forgot-password?token=abc&id=1&expires=9999999999&signature=xyz';
         $mailable = new ResetPasswordMail($tokenUrl, 60);
         $html = $mailable->render();
 
-        $this->assertStringContainsString('Audistilizer', $html);
+        $this->assertStringContainsString('RSSPilot', $html);
         $this->assertStringContainsString('60', $html);
         $this->assertStringContainsString('If you did not request a password reset', $html);
         $this->assertStringContainsString('/reset-password?token=abc', $html);
