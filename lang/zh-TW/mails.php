@@ -16,7 +16,7 @@ return [
         'fallback_text' => '如果按鈕無法點擊，請複製以下連結貼到瀏覽器：',
         'security_note' => '如果您沒有要求重設密碼，請忽略此郵件，您的帳號依然安全，密碼不會被更改。RSSPilot 絕不會透過電子郵件要求您提供密碼。',
         'alt_logo'      => 'RSSPilot 標誌',
-        'footer_text'   => '&copy; :year RSSPilot Inc.',
+        'footer_text'   => '&copy; :year RSSPilot',
     ],
 
     'verify_email' => [

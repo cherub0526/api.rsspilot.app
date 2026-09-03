@@ -16,7 +16,7 @@ return [
         'fallback_text' => 'If the button does not work, copy and paste the URL below into your browser:',
         'security_note' => 'If you did not request a password reset, you can ignore this email — your account is safe and your password will not be changed. RSSPilot will never ask for your password by email.',
         'alt_logo'      => 'RSSPilot logo',
-        'footer_text'   => '&copy; :year RSSPilot Inc.',
+        'footer_text'   => '&copy; :year RSSPilot',
     ],
 
     'verify_email' => [
