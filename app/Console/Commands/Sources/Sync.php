@@ -16,7 +16,7 @@ use App\Services\SubscriptionService;
 class Sync extends Command
 {
     protected ?string $signature = 'sources:sync
-        {--id= : Sync a specific source by ID}
+        {--id= : Sync a specific source by ID, bypassing the free/subscribed filter}
         {--free : Only sync sources with free=1}';
 
     protected string $description = 'Sync videos from source RSS feeds into the media table';
@@ -26,7 +26,17 @@ class Sync extends Command
         $query = Source::query()->where('status', Source::STATUS_ACTIVE);
 
         if ($id = $this->option('id')) {
+            // 明確指定 ID 是人工意圖（補跑、驗證單一來源），略過下面的過濾。
             $query->where('id', $id);
+        } else {
+            // 只同步「免費來源」或「至少有一位使用者訂閱的來源」。
+            // POST /v1/media 手動加入單支影片時會順手把該影片的頻道建成 source，
+            // 那種沒人訂閱又非免費的來源如果照樣同步，等於替沒人要的頻道抓整份
+            // RSS、建整批 media，成本卻沒有任何使用者在對應。
+            $query->where(function ($builder) {
+                $builder->where('free', true)
+                    ->orWhereHas('userSources');
+            });
         }
 
         if ($this->option('free')) {

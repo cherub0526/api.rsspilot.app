@@ -24,11 +24,27 @@ The rule, the reasoning, and edge cases.
 兩條進來的路徑共用這一列：
 
 - **RSS 同步**（`SyncJob`）——訂閱頻道後自動收進來，`source_id` 指向該 source
-- **手動貼網址**（`POST /v1/media`）——單支影片，`source_id` 是 null
+- **手動貼網址**（`POST /v1/media`）——單支影片，會順手把該影片的頻道建成 source
+  並掛上去（`SourceService::firstOrCreateYoutubeChannel()`）。只有 `getUrlInfo`
+  與 YouTube Data API 都拿不到頻道時才留 null
 
 手動貼的網址如果指到一支已經被 RSS 收進來的影片，會**重用**該列（連同已經跑好的逐字稿與摘要），只新增 userables 關聯。這也表示使用者可能立刻就看得到摘要，不必等轉錄。
 
 不讓每位使用者各自持有一列，是因為轉錄與摘要的成本會直接乘上使用者數。
+
+## 手動加入影片會建出頻道 source，但不等於訂閱該頻道
+
+`code:` `app/Services/SourceService.php` → `firstOrCreateYoutubeChannel()`、`app/Console/Commands/Sources/Sync.php` → `handle()` · `updated:` `2026-09-03` · `status:` `active`
+
+`POST /v1/media` 建立 media 時會一併建立（或重用）該影片所屬頻道的 source，讓手動加入的影片跟 RSS 收進來的一樣掛得到來源——列表能顯示頻道、關鍵字能搜到頻道名、日後真的訂閱該頻道時 `syncSourceMediaToUserables()` 也接得起來。
+
+**但使用者不會因此被寫進 `user_sources`。** 訂閱會吃掉方案的 `channel_limit`，只加一支影片不該偷偷佔掉一個頻道名額。「擁有影片」與「訂閱來源」是兩個樞紐，混用出過事（見〈影片的存取權以 userables 為準〉）。
+
+於是產生一種來源：**存在、active、但沒人訂閱且 `free = false`**。`sources:sync` 因此只撈「`free = true` 或至少有一位使用者訂閱」的 active 來源——照單全收會替沒人要的頻道抓整份 RSS、建整批 media、再送去轉錄，成本卻沒有任何使用者在對應。
+
+例外是 `--id`：明確指定單一來源代表人工意圖（補跑、驗證），略過這道過濾，只保留 `status = active` 的判斷。`--free` 則是在過濾之上再收窄，不是放寬。
+
+新來源預設 `free = false`，所以手動加入影片不會意外讓整個頻道進入同步排程。
 
 ## 影片額度是滾動 30 天，兩條加入路徑共用同一個池子
 
@@ -48,9 +64,12 @@ The rule, the reasoning, and edge cases.
 
 1. `YoutubeService::getVideoIdFromUrl()` 純字串解析，格式不對直接 422，不浪費一次外部呼叫
 2. `VideoTranscriberClient::getUrlInfo()` 確認影片真的存在且可轉錄（`code === 100000`），順便拿標題、縮圖、時長、頻道
-3. `YoutubeService::getVideoDetails()` 補 `description` 與 `published_at`——`getUrlInfo` 沒有這兩個欄位
+3. `YoutubeService::getVideoDetails()` 補 `description` 與 `published_at`——`getUrlInfo` 沒有這兩個欄位；
+   `getUrlInfo` 偶爾漏掉的 `channel_id` / `author` 也由同一份 snippet 的 `channelId` / `channelTitle` 補回
 
-第 3 步是 **best-effort**：YouTube Data API 有配額，用盡時整個「新增影片」功能不該跟著停擺，拿不到就留空。第 2 步失敗才真的擋下來。
+第 3 步是 **best-effort**：YouTube Data API 有配額，用盡時整個「新增影片」功能不該跟著停擺，拿不到就留空（頻道拿不到就是 `source_id` 留 null）。第 2 步失敗才真的擋下來。
+
+頻道走這條路補是免費的：`getVideoDetails()` 為了 description 本來就會發，而且它請求的 part 已經含 `snippet`，所以拿頻道不會多打一次 API、也不會多耗配額。
 
 送給 `getUrlInfo` 的是正規化過的 `https://www.youtube.com/watch?v={videoId}`，不是使用者原本貼的網址——不把追蹤參數送到外部服務。
 
@@ -84,7 +103,9 @@ The rule, the reasoning, and edge cases.
 | 無 source | 是 | 可存取 |
 | 無 source | 否 | 404 |
 
-`source` 為 null 時第 2 條直接是 false（`$this->source?->free ?? false`），所以未歸屬任何來源的影片只能靠影片庫授權——這正是「不訂閱來源、直接加單支影片」那條路徑要的行為。
+`source` 為 null 時第 2 條直接是 false（`$this->source?->free ?? false`），所以未歸屬任何來源的影片只能靠影片庫授權。
+
+手動加入的影片現在多半**有** source（見〈手動加入影片會建出頻道 source〉），但那個 source 預設 `free = false`，第 2 條一樣不成立——「不訂閱來源、直接加單支影片」的授權仍然只靠影片庫。真正的差別只在該頻道剛好被標成免費來源時：那支影片就對所有人開放，這是 free 來源本來就要的行為。
 
 ### 為什麼不是看來源訂閱
 
