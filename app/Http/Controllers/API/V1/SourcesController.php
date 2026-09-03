@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API\V1;
 use App\Models\Source;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
+use App\Services\SourceService;
 use App\Services\YoutubeService;
 use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
@@ -126,10 +127,7 @@ class SourcesController extends AbstractController
             [$externalId, $title, $dbType, $thumbnail] = $this->resolvePlaylist($params['url'], $youtubeService);
         }
 
-        $source = Source::firstOrCreate(
-            ['external_id' => $externalId, 'type' => $dbType],
-            ['title' => $title, 'url' => $this->buildRssUrl($dbType, $externalId), 'thumbnail' => $thumbnail, 'status' => Source::STATUS_ACTIVE]
-        );
+        $source = app(SourceService::class)->firstOrCreate($dbType, $externalId, $title, $thumbnail);
 
         if ($dbType === Source::TYPE_YOUTUBE_CHANNEL && empty($source->metadata['subscriber_count'])) {
             $stats = $youtubeService->getChannelStatistics($externalId);
@@ -323,7 +321,7 @@ class SourcesController extends AbstractController
             throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
         }
 
-        $rssUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $channelId;
+        $rssUrl = app(SourceService::class)->buildRssUrl(Source::TYPE_YOUTUBE_CHANNEL, $channelId);
 
         try {
             $response = Http::get($rssUrl);
@@ -365,14 +363,5 @@ class SourcesController extends AbstractController
         }
 
         return [$playlistId, $details['title'], Source::TYPE_YOUTUBE_PLAYLIST, $details['thumbnail']];
-    }
-
-    private function buildRssUrl(string $dbType, string $externalId): string
-    {
-        if ($dbType === Source::TYPE_YOUTUBE_CHANNEL) {
-            return 'https://www.youtube.com/feeds/videos.xml?channel_id=' . $externalId;
-        }
-
-        return 'https://www.youtube.com/feeds/videos.xml?playlist_id=' . $externalId;
     }
 }
