@@ -174,6 +174,21 @@ class User extends Authenticatable
     }
 
     /**
+     * AI 回應語言的「代碼」（如 ja、zh-TW），供快取鍵與 API 回應使用。
+     *
+     * 與 aiLanguageName() 讀同一個設定值，差別只在給誰看：prompt 要的是語言名稱，
+     * 資料庫欄位與前端比對要的是代碼。兩者必須同源，否則會出現「用日文產生、
+     * 存成英文」這種對不起來的資料。
+     */
+    public function aiLanguageCode(): string
+    {
+        $data = $this->setting()->first()?->data ?? [];
+        $code = $data['ai']['language'] ?? self::DEFAULT_AI_LANGUAGE;
+
+        return is_string($code) && $code !== '' ? $code : self::DEFAULT_AI_LANGUAGE;
+    }
+
+    /**
      * 使用者保存的介面語系，沒有設定或設定值已不在白名單內時回傳 null。
      *
      * 回 null 而不是回預設值，是為了讓呼叫端能區分「沒有偏好」與「偏好剛好

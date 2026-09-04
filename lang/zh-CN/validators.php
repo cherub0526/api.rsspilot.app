@@ -30,6 +30,10 @@ return [
         'chat' => [
             'chat_limit_reached' => '已达到方案允许的每日 AI 对话上限。',
         ],
+        'mindmap' => [
+            'mindmap_limit_reached' => '已达到方案允许的每日思维导图生成上限。',
+            'summary_required'      => '摘要完成后才能生成思维导图。',
+        ],
         'rss' => [
             'invalid_url' => '无效的 RSS 网址。',
             'not_found'   => '找不到指定的 RSS。',

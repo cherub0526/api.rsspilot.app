@@ -30,6 +30,10 @@ return [
         'chat' => [
             'chat_limit_reached' => 'You have reached the daily AI chat limit for your plan.',
         ],
+        'mindmap' => [
+            'mindmap_limit_reached' => 'You have reached the daily mind map limit for your plan.',
+            'summary_required'      => 'The mind map can only be generated once the summary is ready.',
+        ],
         'rss' => [
             'invalid_url' => 'Invalid RSS URL.',
             'not_found'   => 'RSS not found.',

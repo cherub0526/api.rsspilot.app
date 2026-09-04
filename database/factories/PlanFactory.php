@@ -28,6 +28,7 @@ class PlanFactory extends Factory
             'video_limit'   => fake()->numberBetween(3, 100),
             // 0 = 不限制。測試要驗額度時自行覆寫，預設不讓額度干擾無關的測試。
             'chat_limit' => 0,
+            'mindmap_limit' => 0,
             'sort'       => fake()->numberBetween(0, 5),
             'status'     => fake()->randomElement(array_keys(Plan::$statusMaps)),
         ];

@@ -51,6 +51,7 @@ class Plan extends Model
         'channel_limit',
         'video_limit',
         'chat_limit',
+        'mindmap_limit',
         'download_enabled',
         'agent_enabled',
         'advanced_model_enabled',

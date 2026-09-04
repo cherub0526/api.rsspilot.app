@@ -30,6 +30,10 @@ return [
         'chat' => [
             'chat_limit_reached' => '已達到方案允許的每日 AI 對話上限。',
         ],
+        'mindmap' => [
+            'mindmap_limit_reached' => '已達到方案允許的每日心智圖產生上限。',
+            'summary_required'      => '摘要完成後才能產生心智圖。',
+        ],
         'rss' => [
             'invalid_url' => '無效的 RSS 網址。',
             'not_found'   => '找不到指定的 RSS。',

@@ -13,6 +13,7 @@ use App\Http\Controllers\API\V1\AiModelsController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
+use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Auth\GoogleController;
 use App\Http\Controllers\API\V1\Auth\LogoutController;
@@ -296,6 +297,27 @@ Route::group('/media', function () {
             ]
         );
     }, ['as' => 'summaries']);
+
+    // 心智圖是「一次性、使用者主動觸發、單一消費者」的產物，所以不像 chat 拆成
+    // POST 觸發 + 常駐 GET 長連線：POST 的回應本身就是 SSE 串流。
+    Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/mindmap', function () {
+        Route::get(
+            '/',
+            [
+                'as'         => 'show',
+                'uses'       => MindmapController::class . '@show',
+                'middleware' => ['auth'],
+            ]
+        );
+        Route::post(
+            '/',
+            [
+                'as'         => 'store',
+                'uses'       => MindmapController::class . '@store',
+                'middleware' => ['auth'],
+            ]
+        );
+    }, ['as' => 'mindmap']);
 
     Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/captions', function () {
         Route::get(
