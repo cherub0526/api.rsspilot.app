@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions;
 
 use Exception;
-use App\Services\ChatQuotaSnapshot;
+use App\Services\DailyQuotaSnapshot;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -20,7 +20,7 @@ class ChatQuotaExceededException extends Exception
 
     public static string $statusMessage = 'Too Many Requests';
 
-    public function __construct(private readonly ChatQuotaSnapshot $snapshot)
+    public function __construct(private readonly DailyQuotaSnapshot $snapshot)
     {
         parent::__construct(self::$statusMessage, self::$statusCode);
     }

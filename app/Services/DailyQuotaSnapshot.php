@@ -7,12 +7,15 @@ namespace App\Services;
 use Carbon\CarbonInterface;
 
 /**
- * 一位使用者在當下這個額度日的提問額度狀態。
+ * 一位使用者在當下這個額度日、某一種 AI 額度的用量狀態。
  *
- * 由 ChatQuotaService 產出，同時餵給 X-RateLimit-* header 與 usage API，
- * 兩邊看到的數字才不會有兩套算法。
+ * 由 DailyQuotaService 的子類別產出（對話、心智圖各一種），同時餵給
+ * X-RateLimit-* header 與 usage API，兩邊看到的數字才不會有兩套算法。
+ *
+ * 刻意不帶「這是哪一種額度」的欄位：header 名稱與錯誤訊息由各自的
+ * 端點決定，這個值物件只負責數字與時間。
  */
-final class ChatQuotaSnapshot
+final class DailyQuotaSnapshot
 {
     /**
      * @param int $limit 當下方案的每日上限，0 表示不限制
@@ -53,7 +56,7 @@ final class ChatQuotaSnapshot
     }
 
     /**
-     * 不限制的方案不帶 header —— 送 Limit: 0 會被讀成「一次都不能問」。
+     * 不限制的方案不帶 header —— 送 Limit: 0 會被讀成「一次都不能用」。
      * 前端收不到這組 header 就代表沒有上限。
      *
      * @return array<string, string>

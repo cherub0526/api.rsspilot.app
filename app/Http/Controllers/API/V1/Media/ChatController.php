@@ -18,7 +18,7 @@ use App\OpenApi\Responses\Http429;
 use App\Services\ChatQuotaService;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
-use App\Services\ChatQuotaSnapshot;
+use App\Services\DailyQuotaSnapshot;
 use Hypervel\Support\Facades\Event;
 use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -214,9 +214,9 @@ class ChatController
 
     /**
      * 成功的回應也帶 X-RateLimit-*，前端不必等到被擋才知道今天還剩幾次。
-     * 不限制的方案不會有這組 header（見 ChatQuotaSnapshot::headers()）。
+     * 不限制的方案不會有這組 header（見 DailyQuotaSnapshot::headers()）。
      */
-    private function withQuotaHeaders(ResponseInterface $response, ChatQuotaSnapshot $quota): ResponseInterface
+    private function withQuotaHeaders(ResponseInterface $response, DailyQuotaSnapshot $quota): ResponseInterface
     {
         foreach ($quota->headers() as $name => $value) {
             $response = $response->withHeader($name, $value);
