@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace Tests\Unit\Services\FollowUpQuestions;
 
 use Tests\TestCase;
+use App\Models\Config;
+use Hypervel\Support\Facades\Log;
 use Tests\Support\FakeAIProvider;
+use App\Utils\AI\OpenRouterProvider;
+use NeuronAI\Chat\Messages\AssistantMessage;
+use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Services\FollowUpQuestions\NeuronFollowUpQuestions;
 use App\Services\FollowUpQuestions\FollowUpQuestionsTemplate;
 
@@ -15,6 +20,8 @@ use App\Services\FollowUpQuestions\FollowUpQuestionsTemplate;
  */
 class NeuronFollowUpQuestionsTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function testGenerateReturnsTheThreeParsedQuestions(): void
     {
         $provider = new FakeAIProvider("### 1. 均線怎麼用？\n### 2. 族群怎麼選？\n### 3. 停損怎麼設？");
@@ -52,5 +59,60 @@ class NeuronFollowUpQuestionsTest extends TestCase
         $provider = new FakeAIProvider('抱歉，我無法產生問題。');
 
         $this->assertSame([], (new NeuronFollowUpQuestions($provider))->generate('回答', 'English'));
+    }
+
+    /**
+     * 指定單一模型時不記 log：實際模型恆等於要求的模型，每次都寫一行只是灌滿 log。
+     */
+    public function testGenerateDoesNotLogRoutingForAPinnedModel(): void
+    {
+        $this->setFollowUpModel('openai/gpt-4.1-mini');
+
+        Log::shouldReceive('info')->never();
+
+        (new NeuronFollowUpQuestions(new FakeAIProvider('### 1. a')))->generate('回答', 'English');
+    }
+
+    /**
+     * 走 auto 時記下實際模型與 token 用量——這是事後回答「auto 選了什麼、花了多少」
+     * 的唯一依據。
+     */
+    public function testGenerateLogsTheActualModelWhenRoutedByAuto(): void
+    {
+        $this->setFollowUpModel('openrouter/auto');
+
+        $reply = (new AssistantMessage('### 1. a'))
+            ->addMetadata(OpenRouterProvider::META_MODEL, 'anthropic/claude-haiku-4.5');
+
+        Log::shouldReceive('info')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'openrouter auto')
+                    && $context['requested'] === 'openrouter/auto'
+                    && $context['actual'] === 'anthropic/claude-haiku-4.5';
+            });
+
+        (new NeuronFollowUpQuestions(new FakeAIProvider('', $reply)))->generate('回答', 'English');
+    }
+
+    /**
+     * 拿不到 metadata（模型沒回報、或注入的是不帶 metadata 的替身）時 actual 是 null，
+     * 但延伸問題本身照樣要產得出來——記錄失敗不該讓功能失敗。
+     */
+    public function testGenerateStillWorksWhenTheActualModelIsUnknown(): void
+    {
+        $this->setFollowUpModel('openrouter/auto');
+
+        $questions = (new NeuronFollowUpQuestions(new FakeAIProvider('### 1. 只有這題')))
+            ->generate('回答', 'English');
+
+        $this->assertSame(['只有這題'], $questions);
+    }
+
+    private function setFollowUpModel(string $model): void
+    {
+        Config::setValue(Config::KEY_OPENROUTER_MODELS, [
+            'App/Services/FollowUpQuestions/NeuronFollowUpQuestions' => $model,
+        ]);
     }
 }
