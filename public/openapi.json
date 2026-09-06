@@ -65,10 +65,10 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account"
+                                    "email"
                                 ],
                                 "properties": {
-                                    "account": {
+                                    "email": {
                                         "type": "string",
                                         "maxLength": 255,
                                         "minLength": 6,
@@ -259,18 +259,11 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account",
                                     "email",
                                     "password",
                                     "password_confirmation"
                                 ],
                                 "properties": {
-                                    "account": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "minLength": 6,
-                                        "example": "johndoe"
-                                    },
                                     "email": {
                                         "type": "string",
                                         "format": "email",
@@ -294,15 +287,58 @@
                     }
                 },
                 "responses": {
-                    "201": {
-                        "description": "User registered and access token issued",
+                    "202": {
+                        "description": "帳號已建立，驗證信已寄出。刻意不回 token——要先通過 /v1/auth/verify 才算完成註冊。"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/auth/verify": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "以驗證碼或信件 token 完成 email 驗證，成功後發放 token",
+                "operationId": "api.v1.auth.verify.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "johndoe@example.com"
+                                    },
+                                    "code": {
+                                        "type": "string",
+                                        "maxLength": 6,
+                                        "minLength": 6,
+                                        "example": "048213"
+                                    },
+                                    "token": {
+                                        "type": "string",
+                                        "example": "a1b2c3..."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Email verified and access token issued",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
                                         "access_token": {
-                                            "type": "string",
-                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                            "type": "string"
                                         },
                                         "token_type": {
                                             "type": "string",
@@ -324,6 +360,43 @@
                 }
             }
         },
+        "/v1/auth/verify/resend": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "重新寄送 email 驗證碼",
+                "description": "重寄驗證碼。冷卻由 Service 判斷——前端的倒數只是體驗，擋不住直接打 API。",
+                "operationId": "api.v1.auth.verify.resend.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "驗證信已重新寄出"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
         "/v1/auth": {
             "post": {
                 "tags": [
@@ -337,11 +410,11 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account",
+                                    "email",
                                     "password"
                                 ],
                                 "properties": {
-                                    "account": {
+                                    "email": {
                                         "type": "string",
                                         "maxLength": 255,
                                         "minLength": 6,
@@ -838,6 +911,60 @@
                 ]
             }
         },
+        "/v1/media/{mediaId}/captions/{captionId}/download": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Download a caption as a subtitle file",
+                "operationId": "api.v1.media.captions.download",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/captionId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "srt",
+                            "enum": [
+                                "srt",
+                                "vtt",
+                                "txt"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The subtitle file",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups": {
             "get": {
                 "tags": [
@@ -1189,6 +1316,91 @@
                 }
             }
         },
+        "/v1/media/{mediaId}/mindmap": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get the mind map for this media in the user AI language",
+                "description": "GET /v1/media/{mediaId}/mindmap.\n\n取這位使用者在這支影片、這個 AI 語言下的心智圖。\n\n沒有就是 404，不回空陣列——摘要端點回 `[]` 的做法逼得前端把型別寫成\n`SummaryResource | []` 再用 Array.isArray() 分辨，不要再複製一次。",
+                "operationId": "api.v1.media.mindmap.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Mind map",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "language": {
+                                            "type": "string",
+                                            "example": "zh-TW"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "completed"
+                                        },
+                                        "markdown": {
+                                            "type": "string",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Generate the mind map and stream it back over SSE",
+                "description": "POST /v1/media/{mediaId}/mindmap.\n\n產生（或重新產生）心智圖，回應本身就是 SSE 串流。\n事件格式與對話一致：connected / token / done / error。\n\n命中既有心智圖時前端不會走到這裡（它先打 GET），所以這支端點一律扣一次額度。",
+                "operationId": "api.v1.media.mindmap.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream: connected / token / done / error events",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "example": "data: {\"type\":\"token\",\"token\":\"# \"}\n\ndata: {\"type\":\"done\"}\n\n"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
+                    }
+                }
+            }
+        },
         "/v1/media/{mediaId}/summaries": {
             "get": {
                 "tags": [
@@ -1254,6 +1466,57 @@
                         "$ref": "#/components/responses/401"
                     }
                 }
+            }
+        },
+        "/v1/media/{mediaId}/summaries/download": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Download the summary as a document",
+                "description": "匯出的是 index 挑出來的那一份（Media::summaryFor），不另外收 summaryId：\n使用者按下的下載鈕就在他當下看著的那份摘要旁邊。",
+                "operationId": "api.v1.media.summaries.download",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "md",
+                            "enum": [
+                                "md",
+                                "txt"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The summary document",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/media": {
@@ -3479,6 +3742,24 @@
                         "type": "string",
                         "example": "Video Title"
                     },
+                    "status": {
+                        "description": "處理進度，見 App\\Models\\Media 的 STATUS_* 常數",
+                        "type": "string",
+                        "enum": [
+                            "created",
+                            "progress",
+                            "transcribing",
+                            "transcribed",
+                            "transcribe_failed",
+                            "summarizing",
+                            "summarized",
+                            "summarize_failed",
+                            "ready",
+                            "cancelled",
+                            "failed"
+                        ],
+                        "example": "ready"
+                    },
                     "description": {
                         "type": "string",
                         "example": "Video description"
@@ -3580,6 +3861,11 @@
                     },
                     "chat_limit": {
                         "description": "Daily AI chat question limit. 0 means unlimited.",
+                        "type": "integer",
+                        "example": 50
+                    },
+                    "mindmap_limit": {
+                        "description": "Daily mind map generation limit. 0 means unlimited.",
                         "type": "integer",
                         "example": 50
                     },
@@ -3778,10 +4064,6 @@
                         "type": "string",
                         "format": "email",
                         "example": "john@example.com"
-                    },
-                    "account": {
-                        "type": "string",
-                        "example": "johndoe"
                     },
                     "avatar": {
                         "type": "string",
