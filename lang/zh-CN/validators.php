@@ -27,6 +27,11 @@ return [
             'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
         ],
+        'download' => [
+            'plan_required'  => '下载摘要与字幕需要付费方案。',
+            'invalid_format' => '不支持的下载格式。',
+            'not_found'      => '没有可下载的内容。',
+        ],
         'chat' => [
             'chat_limit_reached' => '已达到方案允许的每日 AI 对话上限。',
         ],
@@ -68,7 +73,7 @@ return [
             'required' => '电子邮件为必填。',
             'email'    => '电子邮件格式无效。',
             'max'      => '电子邮件长度不能超过 255 个字符。',
-                    'unique'   => '此电子邮件已被注册。',
+            'unique'   => '此电子邮件已被注册。',
         ],
         'code' => [
             'required' => '请输入验证码。',

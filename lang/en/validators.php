@@ -27,6 +27,11 @@ return [
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
         ],
+        'download' => [
+            'plan_required'  => 'Downloading summaries and transcripts requires a paid plan.',
+            'invalid_format' => 'Unsupported download format.',
+            'not_found'      => 'There is nothing available to download.',
+        ],
         'chat' => [
             'chat_limit_reached' => 'You have reached the daily AI chat limit for your plan.',
         ],
@@ -68,7 +73,7 @@ return [
             'required' => 'Email is required.',
             'email'    => 'Email format is invalid.',
             'max'      => 'Email must not exceed 255 characters.',
-                    'unique'   => 'This email is already registered.',
+            'unique'   => 'This email is already registered.',
         ],
         'code' => [
             'required' => 'Enter the verification code.',

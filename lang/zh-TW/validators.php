@@ -27,6 +27,11 @@ return [
             'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
         ],
+        'download' => [
+            'plan_required'  => '下載摘要與字幕需要付費方案。',
+            'invalid_format' => '不支援的下載格式。',
+            'not_found'      => '沒有可下載的內容。',
+        ],
         'chat' => [
             'chat_limit_reached' => '已達到方案允許的每日 AI 對話上限。',
         ],
@@ -68,7 +73,7 @@ return [
             'required' => '電子郵件為必填。',
             'email'    => '電子郵件格式無效。',
             'max'      => '電子郵件長度不能超過 255 個字元。',
-                    'unique'   => '此電子郵件已被註冊。',
+            'unique'   => '此電子郵件已被註冊。',
         ],
         'code' => [
             'required' => '請輸入驗證碼。',

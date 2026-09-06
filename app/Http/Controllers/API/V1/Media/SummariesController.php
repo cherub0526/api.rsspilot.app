@@ -10,14 +10,21 @@ use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Http\Resources\SummaryResource;
+use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
+use App\Services\Export\SummaryExporter;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Parameters\Path\SummaryId;
 use App\Exceptions\InvalidRequestException;
+use App\Http\Controllers\Concerns\SendsDownloads;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 use App\OpenApi\Schemas\SummaryResource as SummarySchema;
 
 class SummariesController
 {
+    use ResolvesUserPlan;
+    use SendsDownloads;
+
     #[OAT\Get(
         path: '/v1/media/{mediaId}/summaries',
         operationId: 'api.v1.media.summaries.index',
@@ -113,5 +120,82 @@ class SummariesController
         }
 
         return new SummaryResource($summary);
+    }
+
+    #[OAT\Get(
+        path: '/v1/media/{mediaId}/summaries/download',
+        operationId: 'api.v1.media.summaries.download',
+        summary: 'Download the summary as a document',
+        security: [['bearerAuth' => []]],
+        tags: ['Media'],
+        parameters: [
+            new OAT\Parameter(ref: MediaId::class),
+            new OAT\Parameter(
+                name: 'format',
+                in: 'query',
+                required: false,
+                schema: new OAT\Schema(type: 'string', enum: SummaryExporter::FORMATS, default: 'md')
+            ),
+        ],
+        responses: [
+            new OAT\Response(
+                response: 200,
+                description: 'The summary document',
+                content: new OAT\MediaType(mediaType: 'text/plain', schema: new OAT\Schema(type: 'string'))
+            ),
+            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(ref: Http401::class, response: 401),
+        ]
+    )]
+    /**
+     * 匯出的是 index 挑出來的那一份（Media::summaryFor），不另外收 summaryId：
+     * 使用者按下的下載鈕就在他當下看著的那份摘要旁邊。
+     *
+     * @throws InvalidRequestException
+     */
+    public function download(Request $request, string $mediaId): ResponseInterface
+    {
+        if (!$media = Media::find($mediaId)) {
+            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        }
+
+        if (!$media->isAccessibleBy($request->user())) {
+            throw new InvalidRequestException(['media' => [__('validators.controllers.media.not_found')]]);
+        }
+
+        // 先確認拿得到這支影片，再談方案：不然「沒有權限看」會被回成「請升級」。
+        $this->assertDownloadEnabled($request);
+
+        $format = strtolower(strval($request->input('format', SummaryExporter::FORMAT_MD)));
+
+        if (!SummaryExporter::supports($format)) {
+            throw new InvalidRequestException(
+                ['format' => [__('validators.controllers.download.invalid_format')]]
+            );
+        }
+
+        $summary = $media->summaryFor($request->user(), true);
+        // getAttribute() 而不是 ->text：與 ResolvesUserPlan 一致，也讓靜態分析看得懂
+        $text = $summary?->getAttribute('text');
+
+        if (!$summary || !is_array($text)) {
+            throw new InvalidRequestException(
+                ['summary' => [__('validators.controllers.download.not_found')]]
+            );
+        }
+
+        $title = strval($media->getAttribute('title'));
+
+        $content = (new SummaryExporter())->render($text, $title, strval($media->getAttribute('url')), $format);
+
+        $name = $this->safeFilename($title, strval($media->getKey()));
+        $locale = trim(strval($summary->getAttribute('locale')));
+        $suffix = $locale !== '' ? '.' . $locale : '';
+
+        return $this->fileResponse(
+            $content,
+            "{$name}{$suffix}.{$format}",
+            SummaryExporter::mimeFor($format)
+        );
     }
 }

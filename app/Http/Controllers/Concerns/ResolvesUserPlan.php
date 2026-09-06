@@ -52,6 +52,32 @@ trait ResolvesUserPlan
     }
 
     /**
+     * 下載摘要／字幕是付費功能，擋下方案沒開通的使用者。
+     *
+     * 判準與 assertCustomSummaryEnabled 相同，用 plans.download_enabled 而不是
+     * 方案名稱。沒有方案時一併擋下：無從判斷權益的預設是不給。
+     *
+     * 這道閘門擋的是「產好的檔案」；顯示用的 captions / summaries 端點仍對所有
+     * 方案開放（定價頁承諾的就是人人看得到），所以有心人仍能自己把 JSON 組成
+     * 字幕檔。它的作用是讓權益在伺服器上有一個真的執行點，而不是一個改掉就沒
+     * 了的前端判斷。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertDownloadEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('download_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.download.plan_required')]]
+        );
+    }
+
+    /**
      * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
      * 否則一律回 null 當成「不指定」。
      *

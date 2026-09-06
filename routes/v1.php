@@ -288,6 +288,15 @@ Route::group('/media', function () {
                 'middleware' => ['auth'],
             ]
         );
+        // 字面路徑排在 /{summaryId} 前面，不去依賴那條 ULID pattern 擋掉 'download'
+        Route::get(
+            '/download',
+            [
+                'as'         => 'download',
+                'uses'       => SummariesController::class . '@download',
+                'middleware' => ['auth'],
+            ]
+        );
         Route::get(
             '/{summaryId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
             [
@@ -325,6 +334,14 @@ Route::group('/media', function () {
             [
                 'as'         => 'index',
                 'uses'       => CaptionsController::class . '@index',
+                'middleware' => ['auth'],
+            ]
+        );
+        Route::get(
+            '/{captionId}/download',
+            [
+                'as'         => 'download',
+                'uses'       => CaptionsController::class . '@download',
                 'middleware' => ['auth'],
             ]
         );
