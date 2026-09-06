@@ -3,7 +3,17 @@
 declare(strict_types=1);
 
 return [
-    'default_model' => env('AI_DEFAULT_MODEL', 'openai/gpt-4.1-mini'),
+    /*
+     * 沒有在 configs.openrouter_models 指定用途的模型時，退回這個值。
+     *
+     * 預設是 Auto Router：讓 OpenRouter 依提示內容挑模型，比釘死單一模型更能
+     * 跟上型錄變動，也不會因為某家供應商當機就整個用途停擺。價格帶與上限走
+     * configs.openrouter_routing（見 App\Utils\AI\OpenRouterRouting）——沒帶
+     * cost_tier 時 OpenRouter 大約以 low 帶路由。
+     *
+     * 要把某個用途釘回單一模型，改 configs 那筆值即可，不必動這裡也不必重啟。
+     */
+    'default_model' => env('AI_DEFAULT_MODEL', 'openrouter/auto'),
 
     'chat' => [
         /*

@@ -6,6 +6,7 @@ namespace App\Services\Prompts;
 
 use App\Utils\AI\Completion;
 use App\Utils\AI\OpenRouterModels;
+use App\Utils\AI\OpenRouterRouting;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -85,8 +86,10 @@ class TemplateCompletionManager
         // 建立消息陣列
         $messages = $this->template->buildMessages($userContent, $additionalParams);
 
-        // 合併選項
+        // 合併選項。路由參數（Auto Router 的 cost tier 等）擺最前面，明確傳入的
+        // 選項仍然蓋得過它。
         $options = array_merge(
+            OpenRouterRouting::for($this->template::class),
             $this->getDefaultOptions(),
             $this->options,
             $additionalParams
@@ -111,7 +114,11 @@ class TemplateCompletionManager
 
         $messages = $this->template->buildMessages($userContent);
 
-        return $this->completion->streamCompletions($model, $messages, $this->options);
+        return $this->completion->streamCompletions(
+            $model,
+            $messages,
+            array_merge(OpenRouterRouting::for($this->template::class), $this->options)
+        );
     }
 
     /**
