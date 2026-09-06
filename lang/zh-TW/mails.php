@@ -4,7 +4,35 @@ declare(strict_types=1);
 
 return [
     'daily_digest' => [
-        'subject' => '今日新增了 :count 部影片摘要',
+        'subject'    => '今日新增了 :count 部影片摘要',
+        'page_title' => 'RSSPilot — 每日摘要通知',
+
+        // Carbon isoFormat 的格式字串。日期的寫法本身就會隨語言換（中文是
+        // 「2026 年 9 月 6 日」、英文是「Saturday, September 6, 2026」），
+        // 所以格式跟著語系走，不能寫死在程式裡。
+        'date_format' => 'YYYY 年 M 月 D 日，dddd',
+
+        'greeting'    => '嗨，:name！今天是 :date',
+        'title'       => '今日新增了 :count 部影片摘要',
+        'meta_videos' => ':count 部影片',
+        'meta_ready'  => 'AI 摘要已備妥',
+        'meta_view'   => '可立即查看',
+        'intro'       => '您訂閱的頻道今天新增了 <strong>:count 部影片</strong>，我們已自動產出 AI 摘要，讓您快速掌握每部影片的重點內容，不必花時間完整觀看每一部。',
+
+        'key_points' => '重點摘要',
+        'video_cta'  => '查看完整摘要 →',
+        'views'      => ':count 次觀看',
+
+        'summary_title' => '前往 Dashboard 查看所有影片',
+        'summary_text'  => '您的訂閱共有 :channels 個頻道・已累積 :media 部影片摘要',
+        'summary_cta'   => '開啟 Dashboard',
+
+        'link_pricing'       => '升級方案',
+        'link_terms'         => '服務條款',
+        'link_privacy'       => '隱私政策',
+        'unsubscribe'        => '不想再收到每日摘要通知？:unsubscribe 或 :settings',
+        'unsubscribe_action' => '取消訂閱',
+        'settings_action'    => '調整通知設定',
     ],
 
     'reset_password' => [

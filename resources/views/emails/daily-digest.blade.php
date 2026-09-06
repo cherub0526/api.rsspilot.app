@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RSSPilot — 每日摘要通知</title>
+  <title>{{ __('mails.daily_digest.page_title') }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -315,21 +315,26 @@
         <img src="{{ asset('/logo.png') }}" alt="RSSPilot">
         <span class="email-logo-name">RSSPilot</span>
       </div>
-      <p class="email-header-greeting">嗨，{{ $userName }}！今天是 {{ $date }}</p>
-      <h1 class="email-header-title">今日新增了 {{ $videoCount }} 部影片摘要</h1>
+      <p class="email-header-greeting">
+        {{ __('mails.daily_digest.greeting', ['name' => $userName, 'date' => $date]) }}
+      </p>
+      <h1 class="email-header-title">
+        {{ __('mails.daily_digest.title', ['count' => $videoCount]) }}
+      </h1>
       <div class="email-header-meta">
-        <span>🎬 {{ $videoCount }} 部影片</span>
+        <span>🎬 {{ __('mails.daily_digest.meta_videos', ['count' => $videoCount]) }}</span>
         <div class="dot"></div>
-        <span>AI 摘要已備妥</span>
+        <span>{{ __('mails.daily_digest.meta_ready') }}</span>
         <div class="dot"></div>
-        <span>可立即查看</span>
+        <span>{{ __('mails.daily_digest.meta_view') }}</span>
       </div>
     </div>
 
     <div class="email-body">
 
+      {{-- intro 帶 <strong>，用 {!! !!} 輸出；:count 是整數，沒有注入面 --}}
       <p class="email-intro">
-        您訂閱的頻道今天新增了 <strong>{{ $videoCount }} 部影片</strong>，我們已自動產出 AI 摘要，讓您快速掌握每部影片的重點內容，不必花時間完整觀看每一部。
+        {!! __('mails.daily_digest.intro', ['count' => $videoCount]) !!}
       </p>
 
       @foreach ($videos as $video)
@@ -353,15 +358,17 @@
             <div class="tldr-label">TL;DR</div>
             <p class="tldr-text">{{ $video['tldr'] }}</p>
           </div>
-          <p class="keypoints-label">重點摘要</p>
+          <p class="keypoints-label">{{ __('mails.daily_digest.key_points') }}</p>
           <ul class="keypoints-list">
             @foreach ($video['keyPoints'] as $point)
             <li>{{ $point }}</li>
             @endforeach
           </ul>
           <div class="cta-row">
-            <a class="cta-btn" href="{{ $video['url'] }}">查看完整摘要 →</a>
-            <span class="cta-views">{{ number_format($video['viewCount']) }} 次觀看</span>
+            <a class="cta-btn" href="{{ $video['url'] }}">{{ __('mails.daily_digest.video_cta') }}</a>
+            <span class="cta-views">
+              {{ __('mails.daily_digest.views', ['count' => number_format($video['viewCount'])]) }}
+            </span>
           </div>
         </div>
       </div>
@@ -375,10 +382,15 @@
           </svg>
         </div>
         <div class="summary-bar-text">
-          <strong>前往 Dashboard 查看所有影片</strong>
-          <p>您的訂閱共有 {{ $channelCount }} 個頻道・已累積 {{ $totalMediaCount }} 部影片摘要</p>
+          <strong>{{ __('mails.daily_digest.summary_title') }}</strong>
+          <p>
+            {{ __('mails.daily_digest.summary_text', [
+              'channels' => $channelCount,
+              'media'    => $totalMediaCount,
+            ]) }}
+          </p>
         </div>
-        <a class="summary-bar-cta" href="{{ $dashboardUrl }}">開啟 Dashboard</a>
+        <a class="summary-bar-cta" href="{{ $dashboardUrl }}">{{ __('mails.daily_digest.summary_cta') }}</a>
       </div>
 
     </div>
@@ -391,15 +403,26 @@
       <div class="footer-links">
         <a href="{{ $dashboardUrl }}">Dashboard</a>
         <span>·</span>
-        <a href="{{ $pricingUrl }}">升級方案</a>
+        <a href="{{ $pricingUrl }}">{{ __('mails.daily_digest.link_pricing') }}</a>
         <span>·</span>
-        <a href="{{ $termsUrl }}">服務條款</a>
+        <a href="{{ $termsUrl }}">{{ __('mails.daily_digest.link_terms') }}</a>
         <span>·</span>
-        <a href="{{ $privacyUrl }}">隱私政策</a>
+        <a href="{{ $privacyUrl }}">{{ __('mails.daily_digest.link_privacy') }}</a>
       </div>
       <p class="footer-copy">© {{ date('Y') }} RSSPilot. All rights reserved.</p>
+      {{-- 兩個連結當佔位參數丟進整句翻譯，而不是把句子切成前後段：
+           連接詞的位置每個語言都不一樣，切碎了就沒辦法好好翻。 --}}
+      @php
+        $unsubscribeLink = '<a href="' . e($unsubscribeUrl) . '">'
+            . e(__('mails.daily_digest.unsubscribe_action')) . '</a>';
+        $settingsLink = '<a href="' . e($dashboardUrl) . '">'
+            . e(__('mails.daily_digest.settings_action')) . '</a>';
+      @endphp
       <p class="footer-unsubscribe">
-        不想再收到每日摘要通知？<a href="{{ $unsubscribeUrl }}">取消訂閱</a> 或 <a href="{{ $dashboardUrl }}">調整通知設定</a>
+        {!! __('mails.daily_digest.unsubscribe', [
+          'unsubscribe' => $unsubscribeLink,
+          'settings'    => $settingsLink,
+        ]) !!}
       </p>
     </div>
 

@@ -10,6 +10,7 @@ use App\Models\Media;
 use App\Models\Summary;
 use Hypervel\Mail\Mailable;
 use Hypervel\Queue\Queueable;
+use Hypervel\Support\Facades\App;
 use Hypervel\Queue\SerializesModels;
 use Hypervel\Database\Eloquent\Collection;
 
@@ -32,14 +33,29 @@ class DailyDigestMail extends Mailable
     ) {
     }
 
+    /**
+     * 日期與相對時間的語系。
+     *
+     * Mailable::send() 會把 build() 整段包在 withLocale($this->locale) 裡跑
+     *（見 Hypervel\Mail\Mailable），而 DailyDigestJob 送的是使用者自己的
+     * uiLocale()，所以這裡讀 App::getLocale() 就是那位收件人的語系。
+     * 原本寫死 'zh-TW'，英文使用者會收到中文的日期與「5 小時前」。
+     */
+    private function dateLocale(): string
+    {
+        return App::getLocale();
+    }
+
     public function build(): self
     {
         $clientUrl = rtrim((string) env('CLIENT_URL', ''), '/');
 
         return $this->subject(__('mails.daily_digest.subject', ['count' => $this->videos->count()]))
             ->view('emails.daily-digest', [
-                'userName'        => (string) $this->user->getAttribute('name'),
-                'date'            => Carbon::now()->locale('zh-TW')->isoFormat('YYYY 年 M 月 D 日，dddd'),
+                'userName' => (string) $this->user->getAttribute('name'),
+                'date'     => Carbon::now()
+                    ->locale($this->dateLocale())
+                    ->isoFormat(__('mails.daily_digest.date_format')),
                 'videoCount'      => $this->videos->count(),
                 'videos'          => $this->buildVideoList(),
                 'channelCount'    => $this->user->sources()->count(),
@@ -85,7 +101,7 @@ class DailyDigestMail extends Mailable
                 'title'       => (string) $media->getAttribute('title'),
                 'channel'     => (string) ($media->source?->getAttribute('title') ?? ''),
                 'publishedAt' => $publishedAt
-                    ? Carbon::parse($publishedAt)->locale('zh-TW')->diffForHumans()
+                    ? Carbon::parse($publishedAt)->locale($this->dateLocale())->diffForHumans()
                     : '',
                 'duration'          => $duration,
                 'thumbnailGradient' => $gradients[$index % count($gradients)],

@@ -4,7 +4,34 @@ declare(strict_types=1);
 
 return [
     'daily_digest' => [
-        'subject' => ':count new video summaries today',
+        'subject'    => ':count new video summaries today',
+        'page_title' => 'RSSPilot — Daily digest',
+
+        // Carbon isoFormat pattern. How a date reads changes with the language,
+        // so the pattern follows the locale instead of being hard-coded.
+        'date_format' => 'dddd, MMMM D, YYYY',
+
+        'greeting'    => 'Hi :name — today is :date',
+        'title'       => ':count new video summaries today',
+        'meta_videos' => ':count videos',
+        'meta_ready'  => 'AI summaries ready',
+        'meta_view'   => 'Ready to read',
+        'intro'       => 'The channels you follow published <strong>:count videos</strong> today. We have already generated AI summaries so you can get the gist of each one without watching them in full.',
+
+        'key_points' => 'Key points',
+        'video_cta'  => 'Read the full summary →',
+        'views'      => ':count views',
+
+        'summary_title' => 'Open the dashboard to see every video',
+        'summary_text'  => ':channels channels subscribed · :media summaries so far',
+        'summary_cta'   => 'Open Dashboard',
+
+        'link_pricing'       => 'Upgrade',
+        'link_terms'         => 'Terms of Service',
+        'link_privacy'       => 'Privacy Policy',
+        'unsubscribe'        => 'Do not want the daily digest any more? :unsubscribe or :settings.',
+        'unsubscribe_action' => 'Unsubscribe',
+        'settings_action'    => 'adjust your notification settings',
     ],
 
     'reset_password' => [
