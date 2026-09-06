@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Hypervel\Support\Facades\Route;
-use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\PlansController;
@@ -184,30 +183,6 @@ Route::group('/settings', function () {
         ]
     );
 }, ['as' => 'settings']);
-
-Route::group('/rss', function () {
-    Route::get(
-        '/',
-        [
-            'as'         => 'index',
-            'uses'       => RSSController::class . '@index',
-            'middleware' => ['auth'],
-        ]
-    );
-    Route::post(
-        '/',
-        [
-            'as'         => 'store',
-            'uses'       => RSSController::class . '@store',
-            'middleware' => ['auth'],
-        ]
-    );
-    Route::delete('/{rssId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
-        'as'         => 'destroy',
-        'uses'       => RSSController::class . '@destroy',
-        'middleware' => ['auth'],
-    ]);
-}, ['as' => 'rss']);
 
 Route::group('/popularies', function () {
     Route::get('/', [

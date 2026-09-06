@@ -465,19 +465,20 @@ migration 只掛在 `api` 一個 service 上，其餘三個不要加，否則同
 
 ## 目前暫停中的 queue
 
-`media.info`、`media.caption`、`media.youtube-data-caption`、`rss.sync`、
-`media.summary` 五個 queue 已從 worker 的 `--queue` 清單移除，**沒有任何
-worker 會消化它們**。
+`media.info`、`media.caption`、`media.youtube-data-caption`、`media.summary`
+四個 queue 已從 worker 的 `--queue` 清單移除，**沒有任何 worker 會消化
+它們**。`rss.sync` 不在此列——整條 RSS 管線已下架，佇列與 job 類別都不存在
+了，不是暫停。
 
 | Service | 仍在處理 | 已移除 |
 |---|---|---|
 | `worker-fast` | `videotranscriber.start`, `videotranscriber.fetch` | `media.info`, `media.caption`, `media.youtube-data-caption` |
-| `worker-slow` | `videotranscriber.smart-summary` | `rss.sync`, `media.summary` |
+| `worker-slow` | `videotranscriber.smart-summary` | `media.summary` |
 
 兩個 service 都保留，因為各自還有 queue 要跑，`--timeout` 的分組也沒變。
 要恢復就是把名字加回 `--queue` 清單，順序即優先序。
 
-### 這五個之中，只有兩個實際上有工作
+### 這四個實際上都沒有工作
 
 查過派工端之後：
 
@@ -486,8 +487,7 @@ worker 會消化它們**。
 | `media.info` | **無** | 無。`InfoJob` 在 `app/` 內沒有任何 dispatch 點 |
 | `media.youtube-data-caption` | **無** | 無。`YoutubeDataCaptionJob` 同上 |
 | `media.summary` | **無** | 無。`SummaryJob` 同上 |
-| `media.caption` | `SyncJob:175` → `YoutubeCaptionJob` | 有，但源頭是 `rss.sync` |
-| `rss.sync` | `RSSController:199`（使用者訂閱 feed）、`rss:sync` 指令 | 有 |
+| `media.caption` | **無** | 無。唯一的派工點 `SyncJob:175` 已隨 RSS 管線移除 |
 
 `InfoJob`、`CaptionJob`、`YoutubeDataCaptionJob`、`SummaryJob` 四個 job
 類別在 `app/`、`routes/`、`database/` 底下都找不到 dispatch 點——它們是改用
@@ -498,9 +498,9 @@ videotranscriber.ai 之前的遺留物。所以 `media.info`、
 摘要實際上是走 `videotranscriber.smart-summary`（由
 `app/Console/Commands/VideoTranscriber/Summarize.php` 派工），那個仍在運作。
 
-還有一個連鎖效應：`media.caption` 的工作是由 `SyncJob` 派出的，而 `SyncJob`
-跑在已暫停的 `rss.sync` 上。也就是說停掉 `rss.sync` 之後，`media.caption`
-連新工作都不會產生。
+`media.caption` 原本唯一的來源是 `SyncJob:175` 派出的 `YoutubeCaptionJob`，
+RSS 管線下架後連新工作都不會產生，`CaptionJob` 與 `YoutubeCaptionJob` 兩個
+類別也一併成為沒有派工點的遺留物。
 
 ### 累積與恢復
 

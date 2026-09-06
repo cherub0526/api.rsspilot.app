@@ -39,10 +39,6 @@ return [
             'mindmap_limit_reached' => '已達到方案允許的每日心智圖產生上限。',
             'summary_required'      => '摘要完成後才能產生心智圖。',
         ],
-        'rss' => [
-            'invalid_url' => '無效的 RSS 網址。',
-            'not_found'   => '找不到指定的 RSS。',
-        ],
         'sources' => [
             'invalid_url'           => '無效的 YouTube 網址。',
             'not_found'             => '找不到指定的來源。',
@@ -167,16 +163,6 @@ return [
             'string'   => '導轉網址必須是字串。',
             'url'      => '導轉網址格式不正確。',
             'max'      => '導轉網址不得超過 :max 個字元。',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => '類型為必填。',
-            'string'   => '類型必須是字串。',
-            'in'       => '類型無效。',
-        ],
-        'url' => [
-            'required' => 'URL 為必填。',
         ],
     ],
     'source' => [

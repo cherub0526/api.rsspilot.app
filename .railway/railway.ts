@@ -164,7 +164,7 @@ export default defineRailway((ctx) => {
         },
     });
 
-    // rss.sync、media.summary 暫停中。
+    // media.summary 暫停中。rss.sync 已隨 RSS 管線一併下架。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),

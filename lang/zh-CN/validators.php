@@ -39,10 +39,6 @@ return [
             'mindmap_limit_reached' => '已达到方案允许的每日思维导图生成上限。',
             'summary_required'      => '摘要完成后才能生成思维导图。',
         ],
-        'rss' => [
-            'invalid_url' => '无效的 RSS 网址。',
-            'not_found'   => '找不到指定的 RSS。',
-        ],
         'sources' => [
             'invalid_url'           => '无效的 YouTube 网址。',
             'not_found'             => '找不到指定的来源。',
@@ -167,16 +163,6 @@ return [
             'string'   => '跳转网址必须是字符串。',
             'url'      => '跳转网址格式不正确。',
             'max'      => '跳转网址不得超过 :max 个字符。',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => '类型为必填。',
-            'string'   => '类型必须是字符串。',
-            'in'       => '类型无效。',
-        ],
-        'url' => [
-            'required' => 'URL 为必填。',
         ],
     ],
     'source' => [

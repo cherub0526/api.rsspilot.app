@@ -39,10 +39,6 @@ return [
             'mindmap_limit_reached' => 'You have reached the daily mind map limit for your plan.',
             'summary_required'      => 'The mind map can only be generated once the summary is ready.',
         ],
-        'rss' => [
-            'invalid_url' => 'Invalid RSS URL.',
-            'not_found'   => 'RSS not found.',
-        ],
         'sources' => [
             'invalid_url'           => 'Invalid YouTube URL.',
             'not_found'             => 'Source not found.',
@@ -167,16 +163,6 @@ return [
             'string'   => 'Redirect URL must be a string.',
             'url'      => 'Redirect URL is invalid.',
             'max'      => 'Redirect URL may not be greater than :max characters.',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => 'Type is required.',
-            'string'   => 'Type must be a string.',
-            'in'       => 'Type is invalid.',
-        ],
-        'url' => [
-            'required' => 'URL is required.',
         ],
     ],
     'source' => [

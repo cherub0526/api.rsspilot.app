@@ -82,16 +82,6 @@ class User extends Authenticatable
         return $this->hasMany(CustomPrompt::class, 'user_id', 'id');
     }
 
-    public function rss()
-    {
-        return $this->belongsToMany(
-            Rss::class,
-            'userables',
-            'user_id',
-            'rss_id'
-        )->wherePivot('media_id', null)->withTimestamps();
-    }
-
     public function sources(): UlidBelongsToMany
     {
         $instance = $this->newRelatedInstance(Source::class);

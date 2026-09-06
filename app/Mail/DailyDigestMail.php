@@ -42,7 +42,7 @@ class DailyDigestMail extends Mailable
                 'date'            => Carbon::now()->locale('zh-TW')->isoFormat('YYYY 年 M 月 D 日，dddd'),
                 'videoCount'      => $this->videos->count(),
                 'videos'          => $this->buildVideoList(),
-                'channelCount'    => $this->user->rss()->count(),
+                'channelCount'    => $this->user->sources()->count(),
                 'totalMediaCount' => $this->user->media()->count(),
                 'dashboardUrl'    => $clientUrl . '/dashboard',
                 'pricingUrl'      => $clientUrl . '/pricing',
