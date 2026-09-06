@@ -98,3 +98,51 @@ Invalid message sequence at position 1: expected role assistant, got user
 也因為這條規則，**參考資料不能當成獨立的 user 訊息插在提問前** —— 那會造成連續兩個
 user。所以摘要改由 `AssistantTemplate::getSystemPrompt()` 併進系統提示詞。要在提問前
 額外塞任何內容時，先想清楚它會落在序列的哪個位置。
+
+## Auto Router 的 `cost_tier` 是價格帶，不是成本上限
+
+`code:` `app/Utils/AI/OpenRouterRouting.php` · `code:` `app/Services/FollowUpQuestions/NeuronFollowUpQuestions.php` → `defaultProvider` · `updated:` `2026-09-07` · `status:` `active`
+
+走 `openrouter/auto` 時，路由設定不在 `model` 欄位，而是請求 body 裡另外兩處：
+
+| 想控制的事 | 欄位 |
+|---|---|
+| 品質／價格檔次 | `plugins: [{"id": "auto-router", "cost_tier": "low"}]` |
+| **真正的成本上限** | `provider.max_price`（每百萬 token 的美元價） |
+
+`cost_tier` 的五個值由便宜到強是 `low` / `medium` / `high` / `xhigh` / `max`，**沒設定時大約以 `low` 帶路由**。
+
+**反直覺的地方：`cost_tier` 是一個「帶」，不是天花板——比該帶便宜的模型也會被排除。** 所以把它從 `low` 調到 `medium`，有可能比原本釘死 `openai/gpt-4.1-mini` 還貴。它是「我要這個檔次」的旋鈕，不是「我最多花這麼多」的旋鈕。
+
+要讓 [subscription/business-rules.md](../subscription/business-rules.md) 的〈方案定價的成本曝險在 chat_limit，不在轉錄〉那套成本天花板算術成立，靠的**只有** `provider.max_price`。單看 `cost_tier` 排方案會算錯。
+
+計價本身沒有加成：路由到哪個模型就付那個模型的標準價，Auto Router 不另外收費。
+
+這兩組參數存在 `configs` 的 `openrouter_routing`，per 用途一組，與模型（`openrouter_models`）分開兩個 key——換模型是天天在試的事，改路由政策牽涉成本結構，動的頻率不同。值原封不動送給 OpenRouter，刻意沒有型別化 schema。
+
+## NeuronAI 會丟掉回應的 `model` 欄位
+
+`code:` `app/Utils/AI/OpenRouterProvider.php` · `code:` `vendor/neuron-core/neuron-ai/src/Providers/OpenAI/HandleChat.php` → `processChatResult` · `updated:` `2026-09-07` · `status:` `active`
+
+`HandleChat::processChatResult()` 只從回應取 `usage` 與 citations，**`model` 直接丟掉**。
+
+指定單一模型時無所謂——要求的就是拿到的。但走 `openrouter/auto` 時「要求的模型」永遠是字串 `openrouter/auto`，實際跑的是哪一個只有回應的 `model` 知道，丟掉就再也回答不了「auto 幫我選了什麼、花了多少」。而 `summaries.ai_model` / `mindmaps.ai_model` 寫進去的是 `OpenRouterModels::for()` 的回傳值，也就是**要求的**那個字串，不是實際的。
+
+解法是 `OpenRouterProvider extends OpenAILike`，覆寫 `processChatResult()` 把 `$result['model']` 塞進訊息 metadata。只缺這一個欄位，不值得為它改用 `Completion` 自己控 payload——那要連 Agent、訊息映射與串流一起重寫。
+
+**串流那條還沒解**：`HandleStream` 不走 `processChatResult()`，要另外覆寫才拿得到。所以 `NeuronChatStreamer` 目前若改走 auto，會是盲的。
+
+## `openrouter/auto` 在 `ai_models` 的單價是 -1000000
+
+`code:` `app/Console/Commands/OpenRouter/SyncModels.php` → `price` · `updated:` `2026-09-07` · `status:` `active`
+
+OpenRouter 的型錄對 auto 系列回報的每 token 單價是 **`-1`**（意思是「由實際路由到的模型決定」），而 `SyncModels::price()` 會把每 token 價乘上 `PRICE_UNIT`（100 萬）換算成每百萬 token，於是資料表裡長這樣：
+
+| provider_model | input_price | output_price |
+|---|---|---|
+| `openrouter/auto` | -1000000 | -1000000 |
+| `openrouter/auto-beta` | -1000000 | -1000000 |
+
+`price()` 只擋掉非數值（回 null），`-1` 是合法數值所以照樣寫進去。**任何讀這兩欄算成本的邏輯拿到的會是負數**，而且不會拋錯，只會靜靜地把總成本算小。要對 `ai_models` 做成本統計時記得排除負值，或改以 `provider.max_price` 設的上限當估算基準。
+
+（這兩列的 `enabled` 是 0，因為 `SyncModels` 對新模型一律 disabled。但 `OpenRouterModels` 讀的是 `configs`，不看 `ai_models.enabled`，所以用途照樣可以指定 auto——`enabled` 管的是使用者可選的型錄，不是後端實際能用什麼。）
