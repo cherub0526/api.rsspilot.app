@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\FollowUpQuestions;
 
+use App\Models\User;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
 
 /**
@@ -24,7 +25,10 @@ class VideoTranscriberFollowUpQuestions implements FollowUpQuestionsGeneratorInt
     ) {
     }
 
-    public function generate(string $answers, string $language): array
+    /**
+     * $user 不使用：這個後端的模型由 videotranscriber.ai 決定，沒有可套用的路由設定。
+     */
+    public function generate(string $answers, string $language, ?User $user = null): array
     {
         return $this->parser->parse(
             $this->client->completions(

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use Generator;
+use App\Models\User;
 use App\Utils\AI\ChatStreamerInterface;
 
 /**
@@ -27,7 +28,7 @@ class FakeChatStreamer implements ChatStreamerInterface
     {
     }
 
-    public function stream(string $instructions, array $messages): Generator
+    public function stream(string $instructions, array $messages, ?User $user = null): Generator
     {
         ++$this->calls;
         $this->instructions = $instructions;

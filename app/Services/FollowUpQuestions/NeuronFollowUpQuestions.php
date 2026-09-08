@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\FollowUpQuestions;
 
+use App\Models\User;
 use NeuronAI\Agent\Agent;
+use App\Utils\AI\RoutingProfile;
+use App\Utils\AI\RoutedInference;
 use Hypervel\Support\Facades\Log;
-use App\Utils\AI\OpenRouterModels;
-use App\Utils\AI\OpenRouterRouting;
 use NeuronAI\Chat\Messages\Message;
 use App\Utils\AI\OpenRouterProvider;
 use NeuronAI\Chat\Messages\UserMessage;
@@ -35,16 +36,22 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
     ) {
     }
 
-    public function generate(string $answers, string $language): array
+    public function generate(string $answers, string $language, ?User $user = null): array
     {
-        $requested = OpenRouterModels::for(self::class);
+        $message = RoutedInference::run(
+            self::class,
+            $user,
+            function (RoutingProfile $profile) use ($answers, $language) {
+                $message = Agent::make()
+                    ->setAiProvider($this->provider ?? $this->defaultProvider($profile))
+                    ->chat(new UserMessage($this->template->build($answers, $language)))
+                    ->getMessage();
 
-        $message = Agent::make()
-            ->setAiProvider($this->provider ?? $this->defaultProvider($requested))
-            ->chat(new UserMessage($this->template->build($answers, $language)))
-            ->getMessage();
+                $this->logRouting($profile->model, $message);
 
-        $this->logRouting($requested, $message);
+                return $message;
+            }
+        );
 
         return $this->parser->parse($message->getContent());
     }
@@ -53,13 +60,13 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
      * 路由參數（Auto Router 的 cost tier、價格上限等）與模型一樣來自 configs，
      * 沒設定就是空陣列。NeuronAI 把 parameters 原封不動展開進 request body。
      */
-    protected function defaultProvider(string $model): AIProviderInterface
+    protected function defaultProvider(RoutingProfile $profile): AIProviderInterface
     {
         return new OpenRouterProvider(
             baseUri: (string) config('ai.openrouter.base_uri'),
             key: (string) config('ai.openrouter.api_key'),
-            model: $model,
-            parameters: OpenRouterRouting::for(self::class),
+            model: $profile->model,
+            parameters: $profile->parameters,
         );
     }
 

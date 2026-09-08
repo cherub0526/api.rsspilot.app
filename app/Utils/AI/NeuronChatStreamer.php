@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Utils\AI;
 
 use Generator;
+use App\Models\User;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Enums\MessageRole;
@@ -28,14 +29,27 @@ use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
  */
 class NeuronChatStreamer implements ChatStreamerInterface
 {
-    public function stream(string $instructions, array $messages): Generator
+    public function stream(string $instructions, array $messages, ?User $user = null): Generator
+    {
+        yield from RoutedInference::stream(
+            self::class,
+            $user,
+            fn (RoutingProfile $profile): Generator => $this->streamWith($profile, $instructions, $messages)
+        );
+    }
+
+    /**
+     * @param array<int, array{role: string, content: string}> $messages
+     * @return Generator<int, string>
+     */
+    private function streamWith(RoutingProfile $profile, string $instructions, array $messages): Generator
     {
         $agent = Agent::make()
             ->setAiProvider(new OpenRouterProvider(
                 baseUri: (string) config('ai.openrouter.base_uri'),
                 key: (string) config('ai.openrouter.api_key'),
-                model: OpenRouterModels::for(self::class),
-                parameters: OpenRouterRouting::for(self::class),
+                model: $profile->model,
+                parameters: $profile->parameters,
             ))
             ->setInstructions($instructions);
 

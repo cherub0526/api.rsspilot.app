@@ -44,11 +44,14 @@ class ChatFollowUpsTest extends TestCase
             {
             }
 
-            public function generate(string $answers, string $language): array
+            public ?User $receivedUser = null;
+
+            public function generate(string $answers, string $language, ?User $user = null): array
             {
                 ++$this->calls;
                 $this->received = $answers;
                 $this->receivedLanguage = $language;
+                $this->receivedUser = $user;
 
                 return $this->questions;
             }

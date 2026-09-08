@@ -129,6 +129,28 @@ class TemplateCompletionManagerRoutingTest extends TestCase
     }
 
     /**
+     * 呼叫端明講模型時**不帶**路由參數：使用者自選了模型，再附一個 cost_tier 的
+     * auto-router plugin 是自相矛盾的指示，而 max_price 有機會把他自己選的模型擋掉。
+     */
+    public function testAnExplicitModelSuppressesRouting(): void
+    {
+        Config::setValue(Config::KEY_OPENROUTER_ROUTING, [
+            'App/Services/Prompts/SummaryTemplate' => self::LOW_TIER,
+        ]);
+
+        $template = TemplateFactory::create('summary', ['language' => 'English']);
+
+        (new TemplateCompletionManager(Completion::make(), $template))
+            ->complete('逐字稿', 'anthropic/claude-opus-5');
+
+        $this->assertSentBody(function (array $body): void {
+            $this->assertSame('anthropic/claude-opus-5', $body['model']);
+            $this->assertArrayNotHasKey('plugins', $body);
+            $this->assertArrayNotHasKey('provider', $body);
+        });
+    }
+
+    /**
      * 既有選項不能被路由參數擠掉。
      */
     public function testDefaultOptionsSurvive(): void

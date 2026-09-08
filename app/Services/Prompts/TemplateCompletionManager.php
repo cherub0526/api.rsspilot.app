@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Prompts;
 
+use App\Models\User;
 use App\Utils\AI\Completion;
-use App\Utils\AI\OpenRouterModels;
-use App\Utils\AI\OpenRouterRouting;
+use App\Utils\AI\RoutingProfile;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -31,12 +31,22 @@ class TemplateCompletionManager
     private array $options = [];
 
     /**
+     * 這次推論屬於哪位使用者；null 代表全站共用的產物。
+     *
+     * 摘要（SummaryJob）刻意不帶——`summaries.user_id` 是 null、一支影片全站一份，
+     * 用觸發者的方案會讓先看到那支影片的人決定所有人拿到的品質。自訂摘要試跑
+     * （SummaryPreviewService）則是 per-user，要帶。
+     */
+    private ?User $user;
+
+    /**
      * 建構函式.
      */
-    public function __construct(Completion $completion, TemplateInterface $template)
+    public function __construct(Completion $completion, TemplateInterface $template, ?User $user = null)
     {
         $this->completion = $completion;
         $this->template = $template;
+        $this->user = $user;
     }
 
     /**
@@ -80,16 +90,16 @@ class TemplateCompletionManager
         string $model = '',
         array $additionalParams = []
     ): array {
-        if ($model === '') {
-            $model = OpenRouterModels::for($this->template::class);
-        }
+        $routing = $this->routingFor($model);
+        $model = $model === '' ? $routing->model : $model;
+
         // 建立消息陣列
         $messages = $this->template->buildMessages($userContent, $additionalParams);
 
         // 合併選項。路由參數（Auto Router 的 cost tier 等）擺最前面，明確傳入的
         // 選項仍然蓋得過它。
         $options = array_merge(
-            OpenRouterRouting::for($this->template::class),
+            $routing->parameters,
             $this->getDefaultOptions(),
             $this->options,
             $additionalParams
@@ -108,17 +118,35 @@ class TemplateCompletionManager
      */
     public function completeStream(string $userContent, string $model = ''): ResponseInterface
     {
-        if ($model === '') {
-            $model = OpenRouterModels::for($this->template::class);
-        }
+        $routing = $this->routingFor($model);
+        $model = $model === '' ? $routing->model : $model;
 
         $messages = $this->template->buildMessages($userContent);
 
         return $this->completion->streamCompletions(
             $model,
             $messages,
-            array_merge(OpenRouterRouting::for($this->template::class), $this->options)
+            array_merge($routing->parameters, $this->options)
         );
+    }
+
+    /**
+     * 這次要用的路由設定。
+     *
+     * **呼叫端明講模型時只拿模型、不帶路由參數**：使用者自選了 `claude-opus-5`，
+     * 再附上一個 `cost_tier: low` 的 auto-router plugin 是自相矛盾的指示，而且
+     * `max_price` 有機會把他自己選的模型擋掉。明講就是明講。
+     *
+     * 沒明講時吃使用者方案的設定（$user 為 null 就退回用途層）——自訂摘要試跑是
+     * per-user 的路徑，不帶使用者的話 Pro 使用者會跟 Free 用到同一個價格帶。
+     */
+    private function routingFor(string $model): RoutingProfile
+    {
+        if ($model !== '') {
+            return new RoutingProfile($model);
+        }
+
+        return RoutingProfile::for($this->template::class, $this->user);
     }
 
     /**

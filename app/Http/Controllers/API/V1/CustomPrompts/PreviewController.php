@@ -106,7 +106,8 @@ class PreviewController extends AbstractController
             (string) $params['content'],
             $captions,
             (string) $request->user()->aiLanguageName(),
-            $this->providerModel($request, $params['model_id'] ?? null)
+            $this->providerModel($request, $params['model_id'] ?? null),
+            $request->user()
         );
 
         // 形狀與 summaries.text 一致，前端可以沿用既有的摘要渲染。

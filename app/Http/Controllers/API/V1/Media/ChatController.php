@@ -18,8 +18,8 @@ use App\OpenApi\Responses\Http429;
 use App\Services\ChatQuotaService;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
-use App\Services\DailyQuotaSnapshot;
 use Hypervel\Support\Facades\Event;
+use App\Services\DailyQuotaSnapshot;
 use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
@@ -172,9 +172,11 @@ class ChatController
         ]);
 
         try {
+            // 帶使用者進去：對話是 per-user 的產物，吃這個人方案的路由設定。
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
-                $this->buildMessages($history, $userMessage)
+                $this->buildMessages($history, $userMessage),
+                $request->user()
             );
 
             foreach ($stream as $token) {

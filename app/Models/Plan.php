@@ -57,6 +57,7 @@ class Plan extends Model
         'advanced_model_enabled',
         'custom_summary_enabled',
         'ai_quality',
+        'ai_routing',
         'sort',
         'status',
     ];
@@ -66,6 +67,7 @@ class Plan extends Model
      */
     protected array $casts = [
         'sort'                   => 'integer',
+        'ai_routing'             => 'array',
         'download_enabled'       => 'boolean',
         'agent_enabled'          => 'boolean',
         'advanced_model_enabled' => 'boolean',
@@ -90,6 +92,22 @@ class Plan extends Model
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /**
+     * 這個方案送給 OpenRouter 的路由設定，null 表示不覆寫。
+     *
+     * **與 `ai_quality` 是兩件事。** `ai_quality`（pro / advanced / deep）是定價頁
+     * 的行銷文案，桌面端拿它 switch 成「Pro / Advanced / Deep」三個標籤；這一欄是
+     * 實際的路由。兩者刻意不綁在一起——調成本不該被迫改文案，改文案也不該動成本。
+     *
+     * @return null|array<string, mixed>
+     */
+    public function aiRouting(): ?array
+    {
+        $routing = $this->getAttribute('ai_routing');
+
+        return is_array($routing) && $routing !== [] ? $routing : null;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use Generator;
+use App\Models\User;
 use RuntimeException;
 use App\Utils\AI\ChatStreamerInterface;
 
@@ -26,7 +27,7 @@ class FailingChatStreamer implements ChatStreamerInterface
     {
     }
 
-    public function stream(string $instructions, array $messages): Generator
+    public function stream(string $instructions, array $messages, ?User $user = null): Generator
     {
         $this->instructions = $instructions;
         $this->messages = $messages;
