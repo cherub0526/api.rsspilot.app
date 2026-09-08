@@ -146,3 +146,47 @@ OpenRouter 的型錄對 auto 系列回報的每 token 單價是 **`-1`**（意�
 `price()` 只擋掉非數值（回 null），`-1` 是合法數值所以照樣寫進去。**任何讀這兩欄算成本的邏輯拿到的會是負數**，而且不會拋錯，只會靜靜地把總成本算小。要對 `ai_models` 做成本統計時記得排除負值，或改以 `provider.max_price` 設的上限當估算基準。
 
 （這兩列的 `enabled` 是 0，因為 `SyncModels` 對新模型一律 disabled。但 `OpenRouterModels` 讀的是 `configs`，不看 `ai_models.enabled`，所以用途照樣可以指定 auto——`enabled` 管的是使用者可選的型錄，不是後端實際能用什麼。）
+
+## `openrouter/free` 放進 `models` 陣列會被靜默跳過並計費
+
+`code:` `app/Utils/AI/RoutedInference.php` · `updated:` `2026-09-09` · `status:` `active`
+
+`openrouter/free` 是一個 router slug（從約 24 個免費模型裡隨機挑，不計費），**單獨當 `model` 用完全正常**——實測三次，`cost` 都是 0，每次挑到不同模型。
+
+但把它放進 OpenRouter 的原生 fallback 陣列就不行：
+
+```json
+{"models": ["openrouter/free", "openrouter/auto"], ...}
+```
+
+實測兩次（帶與不帶 `plugins` 都試過），回應的 `model` 都是 `deepseek/deepseek-v4-flash-0731`，`cost` 不是 0。**free 被完全跳過，直接掉到付費模型，而且沒有任何錯誤訊息。** 也就是說「free 優先、auto 備援」這個一次請求的寫法會靜默地變成付費。
+
+所以 Free 方案的 fallback 只能寫在應用層（`RoutedInference`），退路是用途層設定。
+
+順帶一提，文件說 fallback 對「any error」都會觸發，但**無效的 model id 是直接回 400**，不會觸發 fallback。
+
+品質也要注意：隨機挑的第一次就挑到 `nvidia/nemotron-3.5-content-safety:free`——那是審核模型，不是聊天模型。
+
+## Auto Router 各價格帶的實際落點
+
+`code:` `app/Utils/AI/OpenRouterRouting.php` · `updated:` `2026-09-09` · `status:` `active`
+
+2026-09 實測（同一個 prompt，只換 `cost_tier`）：
+
+| cost_tier | 路由到 | 單價（in / out，每百萬 token） |
+|---|---|---|
+| `low` | `deepseek/deepseek-v4-flash-0731` | 0.065 / 0.18 |
+| `medium` | `z-ai/glm-5.2` | 1.19 / 3.74 |
+| `max` | `anthropic/claude-opus-5` | 5 / 25 |
+| （對照）`openai/gpt-4.1-mini` | — | 0.4 / 1.6 |
+
+兩件事值得記住：
+
+- **`low` 比先前釘死的 `gpt-4.1-mini` 便宜約 6 倍**，換過去是省錢不是省品質妥協。
+- 每次路由的結果**會變**，上表只是抽樣。要靠它算成本天花板必須配 `provider.max_price`，理由見〈Auto Router 的 `cost_tier` 是價格帶，不是成本上限〉。
+
+### 心智圖的額度從來沒被計入定價
+
+依上表估算 Advance（`chat_limit` 50/日、`mindmap_limit` 50/日，medium 帶）：chat 約 $5.5/月、心智圖約 $6.6/月，合計 **$12.1**，而 `docs/lore/subscription/business-rules.md` 用 70% 毛利回推的 AI 預算是 **$6.03**。
+
+`mindmap_limit` 是後來加的，比照 `chat_limit` 設成同一個數字，而那張成本天花板表只算了「影片上限 + 提問上限」。**心智圖現在是比 chat 更大的一條成本線，但沒有出現在任何定價計算裡。** 排方案時要把它算進去。
