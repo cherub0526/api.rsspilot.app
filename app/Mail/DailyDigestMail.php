@@ -46,12 +46,32 @@ class DailyDigestMail extends Mailable
         return App::getLocale();
     }
 
+    /**
+     * 信裡的 logo 網址。
+     *
+     * **不能用 `asset()`。** 它最終走 `UrlGenerator::getRequestUri()`，有 request 時
+     * 取當前請求的 host、沒有時才退回 `config('app.url')`——而信是在 queue worker
+     * 裡算出來的，永遠沒有 request。更麻煩的是它的 scheme 快取在 UrlGenerator 這個
+     * singleton 上，在常駐的 Swoole 程序裡是跨請求狀態。直接讀設定值，行為才是
+     * 一望即知且可測的。
+     *
+     * `APP_URL` **必須設定**。沒設定時 `config('app.url')` 會退回 `http://localhost`，
+     * 信裡的圖就指向收件人自己的電腦——不會報錯，只會在每一封信裡默默破圖。
+     * public/logo.png 由 Swoole 的 static handler 直接供應（見 config/server.php 的
+     * `enable_static_handler`），所以 `{APP_URL}/logo.png` 就是它的公開位址。
+     */
+    private function logoUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/') . '/logo.png';
+    }
+
     public function build(): self
     {
         $clientUrl = rtrim((string) env('CLIENT_URL', ''), '/');
 
         return $this->subject(__('mails.daily_digest.subject', ['count' => $this->videos->count()]))
             ->view('emails.daily-digest', [
+                'logoUrl'  => $this->logoUrl(),
                 'userName' => (string) $this->user->getAttribute('name'),
                 'date'     => Carbon::now()
                     ->locale($this->dateLocale())
@@ -97,10 +117,16 @@ class DailyDigestMail extends Mailable
                 : '';
             $publishedAt = $media->getAttribute('published_at');
 
+            // 頻道／清單的縮圖。sources.thumbnail 存的已經是完整網址（YouTube 的
+            // yt3.ggpht.com 或 i.ytimg.com），不需要再接前綴。取不到時回空字串，
+            // 由版型退回原本的漸層底色——寧可少一張圖，也不要送出破圖的 <img>。
+            $channelThumbnail = (string) ($media->source?->getAttribute('thumbnail') ?? '');
+
             return [
-                'title'       => (string) $media->getAttribute('title'),
-                'channel'     => (string) ($media->source?->getAttribute('title') ?? ''),
-                'publishedAt' => $publishedAt
+                'title'            => (string) $media->getAttribute('title'),
+                'channel'          => (string) ($media->source?->getAttribute('title') ?? ''),
+                'channelThumbnail' => $channelThumbnail,
+                'publishedAt'      => $publishedAt
                     ? Carbon::parse($publishedAt)->locale($this->dateLocale())->diffForHumans()
                     : '',
                 'duration'          => $duration,

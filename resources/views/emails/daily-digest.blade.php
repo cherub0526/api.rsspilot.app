@@ -115,6 +115,12 @@
       justify-content: center;
       font-size: 2rem;
     }
+    .video-thumb-img {
+      display: block;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      border: 0;
+    }
     .video-thumb-overlay {
       position: absolute;
       inset: 0;
@@ -312,7 +318,7 @@
 
     <div class="email-header">
       <div class="email-logo">
-        <img src="{{ asset('/logo.png') }}" alt="RSSPilot">
+        <img src="{{ $logoUrl }}" alt="RSSPilot">
         <span class="email-logo-name">RSSPilot</span>
       </div>
       <p class="email-header-greeting">
@@ -340,9 +346,14 @@
       @foreach ($videos as $video)
       <div class="video-card">
         <div class="video-thumb">
+          @if ($video['channelThumbnail'] !== '')
+          <img class="video-thumb-img" src="{{ $video['channelThumbnail'] }}" alt="{{ $video['channel'] }}">
+          @else
+          {{-- 來源沒有縮圖時的退路，不要送出 src 為空的 <img> --}}
           <div class="video-thumb-inner" style="background: {{ $video['thumbnailGradient'] }};">
             {{ $video['thumbnailEmoji'] }}
           </div>
+          @endif
           <div class="video-thumb-overlay"></div>
           <span class="video-thumb-new">New</span>
           <span class="video-thumb-duration">{{ $video['duration'] }}</span>
@@ -397,7 +408,7 @@
 
     <div class="email-footer">
       <div class="footer-logo">
-        <img src="{{ asset('/logo.png') }}" alt="">
+        <img src="{{ $logoUrl }}" alt="">
         <span class="footer-logo-name">RSSPilot</span>
       </div>
       <div class="footer-links">
