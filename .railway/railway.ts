@@ -71,12 +71,21 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 102 個破壞性變更。IaC 的 omit=delete 對變數同樣適用。
  *
  * 新增變數時要同步加進這裡，否則下一次 apply 會把它刪掉。
+ *
+ * APP_KEY 與 APP_URL 是後來補上的——兩者缺席時都不會有明確的錯誤訊息：
+ *   - 少了 APP_KEY，config('app.key') 是 null，而 UrlGenerator::getSignedKey()
+ *     宣告回傳 string，忘記密碼那支端點組簽章連結時直接 TypeError → 500。
+ *   - 少了 APP_URL，config('app.url') 退回 http://localhost，信件裡的圖片就
+ *     指向收件人自己的電腦，靜靜破圖。
+ * 兩者都是「設定沒設」而不是程式壞掉，所以不會出現在任何測試裡。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
-    "APP_LOCALE", "APP_NAME", "BROADCAST_CONNECTION", "CACHE_DRIVER",
+    "APP_KEY", "APP_LOCALE", "APP_NAME", "APP_URL",
+    "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
-    "DB_USERNAME", "GITHUB_TOKEN", "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
+    "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+    "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
@@ -134,14 +143,19 @@ export default defineRailway((ctx) => {
             region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
-            // staging 開著以省成本；production 一定要關——休眠後的第一個
-            // 請求要等冷啟動，而 Hyperf 開機還要產生 DI proxy，webhook 打
-            // 進來會吃到這段延遲。
+            // 兩個環境都不休眠。
             //
-            // 兩邊都顯式給值而不是省略：不宣告的話 plan 會設成 null，等於
-            // 順手改掉了沒人要求改的行為。
-            // sleepApplication: !isProduction,
-            sleepApplication: true
+            // production 不能休眠的理由很直接：休眠後的第一個請求要等冷啟動，
+            // 而 Hyperf 開機還要產生 DI proxy，webhook 打進來會吃到這段延遲。
+            //
+            // staging 一度開著休眠以省成本，後來收回——省下的錢遠不及它造成的
+            // 誤判。同一個專案裡的 mailpit 就是這樣：它睡著時 SMTP 連不上，
+            // 症狀是「寄信失敗」，跟設定錯誤長得一模一樣，查了才知道只是沒醒。
+            // 測試環境要能被信任，前提是它的行為跟正式環境一致。
+            //
+            // 顯式給值而不是省略：不宣告的話 plan 會設成 null，等於順手改掉了
+            // 沒人要求改的行為。
+            sleepApplication: false
         },
     });
 
