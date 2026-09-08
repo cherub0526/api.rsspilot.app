@@ -9,6 +9,7 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Validators\AuthValidator;
 use App\OpenApi\Responses\Http400;
+use App\OpenApi\Responses\Http422;
 use Psr\Http\Message\ResponseInterface;
 use App\Services\EmailVerificationService;
 use App\Exceptions\InvalidRequestException;
@@ -40,7 +41,12 @@ class VerifyController extends AbstractController
             required: true,
             content: new OAT\JsonContent(
                 properties: [
-                    new OAT\Property(property: 'email', type: 'string', format: 'email', example: 'johndoe@example.com'),
+                    new OAT\Property(
+                        property: 'email',
+                        type: 'string',
+                        format: 'email',
+                        example: 'johndoe@example.com'
+                    ),
                     new OAT\Property(property: 'code', type: 'string', maxLength: 6, minLength: 6, example: '048213'),
                     new OAT\Property(property: 'token', type: 'string', example: 'a1b2c3...'),
                 ]
@@ -114,7 +120,7 @@ class VerifyController extends AbstractController
         tags: ['Auth'],
         responses: [
             new OAT\Response(response: 202, description: '驗證信已重新寄出'),
-            new OAT\Response(ref: Http400::class, response: 400),
+            new OAT\Response(ref: Http422::class, response: 422),
         ]
     )]
     public function resend(Request $request): ResponseInterface
