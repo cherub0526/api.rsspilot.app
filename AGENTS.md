@@ -11,8 +11,8 @@ for YouTube content, with Stripe subscription management.
 **Core functionality:**
 
 - RSS feed subscription and synchronization for YouTube channels
-- Video caption extraction and AI-powered transcription (via Groq)
-- AI-generated video summaries using OpenAI
+- Video caption extraction and AI-powered transcription (via videotranscriber.ai)
+- AI-generated video summaries via OpenRouter
 - Interactive chat with video content
 - Stripe subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
@@ -126,21 +126,49 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 - Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `transactions()`
 - Respects sandbox mode via `PADDLE_SANDBOX` env var
 
-**RssFeedAsapService** (`App\Services\RssFeedAsapService`)
+**Source syncing** (`App\Console\Commands\Sources\Sync`)
 
-- Parses YouTube RSS feeds
-- Extracts video metadata
+- Fetches each source's YouTube XML feed (`sources.url`) and upserts the entries
+  into `media`; `--id=` syncs a single source
+- Only free sources and sources with at least one subscriber are synced by
+  default — see `docs/lore/media/business-rules.md`
+- `App\Services\RssFeedAsapService` is **dead code**: no callers anywhere.
+  The `rss` table it belonged to is superseded by `sources` — see
+  `docs/lore/media/pitfalls.md`
 
 **Prompt Templates** (`App\Services\Prompts/*`)
 
-- Template system for AI interactions with OpenAI
+- Template system for AI interactions, sent through OpenRouter
 - `TemplateCompletionManager` - Orchestrates API calls
-- Templates: `AnalysisTemplate`, `SummaryTemplate`, `TranslationTemplate`, `CaptionTemplate`, `AssistantTemplate`
+- In production use: `AssistantTemplate` (chat), `SummaryTemplate`,
+  `CustomPromptTemplate` (custom-summary preview), `MindMapTemplate`
+- Registered in `TemplateFactory` but with no production caller:
+  `TranslationTemplate`, `CaptionTemplate`, `AnalysisTemplate`,
+  `App\Services\Prompts\FollowUpQuestionsTemplate` — the live follow-up
+  template is the **same-named class in `App\Services\FollowUpQuestions`**,
+  built directly rather than through the factory
 - All extend `BaseTemplate` implementing `TemplateInterface`
+- `TemplateUsageExample` is documentation, not wiring; it still calls
+  `TemplateFactory::create('custom', ...)`, a key the factory does not register
 
-**OpenAI Integration** (`App\Utils\OpenAI\Completion`)
+**OpenRouter client** (`App\Utils\AI\Completion`)
 
-- Direct OpenAI API client for completions
+- HTTP client for OpenRouter's OpenAI-compatible chat completions (non-streaming
+  `completions()` and streaming `streamCompletions()`)
+- Streaming inference goes through `App\Utils\AI\NeuronChatStreamer` instead
+- Which model each purpose uses, and the per-plan routing that overrides it,
+  live in the database — see `App\Utils\AI\OpenRouterModels`,
+  `OpenRouterRouting` and `RoutingProfile`
+
+**Transcription** (`App\Services\VideoTranscriber\*`)
+
+- AI transcription goes to **videotranscriber.ai**; `VideoTranscriberStartJob`
+  submits and `VideoTranscriberFetchJob` collects the result
+- **Groq is receive-only**: `POST /v1/webhook/groq/{mediaId}` accepts a callback,
+  but nothing in `app/` calls Groq or reads `GROQ_API_KEY`
+- `YoutubeCaptionJob`, `YoutubeDataCaptionJob` and `CaptionJob` still exist but
+  have **no dispatch site** — they are referenced only from comments
+- Details and pitfalls: `docs/lore/transcription/`
 
 **YoutubeMediaDownloader** (`App\Services\RapidApi\YoutubeMediaDownloader`)
 
