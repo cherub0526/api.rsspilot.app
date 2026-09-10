@@ -66,3 +66,17 @@ Stripe API 對這兩種物件的刪除支援，比直覺想的少很多：
 - Model 的 observer 每次 `created` 都會在 Stripe 建新 product。測試與 seeder 反覆跑的結果是測試環境累積了 200+ 個同名的重複 product，而且**清不掉、只能封存**。要驗證同步邏輯時優先用 `stripe:sync --dry-run`，不要靠反覆重建資料試。
 
 與上一條的分工：上一條講「改 `prices.price` 不等於改了 Stripe 上的價格」，這條講「改 Stripe 上的價格只能用新增取代修改」。
+
+## Paddle 建 price 不指定 tax_mode，會落在 location 而不是 external
+
+`code:` `app/Console/Commands/Paddle/Sync.php` → `handle` · `updated:` `2026-09-11` · `status:` `active`
+
+`CreatePrice` 的 `taxMode` 是選填，不帶的時候 Paddle **不是**給你 `account_setting`，實測回來的是 `location`——依買家所在地的顯示慣例決定含不含稅。2026-09-11 第一次跑 `paddle:sync` 建出來的六筆 price，`tax_mode` 全是 `location`。
+
+這件事對我們是錯的方向：`prices.price` 是**未稅**基準價（見上面〈prices.price 一律是 USD〉），而 `location` 會讓歐盟／英國那種含稅顯示的市場把 12.99 當成**含稅價**——VAT 不是外加給買家，是從我們的收入裡扣。Paddle 是 MoR 會代收代繳，所以帳面上不會噴錯，只會少收。
+
+要的是 `TaxMode::External()`（價格未稅、稅在結帳時外加），建立時就要明寫。
+
+修既有的 price 時有個跟 Stripe 相反的地方值得記住：**Paddle 的 price 可以更新**，`PATCH /prices/:id` 帶 `tax_mode` 就會生效，不必像 Stripe 那樣「建新的 + 改映射 + 封存舊的」。所以同步指令對已存在的 price 不能只是 `continue` 跳過，否則早建好的那批永遠修不到。
+
+代價是：`external` 的結帳頁對歐盟／英國 B2C 顯示的是未稅價，跟當地「標價即含稅」的消費者慣例不同。要改成含稅顯示是 `internal` / `location` + 重新定價的商業決策，不是把這個參數轉回去就好。
