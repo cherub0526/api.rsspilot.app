@@ -7,10 +7,11 @@ namespace App\Console\Commands\Paddle;
 use Exception;
 use App\Models\Plan;
 use App\Models\Price;
-use App\Services\PaddleClient;
 use Hypervel\Console\Command;
+use App\Services\PaddleClient;
 use Paddle\SDK\Exceptions\ApiError;
 use Paddle\SDK\Entities\Shared\Money;
+use Paddle\SDK\Entities\Shared\TaxMode;
 use Paddle\SDK\Entities\Shared\Interval;
 use Paddle\SDK\Entities\Shared\TimePeriod;
 use Paddle\SDK\Entities\Shared\TaxCategory;
@@ -18,6 +19,7 @@ use Paddle\SDK\Entities\Shared\CurrencyCode;
 use Paddle\SDK\Entities\Shared\PriceQuantity;
 use Paddle\SDK\Exceptions\ApiError\ProductApiError;
 use Paddle\SDK\Resources\Prices\Operations\CreatePrice;
+use Paddle\SDK\Resources\Prices\Operations\UpdatePrice;
 use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 use Paddle\SDK\Resources\Products\Operations\CreateProduct;
 use Paddle\SDK\Resources\Products\Operations\UpdateProduct;
@@ -31,7 +33,7 @@ class Sync extends Command
     public function handle(): void
     {
         $paddle = new PaddleClient();
-        $plans  = Plan::with('prices')->get();
+        $plans = Plan::with('prices')->get();
 
         foreach ($plans as $plan) {
             $this->info("處理方案：{$plan->title}");
@@ -87,7 +89,22 @@ class Sync extends Command
                 $label = "{$price->unit} \${$price->price}";
 
                 if ($price->paddle()->exists()) {
-                    $this->line("    ✓ Price [{$label}] 已存在：{$price->paddle->paddle_id}");
+                    $paddlePriceId = $price->paddle->paddle_id;
+
+                    try {
+                        // 已存在的 price 也要把 tax_mode 拉回 external，理由同下方建立時的註解。
+                        $response = $paddle->prices()->update(
+                            $paddlePriceId,
+                            new UpdatePrice(taxMode: TaxMode::External())
+                        );
+
+                        $price->paddle->fill(['paddle_detail' => $response])->save();
+
+                        $this->line("    ✓ Price [{$label}] 已存在：{$paddlePriceId}（tax_mode=external）");
+                    } catch (Exception $e) {
+                        $this->error("    ✗ 更新 Price [{$label}] 失敗：{$e->getMessage()}");
+                    }
+
                     continue;
                 }
 
@@ -110,6 +127,10 @@ class Sync extends Command
                                 interval: new Interval($period[0]),
                                 frequency: $period[1]
                             ),
+                            // 稅金外加。prices.price 是未稅基準價（見 docs/lore/subscription/pitfalls.md），
+                            // 而 Paddle 不指定時會落在 location 模式——那會讓歐盟等含稅慣例地區把
+                            // 這個數字當成含稅價，VAT 變成從我們的收入裡扣。
+                            taxMode: TaxMode::External(),
                             quantity: new PriceQuantity(1, 1)
                         )
                     );
