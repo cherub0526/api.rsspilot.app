@@ -38,5 +38,6 @@
             噴未捕捉的例外。
         -->
         <env name="STRIPE_API_KEY" value="sk_test_invalid_for_tests_only" force="true"/>
+        <env name="PADDLE_WEBHOOK_SECRET_KEY" value="pdl_ntfset_test_secret" force="true"/>
     </php>
 </phpunit>
