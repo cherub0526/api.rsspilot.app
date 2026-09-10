@@ -116,10 +116,10 @@ class SubscriptionsController extends AbstractController
                     ),
                     new OAT\Property(
                         property: 'paymentMethod',
-                        description: 'Payment gateway (stripe or paddle, defaults to stripe)',
+                        description: 'Payment gateway (stripe or paddle, defaults to paddle)',
                         type: 'string',
                         enum: ['stripe', 'paddle'],
-                        example: 'stripe'
+                        example: 'paddle'
                     ),
                 ]
             )
@@ -178,7 +178,9 @@ class SubscriptionsController extends AbstractController
             );
         }
 
-        $paymentMethod = $params['paymentMethod'] ?? Subscription::PAYMENT_METHOD_STRIPE;
+        // 預設走 Paddle。Stripe 仍然收：既有訂閱的取消與 webhook 都還依
+        // subscription.payment_method 分流，只是新的結帳不再導向它。
+        $paymentMethod = $params['paymentMethod'] ?? Subscription::PAYMENT_METHOD_PADDLE;
 
         $subscription = $request->user()->subscriptions()->create([
             'plan_id'        => $plan->id,
