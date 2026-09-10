@@ -272,3 +272,43 @@ co-phpunit，`composer.lock` 提到它只是因為 `hyperf/testing` 宣告了這
 process 常駐、但**每個請求一個協程**，`Context` 隨協程銷毀——兩個請求永遠不共用協程 Context。
 所以「一個測試 ≙ 一個請求」的 `phpunit` 才是正確類比。正式環境真正會跨請求殘留的是
 singleton / static / 容器層的狀態，那一層兩個 runner 條件相同，換 runner 沒有任何幫助。
+
+## request body 的 stream 不能 seek，凡是 `rewind()` 的第三方程式碼都會炸
+
+`code:` `app/Http/Controllers/API/V1/Webhook/PaddleController.php` → `assertValidSignature` · `updated:` `2026-09-10` · `status:` `active`
+
+Swoole 的請求 body 是 `Hyperf\HttpMessage\Stream\SwooleStream`，**不可 seek**。任何對它呼叫 `rewind()` / `seek()` 的程式碼都會拿到：
+
+```
+RuntimeException: Cannot seek a SwooleStream
+```
+
+實際踩到的是 Paddle SDK 的官方驗簽器 `Paddle\SDK\Notifications\Verifier`——它在算雜湊之前會 `$request->getBody()->rewind()`，而 `Hypervel\Http\Request` 確實實作了 PSR-7 的 `RequestInterface`，型別上完全吃得下，所以問題不會在編譯期出現，而是**每一個 webhook 都變成 500**。
+
+**能用的寫法是直接讀，不要 rewind**：`(string) $request->getBody()` 沒有問題（`Webhook\StripeController` 一直都是這樣拿 raw payload 的）。Paddle 那邊改成用 SDK 的底層 `PaddleSignature::parse()` + `->verify($rawBody, $secret)`，雜湊與演算法協商仍由 SDK 負責，只有「怎麼拿 body」自己處理。
+
+判準：**引入任何吃 PSR-7 request 的第三方函式庫之前，先確認它有沒有 rewind body。** 型別相容不代表能跑。
+
+## `$this->json('POST', ...)` 送的不是 JSON，是 form-urlencoded
+
+`code:` `tests/Feature/API/V1/Webhook/PaddleControllerTest.php` → `send` · `updated:` `2026-09-10` · `status:` `active`
+
+`MakesHttpRequests::json($method, $uri, $data, $headers)` 會轉呼叫 `$client->{$method}(...)`，也就是 **`TestClient::post()`**，而它送的是 `form_params`——body 最後是 `http_build_query($data)`：
+
+```
+event_id=evt_xxx&event_type=transaction.completed&occurred_at=2024-01-01T00%3A00%3A00Z
+```
+
+（順帶一提，巢狀的空陣列例如 `'data' => []` 在這種編碼下會**整個消失**。）
+
+`$request->all()` 兩種編碼都解析得出來，所以絕大多數測試察覺不到差別。**但只要測試會碰到 raw body 就會出事**：驗簽算的是 raw body，測試簽的是自己 `json_encode` 的字串，兩者永遠對不上，而且錯誤看起來像「簽章邏輯寫錯了」。
+
+要送真的 JSON body 得繞過那層 helper：
+
+```php
+$this->createTestResponse(
+    $this->getTestingClient()->json('POST', $uri, $payload, $headers)
+);
+```
+
+`TestClient::json()`（注意第一個參數是 method）才會把 `json_encode($data, JSON_UNESCAPED_UNICODE)` 當 body。**簽章要用同一組 flag 算**，否則中文或斜線的跳脫方式一不同就過不了。
