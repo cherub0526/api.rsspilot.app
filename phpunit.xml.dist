@@ -38,6 +38,13 @@
             噴未捕捉的例外。
         -->
         <env name="STRIPE_API_KEY" value="sk_test_invalid_for_tests_only" force="true"/>
+        <!--
+            store() 的 Stripe 分支要這兩個值：沒有 STRIPE_RETURN_URL 會直接
+            丟 RuntimeException，publishable_key 則是回給前端的欄位。兩個都
+            是假值，實際請求由 Tests\Support\FakeStripeHttpClient 攔下。
+        -->
+        <env name="STRIPE_PUBLISHABLE_KEY" value="pk_test_fake_for_tests_only" force="true"/>
+        <env name="STRIPE_RETURN_URL" value="https://tests.invalid/billing/return" force="true"/>
         <env name="PADDLE_WEBHOOK_SECRET_KEY" value="pdl_ntfset_test_secret" force="true"/>
     </php>
 </phpunit>
