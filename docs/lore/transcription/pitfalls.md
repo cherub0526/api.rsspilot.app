@@ -158,3 +158,36 @@ process 怎麼死都不會留下孤兒。**對這兩支 job 不能這樣做，�
 後鎖自然到期、job 卻還在重試，這段期間新的 dispatch 會被接受。觸發條件窄（要同時碰上
 auth 失敗又剛好有人跑指令），但確實存在。要補就是把 `uniqueFor` 拉到涵蓋最長重試週期，
 代價是孤兒鎖的影響時間也一起變長 —— 是個取捨，不是單純的修正。
+
+## 轉錄記錄會過期，但 CDN 上的字幕檔案不會
+
+`code:` `app/Jobs/Media/VideoTranscriberFetchJob.php` → `archiveTranscription` · `code:` `app/Services/VideoTranscriber/VideoTranscriberClient.php` → `getTranscription` · `updated:` `2026-09-13` · `status:` `active`
+
+videotranscriber.ai 的 `getTranscription()` 會對舊的 audio_id 回
+`{"code":100027,"message":"not found","data":null}` —— 記錄在服務端被清掉了。實測：
+8/3 建立的記錄，9/12 去查已經是 not found。確切的保留期沒有公開，只知道一個多月會過期。
+
+**但 `cdn.ng-resource.com` 上的檔案不會跟著消失。**同一筆記錄的 11 個資產在 API 說
+not found 之後全部照樣抓得到：`transcript_url`、`origin_transcript_url`、各 version 的
+`transcript_url` / `subtitle_url`、匯出的 mp3、YouTube 縮圖。也就是說服務端過期的是
+「記錄索引」，不是檔案本身。
+
+實務上的意義：只要當初那份 response 有留下來，就算 API 已經查不到，字幕原始檔仍然能直接
+從 CDN 下載重建。這是把 response 歸檔到 S3（`videotranscriber.ai/{mediaId}/transcribe.json`）
+真正的價值 —— 不是稽核而已，是那些 URL 本身就是唯一的還原路徑。反過來說，payload 沒留住的
+media，記錄一過期就什麼都不剩。
+
+順帶一提 `versions.original.subtitle_url` 跟 `data.origin_transcript_url` 指向的是
+**同一個檔案**，而 `detected_language` 只存在於這個檔案裡（實測值 `zh`）——
+`detectLocale()` 要多打一次 CDN 才知道語言，原因就在這。
+
+## cdn.ng-resource.com 會依 User-Agent 擋請求
+
+`code:` `app/Jobs/Media/VideoTranscriberFetchJob.php` → `detectLocale` · `updated:` `2026-09-13` · `status:` `active`
+
+CDN 對 User-Agent 做過濾：Python `urllib` 的預設 UA 一律吃 `403 Forbidden`，同一個 URL
+換成 `GuzzleHttp/7`、curl 預設 UA 或瀏覽器 UA 都是 200。
+
+對系統本身無害 —— `Http::get()` 走 Guzzle，UA 是 `GuzzleHttp/7`，實測通過。會踩到的是
+**人工排查的時候**：用隨手寫的 Python script 去抓字幕檔會拿到 403，很容易誤判成「連結失效」
+或「權限被收掉」，然後往錯的方向查。抓這些檔案記得帶 UA。
