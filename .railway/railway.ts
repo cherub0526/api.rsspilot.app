@@ -78,6 +78,11 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  *   - 少了 APP_URL，config('app.url') 退回 http://localhost，信件裡的圖片就
  *     指向收件人自己的電腦，靜靜破圖。
  * 兩者都是「設定沒設」而不是程式壞掉，所以不會出現在任何測試裡。
+ *
+ * 三個 PADDLE_* 是同樣的情況：Paddle 只留給既有訂閱、沒有人在動它，所以它們
+ * 一直不在這份清單裡，plan 每次都提議把四個 service 上的那三個變數刪掉。真的
+ * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
+ * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
@@ -89,8 +94,10 @@ const ENV_KEYS = [
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
-    "PADDLE_SANDBOX", "QUEUE_CONNECTION", "RAPID_API_KEY", "REDIS_AUTH",
-    "REDIS_DB", "REDIS_HOST", "REDIS_PORT", "SERVER_WORKERS_NUMBER",
+    "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_SANDBOX",
+    "PADDLE_WEBHOOK_SECRET_KEY", "QUEUE_CONNECTION", "RAPID_API_KEY",
+    "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
+    "SERVER_WORKERS_NUMBER",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
     "SESSION_PATH", "STRIPE_API_KEY", "STRIPE_PUBLISHABLE_KEY",
     "STRIPE_RETURN_URL", "STRIPE_WEBHOOK_SECRET", "VIDEOTRANSCRIBER_EMAIL",
