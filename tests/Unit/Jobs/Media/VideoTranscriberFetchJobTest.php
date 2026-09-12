@@ -10,8 +10,10 @@ use App\Models\Caption;
 use Hypervel\Queue\Jobs\FakeJob;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Support\Facades\Queue;
 use Hypervel\Support\Facades\Storage;
 use App\Jobs\Media\VideoTranscriberFetchJob;
+use App\Jobs\Media\VideoTranscriberArchiveJob;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
@@ -192,6 +194,52 @@ class VideoTranscriberFetchJobTest extends TestCase
         (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
 
         Storage::disk('s3')->assertMissing(sprintf('videotranscriber.ai/%s/transcribe.json', $media->id));
+    }
+
+    public function testQueuesTheAssetArchivingOnceTheCaptionIsSaved(): void
+    {
+        Queue::fake();
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'versions' => [
+                        'original' => [
+                            'status'    => 'ready',
+                            'subtitles' => [['start' => '00:00:00', 'end' => '00:00:22', 'text' => 'hello']],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        // Downloading the assets is a separate job on purpose: a timeout in
+        // this one takes the whole worker down with it.
+        Queue::assertPushed(fn (VideoTranscriberArchiveJob $job) => $job->uniqueId() === $media->id);
+    }
+
+    public function testDoesNotQueueTheAssetArchivingWhenTheMediaFails(): void
+    {
+        Queue::fake();
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code'    => 164016,
+                'message' => "You've reached the daily limit. Please login and try again.",
+                'data'    => null,
+            ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        Queue::assertNothingPushed();
     }
 
     public function testMarksTranscribeFailedWhenGetTranscriptionThrows(): void

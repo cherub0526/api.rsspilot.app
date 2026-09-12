@@ -155,6 +155,11 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         );
 
         $this->media->fill(['status' => Media::STATUS_TRANSCRIBED])->save();
+
+        // Handed to its own job rather than done here: the assets include a
+        // multi-MB mp3, and this job's timeout does not fail the job, it kills
+        // the whole worker (docs/lore/transcription/pitfalls.md).
+        dispatch(new VideoTranscriberArchiveJob($this->media));
     }
 
     /**
