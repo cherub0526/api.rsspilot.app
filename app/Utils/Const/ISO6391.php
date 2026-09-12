@@ -193,6 +193,16 @@ class ISO6391
         'Zulu'                => 'zu',
     ];
 
+    /**
+     * 這張表用地區碼區分中文，但外界常常用文字系統（script）表示。YouTube 的
+     * `defaultAudioLanguage` 同一批影片裡 `zh-TW` 與 `zh-Hant` 兩種都會出現，
+     * 指的是同一件事。沒有這張對照時 `zh-Hant` 會退成 `zh`，白白丟掉繁簡資訊。
+     */
+    private const SCRIPT_REGIONS = [
+        'hant' => 'TW',
+        'hans' => 'CN',
+    ];
+
     public static function getCodeByName($name): ?string
     {
         return self::LANGUAGES[$name] ?? null;
@@ -206,10 +216,13 @@ class ISO6391
     /**
      * 把各種寫法的語言代碼收斂成這張表使用的形式。
      *
-     * 同一個語言在專案裡有兩種寫法：`settings.data.locale` 存的是這張表的
-     * `zh-TW`（連字號、地區大寫），而字幕與摘要沿用 `Caption::LOCAL_ZH_TW`
-     * 的 `zh_tw`（底線、全小寫）。兩者字面不相等，直接比對只有 `en` 這種沒有
-     * 地區碼的會中——摘要要依使用者語系挑選就必須先過這一層。
+     * 專案裡同一個語言曾經有兩種寫法：`settings.data.locale` 存這張表的
+     * `zh-TW`（連字號、地區大寫），字幕與摘要早期則是 `zh_tw`（底線、全小寫）。
+     * 兩者字面不相等，直接比對只有 `en` 這種沒有地區碼的會中，所以凡是要拿來
+     * 比對或儲存的代碼都先過這一層。
+     *
+     * 也吃 script subtag（`zh-Hant` → `zh-TW`）與多段代碼（`zh-Hant-HK`）：
+     * 明寫的地區優先，對不上才退而求其次用 script 推出來的地區。
      *
      * 查不到的代碼原樣回傳，不猜也不丟例外：這裡的角色是正規化，不是驗證。
      * 帶地區但整組查不到時（例如 `zh-HK`）退回語言本身（`zh`），因為地區
@@ -217,14 +230,42 @@ class ISO6391
      */
     public static function normalize(string $code): string
     {
-        $parts = explode('-', str_replace('_', '-', trim($code)), 2);
-        $language = strtolower($parts[0]);
-        $candidate = isset($parts[1]) ? $language . '-' . strtoupper($parts[1]) : $language;
+        $parts = preg_split('/[-_]/', trim($code)) ?: [];
+        $language = strtolower((string) array_shift($parts));
+        $region = null;
+        $scriptRegion = null;
 
-        if (in_array($candidate, self::LANGUAGES, true)) {
-            return $candidate;
+        foreach ($parts as $part) {
+            $part = strtolower($part);
+
+            if (isset(self::SCRIPT_REGIONS[$part])) {
+                $scriptRegion ??= self::SCRIPT_REGIONS[$part];
+                continue;
+            }
+
+            $region ??= strtoupper($part);
+        }
+
+        foreach ([$region, $scriptRegion] as $candidateRegion) {
+            if ($candidateRegion === null) {
+                continue;
+            }
+
+            $candidate = $language . '-' . $candidateRegion;
+
+            if (in_array($candidate, self::LANGUAGES, true)) {
+                return $candidate;
+            }
         }
 
         return in_array($language, self::LANGUAGES, true) ? $language : $code;
+    }
+
+    /**
+     * 語言本身，不含地區：`zh-TW` → `zh`。兩個代碼是不是同一個語言，靠這個比。
+     */
+    public static function language(string $code): string
+    {
+        return strtolower(explode('-', str_replace('_', '-', trim($code)), 2)[0]);
     }
 }

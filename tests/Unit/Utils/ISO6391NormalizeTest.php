@@ -34,7 +34,12 @@ class ISO6391NormalizeTest extends TestCase
             'uppercase language'              => ['EN', 'en'],
             'surrounding spaces'              => [' en ', 'en'],
             'unregistered region falls back'  => ['zh-HK', 'zh'],
-            'unknown code is untouched'       => ['klingon', 'klingon'],
+            'traditional script subtag'       => ['zh-Hant', 'zh-TW'],
+            'simplified script subtag'        => ['zh-Hans', 'zh-CN'],
+            // 明寫的地區優先；對不上時才退回 script 推出來的地區。
+            'script with unknown region' => ['zh-Hant-HK', 'zh-TW'],
+            'script with known region'   => ['zh-Hans-CN', 'zh-CN'],
+            'unknown code is untouched'  => ['klingon', 'klingon'],
         ];
     }
 }
