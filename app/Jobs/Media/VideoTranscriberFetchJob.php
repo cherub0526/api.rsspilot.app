@@ -9,8 +9,10 @@ use Throwable;
 use App\Models\Media;
 use App\Models\Caption;
 use Hypervel\Queue\Queueable;
+use Hypervel\Support\Facades\Log;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Support\Facades\Storage;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Exceptions\VideoTranscriberAuthException;
@@ -48,6 +50,15 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
      * all, so the versions alone cannot tell waiting from failure.
      */
     protected const RECORD_SETTLED_STATUSES = ['success', 'failed'];
+
+    /**
+     * Where the raw getTranscription() response is archived, since the
+     * `video_transcriptions.transcription` column cannot hold a successful
+     * payload.
+     */
+    protected const TRANSCRIPTION_DISK = 's3';
+
+    protected const TRANSCRIPTION_PATH = 'videotranscriber.ai/%s/transcribe.json';
 
     /**
      * Must cover every release() this job can make, otherwise the worker fails
@@ -102,6 +113,8 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        $this->archiveTranscription($transcription);
+
         if (($transcription['code'] ?? null) !== 100000) {
             $this->saveTranscription($transcription);
             $this->markTranscribeFailed();
@@ -155,7 +168,8 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
      * MEDIUMTEXT column, whereas a failure is a few hundred bytes. Nothing
      * downstream reads the column back, so skipping the successful payload
      * costs only the audit trail. Restore the unconditional write once the
-     * column has been widened to LONGTEXT.
+     * column has been widened to LONGTEXT. The full payload is archived on
+     * S3 regardless — see archiveTranscription().
      *
      * The auth path writes nothing either — it releases for a retry, so it has
      * no outcome yet and would only overwrite what the next attempt stores.
@@ -166,6 +180,37 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             ['media_id' => $this->media->id],
             ['transcription' => $transcription]
         );
+    }
+
+    /**
+     * Archive the raw response on S3, at a key fixed per media so each poll
+     * overwrites the previous one and the object always holds the latest
+     * thing the service said — including the in-progress responses, which are
+     * small, and the rejected ones.
+     *
+     * This is the only complete copy of a successful payload: the DB column
+     * cannot hold one (see saveTranscription()). Storage failures are logged
+     * and swallowed — the archive is an audit trail, and losing it must not
+     * fail a media whose captions are otherwise fine.
+     *
+     * @param array<string, mixed> $transcription
+     */
+    private function archiveTranscription(array $transcription): void
+    {
+        $path = sprintf(self::TRANSCRIPTION_PATH, $this->media->id);
+
+        try {
+            Storage::disk(self::TRANSCRIPTION_DISK)->put(
+                $path,
+                (string) json_encode($transcription, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            );
+        } catch (Throwable $e) {
+            Log::error('Failed to archive the videotranscriber.ai response.', [
+                'media_id' => $this->media->id,
+                'path'     => $path,
+                'message'  => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

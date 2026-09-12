@@ -10,6 +10,7 @@ use App\Models\Caption;
 use Hypervel\Queue\Jobs\FakeJob;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Support\Facades\Storage;
 use App\Jobs\Media\VideoTranscriberFetchJob;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Hypervel\Foundation\Testing\RefreshDatabase;
@@ -22,6 +23,15 @@ use App\Services\VideoTranscriber\VideoTranscriberClient;
 class VideoTranscriberFetchJobTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Every run of the job archives its response, so the disk has to be
+        // faked for all of them, not just the tests that assert on it.
+        Storage::fake('s3');
+    }
 
     private function createMediaWithAudioId(string $audioId = 'audio-1'): Media
     {
@@ -81,6 +91,107 @@ class VideoTranscriberFetchJobTest extends TestCase
             ['start' => 0, 'end' => 22, 'text' => "what's up everybody"],
             ['start' => 771, 'end' => 809, 'text' => 'thanks for watching'],
         ], $caption->segments);
+    }
+
+    public function testArchivesTheSuccessfulResponseOnS3(): void
+    {
+        $response = [
+            'code'    => 100000,
+            'message' => 'success',
+            'data'    => [
+                'status'   => 'success',
+                'versions' => [
+                    'original' => [
+                        'status'    => 'ready',
+                        'subtitles' => [['start' => '00:00:00', 'end' => '00:00:22', 'text' => '我不相信啦']],
+                    ],
+                ],
+            ],
+        ];
+
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response($response, 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        // The DB column cannot hold a successful payload, so S3 keeps the only
+        // complete copy of it.
+        $path = sprintf('videotranscriber.ai/%s/transcribe.json', $media->id);
+        Storage::disk('s3')->assertExists($path);
+        $this->assertSame($response, json_decode(Storage::disk('s3')->get($path), true));
+        // Unescaped, so the archive stays readable as-is.
+        $this->assertStringContainsString('我不相信啦', Storage::disk('s3')->get($path));
+    }
+
+    public function testArchivesTheRejectedResponseOnS3(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code'    => 164016,
+                'message' => "You've reached the daily limit. Please login and try again.",
+                'data'    => null,
+            ], 200),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $archived = json_decode(
+            Storage::disk('s3')->get(sprintf('videotranscriber.ai/%s/transcribe.json', $media->id)),
+            true
+        );
+        $this->assertSame(164016, $archived['code']);
+    }
+
+    public function testOverwritesTheArchiveOnEveryPollSoTheLatestResponseWins(): void
+    {
+        Http::fakeSequence('videotranscriber.ai/api/v1/transcriptions?*')
+            ->push(['code' => 100000, 'data' => ['status' => 'processing']], 200)
+            ->push([
+                'code' => 100000,
+                'data' => [
+                    'status'   => 'success',
+                    'versions' => [
+                        'original' => [
+                            'status'    => 'ready',
+                            'subtitles' => [['start' => '00:00:00', 'end' => '00:00:22', 'text' => 'hello']],
+                        ],
+                    ],
+                ],
+            ], 200);
+
+        $media = $this->createMediaWithAudioId();
+        $path = sprintf('videotranscriber.ai/%s/transcribe.json', $media->id);
+
+        $job = new VideoTranscriberFetchJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+        $job->handle(new VideoTranscriberClient());
+
+        $this->assertSame('processing', json_decode(Storage::disk('s3')->get($path), true)['data']['status']);
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        $archived = json_decode(Storage::disk('s3')->get($path), true);
+        $this->assertSame('success', $archived['data']['status']);
+        $this->assertSame('hello', $archived['data']['versions']['original']['subtitles'][0]['text']);
+    }
+
+    public function testDoesNotArchiveWhenNoResponseBodyEverExisted(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::failedConnection(),
+        ]);
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+
+        Storage::disk('s3')->assertMissing(sprintf('videotranscriber.ai/%s/transcribe.json', $media->id));
     }
 
     public function testMarksTranscribeFailedWhenGetTranscriptionThrows(): void
