@@ -179,6 +179,10 @@ export default defineRailway((ctx) => {
     });
 
     // media.summary 暫停中。rss.sync 已隨 RSS 管線一併下架。
+    //
+    // videotranscriber.archive 跟 smart-summary 同放這裡是因為 timeout：它一趟
+    // 要抓七個檔案，其中 mp3 動輒十幾 MB，120 秒那組裝不下。job 內另有 180 秒
+    // 的預算上限，確保單次執行不會逼近 --timeout=300。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -186,7 +190,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",

@@ -45,7 +45,21 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      * Generous because of the audio: a full episode's mp3 runs to tens of MB,
      * which is a different order of transfer from the JSON files.
      */
-    protected const int DOWNLOAD_TIMEOUT_SECONDS = 120;
+    protected const int DOWNLOAD_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Stop starting new downloads past this point and finish the rest on the
+     * next attempt.
+     *
+     * The arithmetic this has to satisfy: the worker serving this queue runs
+     * at `--timeout=300`, and in Hypervel a job that exceeds it does not fail
+     * on its own — the worker SIGKILLs itself and leaves the unique lock
+     * behind (docs/lore/transcription/pitfalls.md). Seven assets at 60s each
+     * is 420s worst case, well past that. With this budget the worst case is
+     * one download starting at 179s and running its full 60s: 240s, inside
+     * the worker's limit. Raising either constant means re-checking that sum.
+     */
+    protected const int TIME_BUDGET_SECONDS = 180;
 
     protected const string DISK = 's3';
 
@@ -119,8 +133,14 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
         }
 
         $failed = [];
+        $startedAt = microtime(true);
 
         foreach ($assets as $file => $url) {
+            if ((microtime(true) - $startedAt) > self::TIME_BUDGET_SECONDS) {
+                $failed[] = $file;
+                continue;
+            }
+
             if (!$this->store($url, $file)) {
                 $failed[] = $file;
             }
