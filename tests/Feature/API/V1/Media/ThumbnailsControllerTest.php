@@ -171,6 +171,22 @@ class ThumbnailsControllerTest extends TestCase
         Storage::disk('s3')->assertMissing($this->path($media, 301));
     }
 
+    /** 界線是包含的：最後一秒的畫面仍屬於這支影片。 */
+    public function testStoreAcceptsTheLastSecondOfTheVideo(): void
+    {
+        $this->fakeS3();
+
+        $user = $this->fakeLogin();
+        $media = $this->ownedMedia($user, ['duration' => 300]);
+
+        $uri = route('api.v1.media.thumbnails.store', ['mediaId' => $media->id]);
+
+        $this->json('POST', $uri, ['file' => $this->jpeg(), 'second' => 300])
+            ->assertStatus(201);
+
+        Storage::disk('s3')->assertExists($this->path($media, 300));
+    }
+
     /** duration 預設是 0（還沒抓到片長），此時不該把使用者整個擋掉。 */
     public function testStoreAcceptsAnySecondWhenDurationUnknown(): void
     {
@@ -224,6 +240,66 @@ class ThumbnailsControllerTest extends TestCase
             ->assertJsonPath('url', 'https://signed.test/' . $this->path($media, 125));
 
         $this->assertSame('first-writer', Storage::disk('s3')->get($this->path($media, 125)));
+    }
+
+    public function testStoreRequiresSecond(): void
+    {
+        $this->fakeS3();
+
+        $user = $this->fakeLogin();
+        $media = $this->ownedMedia($user);
+
+        $uri = route('api.v1.media.thumbnails.store', ['mediaId' => $media->id]);
+
+        $this->json('POST', $uri, ['file' => $this->jpeg()])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['second']]);
+    }
+
+    public function testStoreRejectsNegativeSecond(): void
+    {
+        $this->fakeS3();
+
+        $user = $this->fakeLogin();
+        $media = $this->ownedMedia($user);
+
+        $uri = route('api.v1.media.thumbnails.store', ['mediaId' => $media->id]);
+
+        $this->json('POST', $uri, ['file' => $this->jpeg(), 'second' => -1])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['second']]);
+    }
+
+    /**
+     * 秒數的上界不只是「不超過片長」——GET 的路由只收 6 位數，所以寫得進去、
+     * 取不回來的秒數必須在寫入時就被擋下，否則會留下一個定址不到的物件。
+     * duration 為 0（還沒抓到片長）時這是唯一的上界。
+     */
+    public function testStoreRejectsSecondBeyondAddressableRange(): void
+    {
+        $this->fakeS3();
+
+        $user = $this->fakeLogin();
+        $media = $this->ownedMedia($user, ['duration' => 0]);
+
+        $uri = route('api.v1.media.thumbnails.store', ['mediaId' => $media->id]);
+
+        $this->json('POST', $uri, ['file' => $this->jpeg(), 'second' => 1234567])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['second']]);
+
+        $this->assertSame([], Storage::disk('s3')->allFiles());
+    }
+
+    /** 非數字的秒數連路由都不該吃下來。 */
+    public function testShowRejectsNonNumericSecond(): void
+    {
+        $this->fakeS3();
+
+        $user = $this->fakeLogin();
+        $media = $this->ownedMedia($user);
+
+        $this->json('GET', "/v1/media/{$media->id}/thumbnails/abc")->assertStatus(404);
     }
 
     public function testStoreReturnsNotFoundForInaccessibleMedia(): void

@@ -147,6 +147,60 @@ class ChatImagesTest extends TestCase
         );
     }
 
+    /**
+     * 連續的同角色訊息會被合併成一則（推論層要求嚴格 user / assistant 交替），
+     * 截圖必須跟著文字一起併過去——合併後仍是同一個人連續說的話。
+     */
+    public function testConsecutiveUserTurnsMergeTheirScreenshots(): void
+    {
+        $this->fakeS3();
+        $streamer = $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+        $this->captureAt($media, 10, 20);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '先看這格', 'images' => [10]],
+                ['role' => 'user', 'content' => '再看這格', 'images' => [20]],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertCount(1, $streamer->messages);
+        $this->assertSame(
+            [$this->signed($media, 10), $this->signed($media, 20)],
+            $streamer->imagesAt(0)
+        );
+    }
+
+    /** 同一秒重複附上沒有意義，送進推論與落庫都只該留一張。 */
+    public function testDuplicateSecondsInOneTurnAreDeduped(): void
+    {
+        $this->fakeS3();
+        $streamer = $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+        $this->captureAt($media, 125);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '這格', 'images' => [125, 125]],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertSame([$this->signed($media, 125)], $streamer->imagesAt(0));
+
+        $message = ChatMessage::where('role', ChatMessage::ROLE_USER)->firstOrFail();
+        $this->assertSame([
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 125],
+            ['type' => ChatMessage::PART_TEXT, 'text' => '這格'],
+        ], $message->contentParts());
+    }
+
     // ── 落庫 ───────────────────────────────────────────────────
 
     public function testScreenshotPartsArePersistedBeforeTheText(): void
@@ -205,6 +259,27 @@ class ChatImagesTest extends TestCase
             ->assertJsonPath('messages.0.parts.0.url', $this->signed($media, 125));
     }
 
+    /** 對話列表也吐訊息片段，同樣要簽得出 URL（走的是另一個 Resource）。 */
+    public function testUserSessionListSignsScreenshotUrls(): void
+    {
+        $this->fakeS3();
+        $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+        $this->captureAt($media, 125);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [125]]],
+        ])->assertStatus(200);
+
+        $this->json('GET', route('api.v1.users.sessions.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.last_messages.0.parts.0.type', ChatMessage::PART_IMAGE)
+            ->assertJsonPath('data.0.last_messages.0.parts.0.url', $this->signed($media, 125));
+    }
+
     // ── 驗證 ───────────────────────────────────────────────────
 
     /**
@@ -244,6 +319,20 @@ class ChatImagesTest extends TestCase
             'messages' => [
                 ['role' => 'user', 'content' => '太多了', 'images' => [1, 2, 3, 4, 5]],
             ],
+        ])->assertStatus(422);
+    }
+
+    public function testNegativeSecondIsRejected(): void
+    {
+        $this->fakeS3();
+        $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '壞資料', 'images' => [-1]]],
         ])->assertStatus(422);
     }
 
