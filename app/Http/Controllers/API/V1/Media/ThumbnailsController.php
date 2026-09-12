@@ -114,7 +114,8 @@ class ThumbnailsController extends AbstractController
                         ),
                         new OAT\Property(
                             property: 'second',
-                            description: 'Whole-second offset, must not exceed the video duration',
+                            description: 'Whole-second offset. Must not exceed the video duration, '
+                                . 'nor 999999 — the GET route only addresses up to 6 digits.',
                             type: 'integer',
                             example: 125
                         ),

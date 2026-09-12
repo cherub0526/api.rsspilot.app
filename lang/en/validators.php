@@ -333,6 +333,7 @@ return [
             'required' => 'The second is required.',
             'integer'  => 'The second must be an integer.',
             'min'      => 'The second may not be less than 0.',
+            'max'      => 'The second is beyond the addressable range.',
         ],
     ],
 ];

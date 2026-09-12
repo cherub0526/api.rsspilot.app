@@ -29,6 +29,16 @@ class ThumbnailService
     public const string MIME_TYPE = 'image/jpeg';
 
     /**
+     * 可定址的最大秒數。
+     *
+     * 這不只是「夠長」而已——GET 端點的路由 pattern 是 `{second:[0-9]{1,6}}`，
+     * 超過 6 位的秒數寫得進 S3、卻永遠不會被那條路由匹配到，等於留下一個
+     * 取不回來的物件。寫入端因此必須擋在同一個界線上，兩端才對得起來。
+     * 改這個值要連 routes/v1.php 的 pattern 一起改。
+     */
+    public const int MAX_SECOND = 999999;
+
+    /**
      * 秒數補零到 6 位。S3 console 與 listObjects 都是字典序，不補零的話
      * `1000.jpg` 會排在 `2.jpg` 前面；6 位足以容納 11 天長的影片。
      */
@@ -86,7 +96,8 @@ class ThumbnailService
      * 秒數是否落在影片長度內。
      *
      * media.duration 預設是 0（尚未取得片長），此時不做上界判斷——把還沒抓到
-     * 長度的影片一律擋掉，會讓剛加入的影片完全不能截圖。
+     * 長度的影片一律擋掉，會讓剛加入的影片完全不能截圖。此時的上界由
+     * MAX_SECOND 接手（在 ThumbnailValidator）。
      */
     public function isWithinDuration(Media $media, int $second): bool
     {

@@ -29,8 +29,9 @@ class ThumbnailValidator extends BaseValidator
             // 檔案是前端 canvas 產生的 Blob，檔名可能只是 "blob" 而沒有副檔名，
             // 所以驗 mimetypes（看實際內容）而不是 mimes（看副檔名）。
             'file' => 'required|file|mimetypes:' . ThumbnailService::MIME_TYPE . '|max:2048',
-            // 上界要比對 media.duration，屬於業務判斷，留在 Controller。
-            'second' => 'required|integer|min:0',
+            // 比對 media.duration 的上界屬於業務判斷，留在 Controller；這裡擋的是
+            // 定址上界——超過 6 位的秒數 GET 的路由永遠匹配不到（見 MAX_SECOND）。
+            'second' => 'required|integer|min:0|max:' . ThumbnailService::MAX_SECOND,
         ];
 
         return $this;
