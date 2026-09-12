@@ -99,3 +99,28 @@ sources : id, type, external_id, title, url, thumbnail, description,
 - **YouTube 的 XML feed** —— `https://www.youtube.com/feeds/videos.xml?channel_id=...`，存在 `sources.url`，由 `Sources\Sync::fetchRssEntries()` 以 `Http::get()` 抓回來解析成 `media`。**這條路是活的，而且跟 `rss` 表零交集**——整個 `Sync` 指令裡一個 `rss` 字樣都沒有。
 
 討論「RSS 同步」時指的一律是後者。
+
+## 截圖的去重必須發生在上傳之前，否則只省到儲存
+
+`code:` `routes/v1.php` → `api.v1.media.thumbnails.show` · `updated:` `2026-09-13` · `status:` `active`
+
+截圖端點刻意是**兩支**而不是一支：
+
+```
+GET  /v1/media/{mediaId}/thumbnails/{second}   → 200 有了 / 404 沒有
+POST /v1/media/{mediaId}/thumbnails            → 201 存入 / 200 早就有了
+```
+
+單一端點（POST 上去再判斷重複）看起來更簡潔，但那會讓瀏覽器**每次都把整張圖傳完**，後端才回「這張已經有了」——省到的只有 S3 儲存，最貴的上傳頻寬照付。截圖跨使用者共用，命中率本來就高，浪費的正好是命中的那些次。
+
+前端（`src/renderer/src/lib/thumbnails.ts`）因此是三層短路：本地 Map → `GET` → 才真的截圖上傳，而且 `capture` 是以函式傳進 `ensureThumbnail()` 的，前兩層命中時擷取與 JPEG 編碼根本不會執行。
+
+改成單一端點之前，先想清楚這件事。
+
+## 秒數一定要量化，播放器回報的是浮點數
+
+`code:` `src/renderer/src/lib/thumbnails.ts` → `toSecond()` · `updated:` `2026-09-13` · `status:` `active`
+
+YouTube iframe 的 `infoDelivery` 每 100–250ms 才回報一次 `currentTime`，而且是 float。使用者在「第 125 秒」連點兩下，拿到的可能是 `125.13` 與 `125.38`——直接當 key 就是兩個不同的值，去重完全失效，同一格畫面會在 S3 上長出兩份。
+
+所以前端一律 `Math.floor()` 成整數秒才往下走，後端的路徑也只接整數（route pattern `{second:[0-9]{1,6}}`）。整數秒同時也對齊使用者心中的「同一秒」。

@@ -62,3 +62,24 @@ chat 與 customPrompt 的回應語言來自 `settings.data.ai.language`，但這
 ### 使用者自選模型時，方案設定完全不套用
 
 `custom_prompts.model_id` 讓訂閱使用者自選模型（授權走 `ResolvesUserPlan::allowedModelId()` → `plan_ai_models`），這條路**已經在運作**。自選時 `TemplateCompletionManager` 只取模型、不帶任何路由參數：使用者明講了 `claude-opus-5`，再附一個 `cost_tier: low` 的 plugin 是自相矛盾的指示，而 `max_price` 有機會把他自己選的模型擋掉。判準是 `$model !== ''`。
+
+## 帶圖提問有兩層上限，整個請求只送最新的 4 張
+
+`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `collectImageSeconds()` · `updated:` `2026-09-13` · `status:` `active`
+
+- **每則訊息 4 張**（`ChatValidator` 的 `messages.*.images` → `max:4`）
+- **整個請求 4 張**（`IMAGES_PER_REQUEST`），由新到舊取，同一則訊息內也是由新到舊
+
+第二層才是重點。前端會把完整歷史送回來，裡頭每一則提問都帶著當時附的截圖秒數；照單全收的話，對話愈長、每一輪要重付的圖片 token 就愈多，而圖片 token 遠貴於文字。
+
+取最新的而不是直接丟掉歷史圖片，是為了讓「剛剛那張圖的旁邊那欄呢」這種接續追問仍然成立。被擠掉的截圖只留下它們當時的文字，AI 上一輪對那張圖的描述本來就在歷史裡。
+
+`chat_limit` 的每日額度沒有為帶圖提問另外加權——一次帶圖提問與一次純文字提問一樣扣 1 次。**vision 推論的單次成本明顯高於純文字，這件事還沒有反映在任何定價計算裡**，跟〈心智圖的成本沒有進定價計算〉是同一類的缺口。
+
+## 圖片排在文字前面
+
+`code:` `app/Utils/AI/NeuronChatStreamer.php` → `toContent()` · `updated:` `2026-09-13` · `status:` `active`
+
+送進推論、落庫成 `parts`、前端氣泡渲染，三處的順序一致：截圖在前、文字在後。
+
+提問幾乎都在指涉圖片（「這一格在講什麼」「比較這兩格」），先給畫面再給問題，指涉對象才會在問題出現之前就已經進入脈絡。反過來排，模型讀到問題時還不知道「這一格」是什麼。

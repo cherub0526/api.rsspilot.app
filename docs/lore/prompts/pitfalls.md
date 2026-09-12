@@ -190,3 +190,13 @@ OpenRouter 的型錄對 auto 系列回報的每 token 單價是 **`-1`**（意�
 依上表估算 Advance（`chat_limit` 50/日、`mindmap_limit` 50/日，medium 帶）：chat 約 $5.5/月、心智圖約 $6.6/月，合計 **$12.1**，而 `docs/lore/subscription/business-rules.md` 用 70% 毛利回推的 AI 預算是 **$6.03**。
 
 `mindmap_limit` 是後來加的，比照 `chat_limit` 設成同一個數字，而那張成本天花板表只算了「影片上限 + 提問上限」。**心智圖現在是比 chat 更大的一條成本線，但沒有出現在任何定價計算裡。** 排方案時要把它算進去。
+
+## NeuronAI 的字串內容與 content block 陣列不等價，純文字回合不要包成陣列
+
+`code:` `app/Utils/AI/NeuronChatStreamer.php` → `toContent()` · `updated:` `2026-09-13` · `status:` `active`
+
+`new Message($role, $content)` 的 `$content` 收字串也收 `ContentBlockInterface[]`，但兩者送到上游的形狀不同：字串會被包成單一 `TextContent`，陣列則由 `OpenAI\MessageMapper::mapBlocks()` 原樣映射成 OpenAI 的 content parts。
+
+所以**只有真的帶圖的回合才組陣列**，沒附圖時維持傳字串——一律走陣列只是讓每一次請求的 payload 多一層結構，沒有任何好處。`buildMessages()` 因此在最後把 `images` 為空的回合的該 key 整個拿掉，而不是留一個空陣列。
+
+圖片用 `ImageContent($url, SourceType::URL)` 而不是 `SourceType::BASE64`：mapper 會把 base64 展開成 `data:` URI 內嵌進 payload，而同一張圖在多輪對話裡會被重複帶上，等於每一輪都把它整個重傳一次。走 URL 則是讓上游自己去抓（URL 是 24 小時的 presigned，S3 物件本身維持 private）。

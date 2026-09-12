@@ -135,3 +135,29 @@ The rule, the reasoning, and edge cases.
 症狀是同一個使用者對同一支影片，captions 看得到、chat 回 404，或免費來源的影片有字幕卻沒有摘要。全部改為呼叫 `Media::isAccessibleBy`。
 
 新增需要授權的端點時直接呼叫它，不要另外寫一份。
+
+## 播放器截圖沒有資料表，S3 的路徑就是那筆紀錄
+
+`code:` `app/Services/ThumbnailService.php` → `path()` · `updated:` `2026-09-13` · `status:` `active`
+
+截圖存在 `media/{mediaId}/thumbnails/{秒數補零6位}.jpg`。這個 key 完全由 `(mediaId, second)` 推導得出，所以「這一秒有沒有截過」問 S3 就有答案，不需要另一張表去描述 S3 已經知道的事。
+
+連帶消失的三個問題，是選這個設計而不是「另開 `chat_screenshots` 表 / 擴充 `images` 表」的實際理由：
+
+- **孤兒列**——截了圖但沒送出訊息，只是留下一張別人也能重用的快取，不是要清的垃圾
+- **並發**——兩個人同時截同一秒就是覆寫同一個 key，內容本來就一樣，不需要 unique index 也不需要鎖
+- **簽章過期**——`chat_messages.parts` 的 image 片段只存 `second`，URL 由 `ChatMessageResource` 在輸出當下才簽。存 URL 進 parts 的話，隔天回頭看同一段對話就是一排破圖
+
+`images` 表（polymorphic，feedback 附圖在用）被評估過但沒採用：它缺 `user_id` / `checksum` / `second`，而且 `foreign_*` 對不上時序——截圖發生在第一則訊息之前，那時 `ChatSession` 還不存在。
+
+副檔名與補零位數都是 key 的一部分，改動等於讓既有截圖全部失去命中，所以定義成 `ThumbnailService` 的常數。用 JPEG 而不是 PNG：1280px 的影片畫面存 PNG 約 1.5–3MB、JPEG 約 150KB。
+
+## 截圖跨使用者共用，而且第一個寫入的人說了算
+
+`code:` `app/Http/Controllers/API/V1/Media/ThumbnailsController.php` → `store()` · `updated:` `2026-09-13` · `status:` `active`
+
+同一個 `mediaId` 的同一秒，影片內容對所有人都一樣，所以路徑裡沒有 `user_id`——第二個人截同一秒時直接拿既有的圖，不必再上傳。
+
+**但已存在時一律不覆寫。** 這不是省一次寫入的最佳化，而是唯一的防線：這張圖是所有使用者在那一秒共同看到的畫面，允許覆寫就等於允許後來的人把它替換掉。`ThumbnailsControllerTest::testStoreReturnsExistingImageWithoutOverwriting` 釘住這個行為。
+
+另外兩道：`second` 要落在 `media.duration` 內（`duration` 為 0 代表還沒抓到片長，此時不做上界判斷——否則剛加入的影片完全不能截圖），以及 `resolveMedia()` 的存取權檢查照常跑（共用的是圖，不是看影片的權限）。
