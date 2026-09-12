@@ -28,6 +28,12 @@ class ChatMessage extends Model
 
     public const string PART_TOOL_RESULT = 'tool_result';
 
+    /**
+     * 使用者附上的影片畫面截圖。片段只存 `second`——圖片在 S3 上的位置由
+     * (session.media_id, second) 推導得出，存 URL 會在簽章過期後變成一排破圖。
+     */
+    public const string PART_IMAGE = 'image';
+
     public const UPDATED_AT = null;
 
     public static array $roleMaps = [
@@ -40,6 +46,7 @@ class ChatMessage extends Model
         self::PART_THINKING    => '思考過程',
         self::PART_TOOL_CALL   => '工具呼叫',
         self::PART_TOOL_RESULT => '工具結果',
+        self::PART_IMAGE       => '截圖',
     ];
 
     public bool $timestamps = false;

@@ -18,7 +18,7 @@ class FakeChatStreamer implements ChatStreamerInterface
 {
     public ?string $instructions = null;
 
-    /** @var array<int, array{role: string, content: string}> */
+    /** @var array<int, array{role: string, content: string, images?: array<int, string>}> */
     public array $messages = [];
 
     public int $calls = 0;
@@ -41,5 +41,11 @@ class FakeChatStreamer implements ChatStreamerInterface
     public function contents(): array
     {
         return array_column($this->messages, 'content');
+    }
+
+    /** 第 n 則訊息附上的圖片 URL（沒有附圖時是空陣列）。 */
+    public function imagesAt(int $index): array
+    {
+        return $this->messages[$index]['images'] ?? [];
     }
 }

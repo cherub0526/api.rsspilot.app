@@ -17,7 +17,9 @@ interface ChatStreamerInterface
 {
     /**
      * @param string $instructions 系統提示詞
-     * @param array<int, array{role: string, content: string}> $messages 依序排列的對話訊息
+     * @param array<int, array{role: string, content: string, images?: array<int, string>}> $messages
+     *                                                                                                依序排列的對話訊息。images 是該回合附上的圖片 URL，實作端自行決定
+     *                                                                                                怎麼帶給上游；沒有附圖的回合不會有這個 key。
      * @param null|User $user 用來套用方案的路由設定。**共用產物一律傳 null**——
      *                        心智圖與摘要全站只有一份，沒有「當前使用者」可言，
      *                        用觸發者的方案會讓先產生的人決定所有人拿到的品質。

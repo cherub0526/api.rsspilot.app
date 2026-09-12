@@ -16,6 +16,7 @@ use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\OpenApi\Responses\Http429;
 use App\Services\ChatQuotaService;
+use App\Services\ThumbnailService;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
@@ -33,9 +34,24 @@ class ChatController
 {
     use ResolvesMedia;
 
+    /**
+     * 一則使用者訊息最多帶幾張截圖，見 ChatValidator。
+     */
+    private const int IMAGES_PER_MESSAGE = 4;
+
+    /**
+     * 整個請求（含歷史）送進推論的截圖總數上限。
+     *
+     * 前端會把完整歷史送回來，裡頭每一則提問都可能帶著當時的截圖；照單全收的話
+     * 對話愈長、每一輪要重付的圖片 token 就愈多。取最新的幾張是折衷：「剛剛那張
+     * 圖的旁邊那欄呢」這種接續追問仍然成立，更早的截圖則只留下它們當時的文字。
+     */
+    private const int IMAGES_PER_REQUEST = 4;
+
     public function __construct(
         private ChatStreamerInterface $streamer,
         private ChatQuotaService $quota,
+        private ThumbnailService $thumbnails,
     ) {
     }
 
@@ -82,6 +98,16 @@ class ChatController
                                     property: 'content',
                                     type: 'string',
                                     example: 'What is this video about?'
+                                ),
+                                new OAT\Property(
+                                    property: 'images',
+                                    description: 'Seconds of player screenshots attached to this turn. '
+                                        . 'Upload them via POST /v1/media/{mediaId}/thumbnails first. '
+                                        . 'At most 4 per message, and the 4 most recent across the whole request '
+                                        . 'are the ones actually sent to the model.',
+                                    type: 'array',
+                                    items: new OAT\Items(type: 'integer', example: 125),
+                                    nullable: true
                                 ),
                             ]
                         ),
@@ -141,19 +167,37 @@ class ChatController
 
         $media = $this->resolveMedia($request, $mediaId);
         $userId = (string) $request->user()->getKey();
+        $mediaKey = (string) $media->getKey();
+
+        // 截圖在扣額度之前就驗完：指到不存在的圖是請求本身有問題，不該先扣一次
+        // 額度再退還。imageUrls 的 key 是秒數，值是當下簽出的限時 URL。
+        $imageSeconds = $this->collectImageSeconds($params['messages']);
+        $this->assertThumbnailsExist($mediaKey, $imageSeconds);
+        $imageUrls = [];
+
+        foreach ($imageSeconds as $second) {
+            $imageUrls[$second] = $this->thumbnails->url($mediaKey, $second);
+        }
 
         // 額度在建立 session 之前就扣，被擋下來的請求才不會留下一堆
         // 只有提問、沒有回應的空 session。
         $quota = $this->quota->consume($request->user());
 
-        $userMessage = collect($params['messages'])->last()['content'] ?? '';
+        $lastMessage = collect($params['messages'])->last() ?? [];
+        $userMessage = $lastMessage['content'] ?? '';
+        $currentImages = $this->allowedImagesOf($lastMessage, $imageSeconds);
         $session = $this->findOrCreateSession(
             $userId,
             $mediaId,
             $params['session_id'] ?? null,
             $userMessage
         );
-        $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_USER, $userMessage);
+        $this->saveMessage(
+            (string) $session->getKey(),
+            ChatMessage::ROLE_USER,
+            $userMessage,
+            $currentImages
+        );
         $buffer = '';
         $saved = false;
 
@@ -175,7 +219,7 @@ class ChatController
             // 帶使用者進去：對話是 per-user 的產物，吃這個人方案的路由設定。
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
-                $this->buildMessages($history, $userMessage),
+                $this->buildMessages($history, $userMessage, $currentImages, $imageUrls),
                 $request->user()
             );
 
@@ -238,20 +282,34 @@ class ChatController
      * 2. 連續同角色合併成一則，內容以空行相接
      * 3. 丟掉開頭的 assistant —— 沒有對應提問的回應，留著只會讓序列不合法
      *
-     * @param array<int, array{role: string, content: string}> $history
-     * @return array<int, array{role: string, content: string}>
+     * 合併同角色時圖片跟著文字一起併，順序不變——合併後仍是同一個人連續說的話，
+     * 他附的圖也該留在同一則裡。
+     *
+     * @param array<int, array{role: string, content: string, images?: array<int, int>}> $history
+     * @param array<int, int> $currentImages 本次提問附上的截圖秒數
+     * @param array<int, string> $imageUrls 秒數 => 限時 URL
+     * @return array<int, array{role: string, content: string, images?: array<int, string>}>
      */
-    private function buildMessages(array $history, string $userMessage): array
-    {
+    private function buildMessages(
+        array $history,
+        string $userMessage,
+        array $currentImages,
+        array $imageUrls
+    ): array {
         // role / content 由 ChatValidator 保證必填，這裡不需再防禦性檢查。
         $messages = array_map(
             fn (array $message): array => [
                 'role'    => $message['role'] === 'assistant' ? 'assistant' : 'user',
                 'content' => $message['content'],
+                'images'  => $this->urlsFor($this->allowedImagesOf($message, array_keys($imageUrls)), $imageUrls),
             ],
             $history
         );
-        $messages[] = ['role' => 'user', 'content' => $userMessage];
+        $messages[] = [
+            'role'    => 'user',
+            'content' => $userMessage,
+            'images'  => $this->urlsFor($currentImages, $imageUrls),
+        ];
 
         $normalised = [];
 
@@ -264,13 +322,116 @@ class ChatController
 
             if ($last !== null && $normalised[$last]['role'] === $message['role']) {
                 $normalised[$last]['content'] .= "\n\n" . $message['content'];
+                $normalised[$last]['images'] = array_merge(
+                    $normalised[$last]['images'],
+                    $message['images']
+                );
                 continue;
             }
 
             $normalised[] = $message;
         }
 
-        return $normalised;
+        // 沒有附圖的回合不帶這個 key，推論層才能照原本的方式送純字串。
+        return array_map(
+            fn (array $message): array => $message['images'] === []
+                ? ['role' => $message['role'], 'content' => $message['content']]
+                : $message,
+            $normalised
+        );
+    }
+
+    /**
+     * 從整個請求裡挑出要送進推論的截圖秒數，由新到舊取到額度用完為止。
+     *
+     * 回傳的順序是「影片時間軸的先後」而不是「被挑中的先後」：同一則訊息裡夾著
+     * 好幾張圖時，照秒數排才對得上使用者截圖的順序。
+     *
+     * @param array<int, array<string, mixed>> $messages
+     * @return array<int, int>
+     */
+    private function collectImageSeconds(array $messages): array
+    {
+        $picked = [];
+
+        foreach (array_reverse($messages) as $message) {
+            $images = $message['images'] ?? [];
+
+            if (!is_array($images)) {
+                continue;
+            }
+
+            // 同一則訊息裡也是由新到舊：額度剩一張時，該留下的是這個人最後截的
+            // 那一格，而不是他最早截的那一格。
+            $recentFirst = array_reverse(array_slice($images, 0, self::IMAGES_PER_MESSAGE));
+
+            foreach ($recentFirst as $second) {
+                if (count($picked) >= self::IMAGES_PER_REQUEST) {
+                    break 2;
+                }
+
+                $picked[(int) $second] = true;
+            }
+        }
+
+        $seconds = array_keys($picked);
+        sort($seconds);
+
+        return $seconds;
+    }
+
+    /**
+     * 這則訊息附的截圖裡，有被 collectImageSeconds() 選中的那些。
+     *
+     * @param array<string, mixed> $message
+     * @param array<int, int> $allowed
+     * @return array<int, int>
+     */
+    private function allowedImagesOf(array $message, array $allowed): array
+    {
+        $images = $message['images'] ?? [];
+
+        if (!is_array($images)) {
+            return [];
+        }
+
+        $seconds = array_values(array_unique(array_map('intval', $images)));
+
+        return array_values(array_intersect($seconds, $allowed));
+    }
+
+    /**
+     * @param array<int, int> $seconds
+     * @param array<int, string> $imageUrls
+     * @return array<int, string>
+     */
+    private function urlsFor(array $seconds, array $imageUrls): array
+    {
+        return array_values(array_filter(array_map(
+            fn (int $second): ?string => $imageUrls[$second] ?? null,
+            $seconds
+        )));
+    }
+
+    /**
+     * 指到不存在的截圖就整個請求擋下來。
+     *
+     * 不改成「靜默略過」是因為那會讓使用者看見自己送出的縮圖、AI 的回答卻完全
+     * 沒提到畫面，而且找不出哪裡不對。附圖上傳本來就在送出之前完成，真的缺圖
+     * 代表前端狀態壞了，早點講清楚比較好。
+     *
+     * @param array<int, int> $seconds
+     * @throws InvalidRequestException
+     */
+    private function assertThumbnailsExist(string $mediaKey, array $seconds): void
+    {
+        foreach ($seconds as $second) {
+            if (!$this->thumbnails->exists($mediaKey, $second)) {
+                throw new InvalidRequestException([
+                    'images' => [__('validators.controllers.thumbnails.not_found')],
+                ]);
+            }
+        }
     }
 
     /**
@@ -303,22 +464,42 @@ class ChatController
         ]);
     }
 
-    private function saveMessage(string $sessionId, string $role, string $content): void
-    {
+    /**
+     * @param array<int, int> $imageSeconds 這則訊息附上的截圖秒數（只有使用者訊息會有）
+     */
+    private function saveMessage(
+        string $sessionId,
+        string $role,
+        string $content,
+        array $imageSeconds = []
+    ): void {
         if ($content === '') {
             return;
         }
+
+        // 截圖排在文字前面，跟送進推論時的順序一致，重播歷史才不會前後顛倒。
+        // 片段只記秒數：圖片在 S3 的位置由 (media_id, second) 推導，存 URL 會在
+        // 簽章過期後變成一排破圖，輸出時才由 ChatMessageResource 現簽。
+        $parts = array_map(
+            fn (int $second): array => [
+                'type'   => ChatMessage::PART_IMAGE,
+                'second' => $second,
+            ],
+            array_values($imageSeconds)
+        );
+
+        // AI 的回覆目前只有純文字，所以片段就是單一 text。thinking 與 tool_call
+        // 要等 agent 能力接上來才會出現在這個陣列裡，屆時 content 仍是文字投影。
+        $parts[] = [
+            'type' => ChatMessage::PART_TEXT,
+            'text' => $content,
+        ];
 
         ChatMessage::create([
             'session_id' => $sessionId,
             'role'       => $role,
             'content'    => $content,
-            // 目前的回覆只有純文字，所以片段就是單一 text。thinking 與 tool_call
-            // 要等 agent 能力接上來才會出現在這個陣列裡，屆時 content 仍是文字投影。
-            'parts' => [[
-                'type' => ChatMessage::PART_TEXT,
-                'text' => $content,
-            ]],
+            'parts'      => $parts,
             'created_at' => now(),
         ]);
     }

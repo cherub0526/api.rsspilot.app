@@ -27,7 +27,7 @@ use OpenApi\Attributes as OAT;
                     new OAT\Property(
                         property: 'type',
                         type: 'string',
-                        enum: ['text', 'thinking', 'tool_call', 'tool_result'],
+                        enum: ['text', 'thinking', 'tool_call', 'tool_result', 'image'],
                         example: 'text'
                     ),
                     new OAT\Property(property: 'text', type: 'string', nullable: true, description: 'text / thinking'),
@@ -37,6 +37,14 @@ use OpenApi\Attributes as OAT;
                     new OAT\Property(property: 'tool_call_id', type: 'string', nullable: true, description: 'tool_result'),
                     new OAT\Property(property: 'output', type: 'string', nullable: true, description: 'tool_result'),
                     new OAT\Property(property: 'is_error', type: 'boolean', nullable: true, description: 'tool_result'),
+                    new OAT\Property(property: 'second', type: 'integer', nullable: true, description: 'image', example: 125),
+                    new OAT\Property(
+                        property: 'url',
+                        type: 'string',
+                        nullable: true,
+                        description: 'image — pre-signed, valid 24 hours. Re-fetch the session instead of storing it.',
+                        example: 'https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=...'
+                    ),
                 ],
                 type: 'object'
             )

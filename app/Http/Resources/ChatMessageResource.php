@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Models\ChatMessage;
+use App\Services\ThumbnailService;
 use Hypervel\Http\Resources\Json\JsonResource;
 
 class ChatMessageResource extends JsonResource
@@ -19,8 +21,42 @@ class ChatMessageResource extends JsonResource
             // parts 是結構化的真相，content 是它的純文字投影。兩者都輸出：
             // 既有呼叫端讀 content 不受影響，新的呼叫端讀 parts 才拿得到
             // 思考過程與工具呼叫。parts 對舊資料列也一定有值（見 contentParts）。
-            'parts'      => $this->resource->contentParts(),
+            'parts'      => $this->withImageUrls($this->resource->contentParts()),
             'created_at' => $this->resource->getAttribute('created_at')?->toIso8601String(),
         ];
+    }
+
+    /**
+     * 幫 image 片段補上當下簽出的 URL。
+     *
+     * 片段本身只存秒數，簽章是有效期限 24 小時的東西——存進 parts 的話，隔天回頭
+     * 看同一段對話就是一排破圖。代價是每次輸出都要簽一次，但簽章是本機運算，
+     * 不會多打一次 S3。
+     *
+     * @param array<int, array<string, mixed>> $parts
+     * @return array<int, array<string, mixed>>
+     */
+    private function withImageUrls(array $parts): array
+    {
+        $mediaId = null;
+
+        foreach ($parts as $index => $part) {
+            if (($part['type'] ?? null) !== ChatMessage::PART_IMAGE || !isset($part['second'])) {
+                continue;
+            }
+
+            // 只有真的出現 image 片段才去碰 session 關聯——AI 的回覆永遠不帶圖，
+            // 無條件取用等於讓每一則訊息都多一次查詢。
+            $mediaId ??= $this->resource->session?->getAttribute('media_id');
+
+            if ($mediaId === null) {
+                continue;
+            }
+
+            $parts[$index]['url'] = app(ThumbnailService::class)
+                ->url((string) $mediaId, (int) $part['second']);
+        }
+
+        return $parts;
     }
 }

@@ -113,6 +113,12 @@ return [
                 'required' => 'The content field is required.',
                 'string'   => 'The content must be a string.',
             ],
+            'images' => [
+                'array'   => 'The screenshots must be an array.',
+                'max'     => 'A message may carry at most 4 screenshots.',
+                'integer' => 'The screenshot second must be an integer.',
+                'min'     => 'The screenshot second may not be less than 0.',
+            ],
         ],
     ],
     'media' => [
