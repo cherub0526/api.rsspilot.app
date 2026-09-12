@@ -391,8 +391,8 @@
                     "202": {
                         "description": "驗證信已重新寄出"
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
+                    "422": {
+                        "$ref": "#/components/responses/422"
                     }
                 }
             }
@@ -1245,6 +1245,15 @@
                                                 "content": {
                                                     "type": "string",
                                                     "example": "What is this video about?"
+                                                },
+                                                "images": {
+                                                    "description": "Seconds of player screenshots attached to this turn. Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole request are the ones actually sent to the model.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "integer",
+                                                        "example": 125
+                                                    },
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
@@ -1510,6 +1519,124 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/media/{mediaId}/thumbnails/{second}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get the cached screenshot for one second of the video",
+                "description": "GET /v1/media/{mediaId}/thumbnails/{second}.\n\n取這一秒已存在的截圖。沒有就是 404，前端據此決定要不要上傳。",
+                "operationId": "api.v1.media.thumbnails.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/second"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The screenshot already exists",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/media/{mediaId}/thumbnails": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Upload the screenshot for one second of the video",
+                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這一秒的截圖。已經有了就原樣回傳既有的那張，**不覆寫**——這張圖是所有\n使用者在那一秒共同看到的畫面，允許覆寫等於允許後來的人替換掉它。",
+                "operationId": "api.v1.media.thumbnails.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "file",
+                                    "second"
+                                ],
+                                "properties": {
+                                    "file": {
+                                        "description": "JPEG frame, max 2 MB",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "second": {
+                                        "description": "Whole-second offset, must not exceed the video duration",
+                                        "type": "integer",
+                                        "example": 125
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Stored",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "Already captured by someone else; the existing image is returned untouched",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [
@@ -2544,13 +2671,13 @@
                                         "example": "01JCXYZ123456789ABCDEFGHIJ"
                                     },
                                     "paymentMethod": {
-                                        "description": "Payment gateway (stripe or paddle, defaults to stripe)",
+                                        "description": "Payment gateway (stripe or paddle, defaults to paddle)",
                                         "type": "string",
                                         "enum": [
                                             "stripe",
                                             "paddle"
                                         ],
-                                        "example": "stripe"
+                                        "example": "paddle"
                                     }
                                 },
                                 "type": "object"
@@ -3406,7 +3533,8 @@
                                         "text",
                                         "thinking",
                                         "tool_call",
-                                        "tool_result"
+                                        "tool_result",
+                                        "image"
                                     ],
                                     "example": "text"
                                 },
@@ -3443,6 +3571,18 @@
                                 "is_error": {
                                     "description": "tool_result",
                                     "type": "boolean",
+                                    "nullable": true
+                                },
+                                "second": {
+                                    "description": "image",
+                                    "type": "integer",
+                                    "example": 125,
+                                    "nullable": true
+                                },
+                                "url": {
+                                    "description": "image — pre-signed, valid 24 hours. Re-fetch the session instead of storing it.",
+                                    "type": "string",
+                                    "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=...",
                                     "nullable": true
                                 }
                             },
@@ -3807,6 +3947,24 @@
                 },
                 "type": "object"
             },
+            "ThumbnailResource": {
+                "properties": {
+                    "media_id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "second": {
+                        "type": "integer",
+                        "example": 125
+                    },
+                    "url": {
+                        "description": "Pre-signed S3 URL, valid for 24 hours. Re-request instead of storing it.",
+                        "type": "string",
+                        "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=..."
+                    }
+                },
+                "type": "object"
+            },
             "UserChatSession": {
                 "properties": {
                     "id": {
@@ -4058,6 +4216,16 @@
                 "schema": {
                     "type": "string",
                     "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                }
+            },
+            "second": {
+                "name": "second",
+                "in": "path",
+                "description": "Whole-second offset into the video (floor of the player currentTime)",
+                "required": true,
+                "schema": {
+                    "type": "integer",
+                    "example": 125
                 }
             },
             "sourceId": {
