@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Jobs\Media;
 
+use Mockery;
 use Tests\TestCase;
 use App\Models\Media;
 use App\Models\Caption;
+use App\Services\YoutubeService;
 use Hypervel\Queue\Jobs\FakeJob;
+use Google\Service\YouTube\Video;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Support\Facades\Queue;
 use Hypervel\Support\Facades\Storage;
+use Google\Service\YouTube\VideoSnippet;
 use App\Jobs\Media\VideoTranscriberFetchJob;
 use App\Jobs\Media\VideoTranscriberArchiveJob;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -35,9 +39,34 @@ class VideoTranscriberFetchJobTest extends TestCase
         Storage::fake('s3');
     }
 
+    /**
+     * A YoutubeService that answers with the given `defaultAudioLanguage`, or
+     * with nothing at all when none is given. Tests never reach the real API.
+     */
+    private function youtube(?string $defaultAudioLanguage = null): YoutubeService
+    {
+        $video = null;
+
+        if ($defaultAudioLanguage !== null) {
+            $snippet = new VideoSnippet();
+            $snippet->setDefaultAudioLanguage($defaultAudioLanguage);
+            $video = new Video();
+            $video->setSnippet($snippet);
+        }
+
+        /** @var YoutubeService $mock */
+        $mock = Mockery::mock(YoutubeService::class);
+        $mock->shouldReceive('getVideoDetails')->andReturn($video);
+
+        return $mock;
+    }
+
     private function createMediaWithAudioId(string $audioId = 'audio-1'): Media
     {
-        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBING]);
+        $media = Media::factory()->create([
+            'status'       => Media::STATUS_TRANSCRIBING,
+            'video_detail' => ['yt:videoId' => '-zQOiMS1A6k'],
+        ]);
 
         VideoTranscription::factory()->create([
             'media_id'            => $media->id,
@@ -71,7 +100,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
@@ -117,7 +146,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         // The DB column cannot hold a successful payload, so S3 keeps the only
         // complete copy of it.
@@ -140,7 +169,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $archived = json_decode(
             Storage::disk('s3')->get(sprintf('videotranscriber.ai/%s/transcribe.json', $media->id)),
@@ -172,11 +201,11 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job = new VideoTranscriberFetchJob($media);
         $job->job = new FakeJob();
         $job->job->attempts = 1;
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $this->assertSame('processing', json_decode(Storage::disk('s3')->get($path), true)['data']['status']);
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $archived = json_decode(Storage::disk('s3')->get($path), true);
         $this->assertSame('success', $archived['data']['status']);
@@ -191,7 +220,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         Storage::disk('s3')->assertMissing(sprintf('videotranscriber.ai/%s/transcribe.json', $media->id));
     }
@@ -216,7 +245,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         // Downloading the assets is a separate job on purpose: a timeout in
         // this one takes the whole worker down with it.
@@ -237,7 +266,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         Queue::assertNothingPushed();
     }
@@ -250,7 +279,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -273,7 +302,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -291,7 +320,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -312,7 +341,7 @@ class VideoTranscriberFetchJobTest extends TestCase
             'start_transcription' => ['code' => 100000, 'data' => []],
         ]);
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -334,7 +363,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 30;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
@@ -361,7 +390,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 60;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -394,7 +423,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $caption = Caption::where('media_id', $media->id)->first();
         $this->assertSame('我不相信啦。', $caption->text);
@@ -424,7 +453,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $caption = Caption::where('media_id', $media->id)->first();
         $this->assertSame('optimized text', $caption->text);
@@ -453,7 +482,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -487,7 +516,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 3;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
@@ -514,7 +543,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 1;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
@@ -544,7 +573,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 1;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -570,7 +599,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);
@@ -599,7 +628,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $caption = Caption::where('media_id', $media->id)->first();
         $this->assertSame($expected, $caption->locale);
@@ -616,6 +645,96 @@ class VideoTranscriberFetchJobTest extends TestCase
             'english'             => ['en', Caption::LOCAL_EN],
             'anything else'       => ['ja', 'ja'],
         ];
+    }
+
+    /**
+     * @param array<int, string> $subtitles
+     */
+    private function fakeReadyTranscription(array $subtitles, string $detected): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions?*' => Http::response([
+                'code' => 100000,
+                'data' => [
+                    'status'   => 'success',
+                    'versions' => [
+                        'original' => [
+                            'status'       => 'ready',
+                            'subtitle_url' => 'https://cdn.ng-resource.com/origin.txt',
+                            'subtitles'    => array_map(
+                                fn (string $text) => ['start' => '00:00:01', 'end' => '00:00:09', 'text' => $text],
+                                $subtitles
+                            ),
+                        ],
+                    ],
+                ],
+            ], 200),
+            'cdn.ng-resource.com/*' => Http::response(['detected_language' => $detected], 200),
+        ]);
+    }
+
+    #[DataProvider('declaredAudioLanguageProvider')]
+    public function testTakesTheRegionFromTheLanguageYouTubeDeclares(string $declared, string $expected): void
+    {
+        // The detection only ever says `zh`; YouTube is the only source that
+        // knows which Chinese it is.
+        $this->fakeReadyTranscription(['你好'], 'zh');
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube($declared));
+
+        $this->assertSame($expected, Caption::where('media_id', $media->id)->first()->locale);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function declaredAudioLanguageProvider(): array
+    {
+        return [
+            'region subtag'        => ['zh-TW', Caption::LOCAL_ZH_TW],
+            'script subtag'        => ['zh-Hant', Caption::LOCAL_ZH_TW],
+            'simplified by region' => ['zh-CN', Caption::LOCAL_ZH_CN],
+            'simplified by script' => ['zh-Hans', Caption::LOCAL_ZH_CN],
+        ];
+    }
+
+    public function testTrustsTheDetectedLanguageWhenYouTubeDisagreesAboutIt(): void
+    {
+        // A channel that declares one language for every upload mislabels the
+        // odd one out; the detection actually listened to the recording.
+        $this->fakeReadyTranscription(['這是中文的內容，說明與學習'], 'zh');
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube('en'));
+
+        $this->assertSame(Caption::LOCAL_ZH_TW, Caption::where('media_id', $media->id)->first()->locale);
+    }
+
+    public function testFallsBackToTheSubtitleTextWhenOnlyBareChineseIsKnown(): void
+    {
+        $this->fakeReadyTranscription(['这是简体的内容，说明与学习'], 'zh');
+
+        $media = $this->createMediaWithAudioId();
+
+        // No YouTube answer at all, so the characters are the only evidence.
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
+
+        $this->assertSame(Caption::LOCAL_ZH_CN, Caption::where('media_id', $media->id)->first()->locale);
+    }
+
+    public function testStoresTheResolvedLanguageOnTheMediaToo(): void
+    {
+        $this->fakeReadyTranscription(['你好'], 'zh');
+
+        $media = $this->createMediaWithAudioId();
+
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube('zh-Hant'));
+
+        $media->refresh();
+        $this->assertSame(Caption::LOCAL_ZH_TW, $media->language);
     }
 
     public function testFallsBackToEnglishWhenTheLanguageCannotBeRead(): void
@@ -639,7 +758,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
@@ -673,7 +792,7 @@ class VideoTranscriberFetchJobTest extends TestCase
 
         $media = $this->createMediaWithAudioId();
 
-        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient());
+        (new VideoTranscriberFetchJob($media))->handle(new VideoTranscriberClient(), $this->youtube());
 
         $caption = Caption::where('media_id', $media->id)->first();
         $this->assertSame(Caption::LOCAL_ZH_TW, $caption->locale);
@@ -713,7 +832,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job = new VideoTranscriberFetchJob($media);
         $job->job = new FakeJob();
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBED, $media->status);
@@ -737,7 +856,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 1;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
@@ -761,7 +880,7 @@ class VideoTranscriberFetchJobTest extends TestCase
         $job->job = new FakeJob();
         $job->job->attempts = 60;
 
-        $job->handle(new VideoTranscriberClient());
+        $job->handle(new VideoTranscriberClient(), $this->youtube());
 
         $media->refresh();
         $this->assertSame(Media::STATUS_TRANSCRIBE_FAILED, $media->status);

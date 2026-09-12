@@ -8,7 +8,10 @@ use Exception;
 use Throwable;
 use App\Models\Media;
 use App\Models\Caption;
+use App\Utils\Const\ISO6391;
+use App\Utils\ChineseVariant;
 use Hypervel\Queue\Queueable;
+use App\Services\YoutubeService;
 use Hypervel\Support\Facades\Log;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
@@ -52,6 +55,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     protected const RECORD_SETTLED_STATUSES = ['success', 'failed'];
 
     /**
+     * The one language whose locale needs more than a language code, and the
+     * only one the subtitle-text arbitration understands.
+     */
+    protected const CHINESE = 'zh';
+
+    /**
      * Where the raw getTranscription() response is archived, since the
      * `video_transcriptions.transcription` column cannot hold a successful
      * payload.
@@ -92,7 +101,7 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     /**
      * Execute the job.
      */
-    public function handle(VideoTranscriberClient $client): void
+    public function handle(VideoTranscriberClient $client, YoutubeService $youtube): void
     {
         $startTranscription = $this->media->videoTranscription?->start_transcription ?? [];
         $audioId = $startTranscription['data']['audio_id'] ?? null;
@@ -141,10 +150,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        $locale = $this->resolveLocale($youtube, $data, $text);
+
         Caption::updateOrCreate(
             [
                 'media_id' => $this->media->id,
-                'locale'   => $this->detectLocale($data['versions']['original']['subtitle_url'] ?? null),
+                'locale'   => $locale,
             ],
             [
                 'primary'       => true,
@@ -154,7 +165,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             ]
         );
 
-        $this->media->fill(['status' => Media::STATUS_TRANSCRIBED])->save();
+        // media.language 存的是同一個結論。字幕語系要靠 captions 那筆才問得到，
+        // 而「這支影片說什麼語言」是 media 自己的屬性，值得留在它身上。
+        $this->media->fill([
+            'status'   => Media::STATUS_TRANSCRIBED,
+            'language' => $locale,
+        ])->save();
 
         // Handed to its own job rather than done here: the assets include a
         // multi-MB mp3, and this job's timeout does not fail the job, it kills
@@ -270,38 +286,121 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Resolve the caption locale from the language videotranscriber.ai
-     * detected. The API response itself always leaves `asr_lang_code`
-     * empty — the language only appears inside the file the `original`
-     * version's `subtitle_url` points at, so this costs one extra request.
-     * Anything unreadable falls back to English.
+     * Decide what language the audio is actually in.
+     *
+     * Nothing in the response body answers this. `extra_data.asr_lang_code`
+     * comes back empty every time, and the neighbouring `client_lang_code` is
+     * the interface language of whoever submitted the job — it reads `en` for
+     * a Mandarin video, so reaching for it is worse than having nothing.
+     *
+     * Two real sources, in this order of authority:
+     *
+     * 1. YouTube's `defaultAudioLanguage`, which is the only one that carries
+     *    a region or script (`zh-TW`, `zh-Hant`). It is declared by the
+     *    uploader, so it can be wrong or absent — 11 of 12 sampled channels
+     *    had it.
+     * 2. The language videotranscriber.ai detected from the audio, which is
+     *    trustworthy but only ever two letters (`zh`), so it cannot tell
+     *    Traditional from Simplified on its own.
+     *
+     * They settle different halves of the question, hence reconcile(): the
+     * spoken language wins on *which* language, the declared code wins on
+     * region and script.
+     *
+     * @param array<string, mixed> $data
      */
-    private function detectLocale(?string $subtitleUrl): string
+    private function resolveLocale(YoutubeService $youtube, array $data, string $text): string
+    {
+        $spoken = $this->detectSpokenLanguage($data['versions']['original']['subtitle_url'] ?? null);
+        $declared = $this->declaredAudioLanguage($youtube);
+
+        $locale = $this->reconcile($spoken, $declared);
+
+        if ($locale === '') {
+            return Caption::LOCAL_EN;
+        }
+
+        // Anything carrying a region is already an answer, and for every
+        // language but Chinese a bare code is the whole answer too. Running
+        // the character test on Japanese would be actively wrong — shinjitai
+        // shares glyphs with Simplified (学, 会, 体, 点), so it would label a
+        // Japanese video `zh-CN`.
+        if ($locale !== self::CHINESE) {
+            return $locale;
+        }
+
+        // Bare `zh`: neither source pinned the variant down, so the subtitles
+        // themselves get the last word — and they are already in hand, so it
+        // costs nothing. Undecidable text falls back to Traditional, because
+        // `available_locales` has no plain `zh` for a user setting to match.
+        return ChineseVariant::detect($text) ?? Caption::LOCAL_ZH_TW;
+    }
+
+    /**
+     * Trust the audio for the language, the uploader for the region.
+     *
+     * When the two disagree on the language itself, the detection wins: it
+     * listened to the recording, whereas a channel that sets one default for
+     * every upload mislabels anything that does not match.
+     */
+    private function reconcile(string $spoken, string $declared): string
+    {
+        if ($declared === '') {
+            return $spoken;
+        }
+
+        if ($spoken === '') {
+            return $declared;
+        }
+
+        return ISO6391::language($declared) === ISO6391::language($spoken)
+            ? $declared
+            : $spoken;
+    }
+
+    /**
+     * The language videotranscriber.ai detected, normalised, or '' when it
+     * cannot be read. It only exists inside the file the `original` version's
+     * `subtitle_url` points at, so this costs one extra request.
+     */
+    private function detectSpokenLanguage(?string $subtitleUrl): string
     {
         if (!$subtitleUrl) {
-            return Caption::LOCAL_EN;
+            return '';
         }
 
         try {
             $langCode = (string) (Http::get($subtitleUrl)->json()['detected_language'] ?? '');
         } catch (Throwable) {
-            return Caption::LOCAL_EN;
+            return '';
         }
 
-        return $langCode === '' ? Caption::LOCAL_EN : $this->mapLocale($langCode);
+        return $langCode === '' ? '' : ISO6391::normalize($langCode);
     }
 
     /**
-     * Map an ISO 639-1 code onto the locales captions are stored under,
-     * matching what the YouTube caption jobs already do.
+     * The `defaultAudioLanguage` the uploader declared, normalised, or '' when
+     * YouTube has nothing to say. Failures are swallowed: this is the richer
+     * of the two sources, not a required one, and a quota error must not cost
+     * a media its captions.
      */
-    private function mapLocale(string $langCode): string
+    private function declaredAudioLanguage(YoutubeService $youtube): string
     {
-        return match (true) {
-            str_starts_with($langCode, 'zh') => Caption::LOCAL_ZH_TW,
-            str_starts_with($langCode, 'en') => Caption::LOCAL_EN,
-            default                          => $langCode,
-        };
+        $videoId = $this->media->video_detail['yt:videoId'] ?? null;
+
+        if (!$videoId) {
+            return '';
+        }
+
+        try {
+            $langCode = (string) ($youtube->getVideoDetails((string) $videoId)
+                ?->getSnippet()
+                ?->getDefaultAudioLanguage() ?? '');
+        } catch (Throwable) {
+            return '';
+        }
+
+        return $langCode === '' ? '' : ISO6391::normalize($langCode);
     }
 
     /**
