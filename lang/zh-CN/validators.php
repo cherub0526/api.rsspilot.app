@@ -39,6 +39,10 @@ return [
             'mindmap_limit_reached' => '已达到方案允许的每日思维导图生成上限。',
             'summary_required'      => '摘要完成后才能生成思维导图。',
         ],
+        'thumbnails' => [
+            'not_found'    => '找不到指定秒数的截图，请重新截图后再发送。',
+            'out_of_range' => '截图的秒数超出视频长度。',
+        ],
         'sources' => [
             'invalid_url'           => '无效的 YouTube 网址。',
             'not_found'             => '找不到指定的来源。',
@@ -310,6 +314,19 @@ return [
                     'array'    => 'text.long_summary.keywords 必须是数组。',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => '请提供截图文件。',
+            'file'      => '截图必须是文件。',
+            'mimetypes' => '截图必须是 JPEG 图片。',
+            'max'       => '截图不能超过 2 MB。',
+        ],
+        'second' => [
+            'required' => '秒数为必填。',
+            'integer'  => '秒数必须是整数。',
+            'min'      => '秒数不能小于 0。',
         ],
     ],
 ];

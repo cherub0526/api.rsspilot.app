@@ -39,6 +39,10 @@ return [
             'mindmap_limit_reached' => '已達到方案允許的每日心智圖產生上限。',
             'summary_required'      => '摘要完成後才能產生心智圖。',
         ],
+        'thumbnails' => [
+            'not_found'    => '找不到指定秒數的截圖，請重新截圖後再送出。',
+            'out_of_range' => '截圖的秒數超出影片長度。',
+        ],
         'sources' => [
             'invalid_url'           => '無效的 YouTube 網址。',
             'not_found'             => '找不到指定的來源。',
@@ -309,6 +313,19 @@ return [
                     'array'    => 'text.long_summary.keywords 必須是陣列。',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => '請提供截圖檔案。',
+            'file'      => '截圖必須是檔案。',
+            'mimetypes' => '截圖必須是 JPEG 圖片。',
+            'max'       => '截圖不能超過 2 MB。',
+        ],
+        'second' => [
+            'required' => '秒數為必填。',
+            'integer'  => '秒數必須是整數。',
+            'min'      => '秒數不能小於 0。',
         ],
     ],
 ];

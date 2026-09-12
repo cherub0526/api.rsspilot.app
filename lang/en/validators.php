@@ -39,6 +39,10 @@ return [
             'mindmap_limit_reached' => 'You have reached the daily mind map limit for your plan.',
             'summary_required'      => 'The mind map can only be generated once the summary is ready.',
         ],
+        'thumbnails' => [
+            'not_found'    => 'No screenshot exists at that second; capture it again before sending.',
+            'out_of_range' => 'The requested second is beyond the length of the video.',
+        ],
         'sources' => [
             'invalid_url'           => 'Invalid YouTube URL.',
             'not_found'             => 'Source not found.',
@@ -310,6 +314,19 @@ return [
                     'array'    => 'The text.long_summary.keywords must be an array.',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => 'The screenshot file is required.',
+            'file'      => 'The screenshot must be a file.',
+            'mimetypes' => 'The screenshot must be a JPEG image.',
+            'max'       => 'The screenshot may not be larger than 2 MB.',
+        ],
+        'second' => [
+            'required' => 'The second is required.',
+            'integer'  => 'The second must be an integer.',
+            'min'      => 'The second may not be less than 0.',
         ],
     ],
 ];

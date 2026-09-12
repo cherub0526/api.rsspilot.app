@@ -12,23 +12,24 @@ use App\Http\Controllers\API\V1\AiModelsController;
 use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
-use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Auth\GoogleController;
 use App\Http\Controllers\API\V1\Auth\LogoutController;
+use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Auth\RefreshController;
 use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\CustomPromptsController;
+use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
-use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
+use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
@@ -329,6 +330,28 @@ Route::group('/media', function () {
             ]
         );
     }, ['as' => 'captions']);
+
+    // 播放器截圖。同一支影片的同一秒對所有使用者都是同一張畫面，所以這裡是共用的
+    // 快取：GET 先問這一秒有沒有人截過，沒有（404）前端才編碼上傳，命中就直接拿。
+    Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/thumbnails', function () {
+        // 上傳會寫進所有人共用的路徑、也是唯一會花到頻寬的一支，成本上限交給 throttle。
+        Route::post(
+            '/',
+            [
+                'as'         => 'store',
+                'uses'       => ThumbnailsController::class . '@store',
+                'middleware' => ['auth', 'throttle:30,1'],
+            ]
+        );
+        Route::get(
+            '/{second:[0-9]{1,6}}',
+            [
+                'as'         => 'show',
+                'uses'       => ThumbnailsController::class . '@show',
+                'middleware' => ['auth'],
+            ]
+        );
+    }, ['as' => 'thumbnails']);
 
     Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/chat', function () {
         Route::post('/', [
