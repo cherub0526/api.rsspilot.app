@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Media\Chat;
 
 use Hypervel\Http\Request;
-use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
@@ -16,7 +15,6 @@ use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Schemas\ChatSessionSchema;
-use Hypervel\Database\Eloquent\Collection;
 use App\Http\Resources\ChatSessionResource;
 use App\OpenApi\Schemas\ChatSessionDetailSchema;
 use App\Http\Resources\ChatSessionDetailResource;
@@ -122,15 +120,6 @@ class SessionsController
 
         if (!$session) {
             throw new NotFoundHttpException();
-        }
-
-        // 訊息裡的截圖片段要靠 session.media_id 才簽得出 URL。關聯反指回來源本身，
-        // 讓每一則訊息各自去查會變成 N+1；這裡直接把已經在手上的 session 塞回去。
-        /** @var Collection<int, ChatMessage> $messages */
-        $messages = $session->getAttribute('messages');
-
-        foreach ($messages as $message) {
-            $message->setRelation('session', $session);
         }
 
         return new ChatSessionDetailResource($session);

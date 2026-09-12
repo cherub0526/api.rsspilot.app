@@ -5,12 +5,33 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use App\Services\ThumbnailService;
 use Hypervel\Http\Resources\Json\JsonResource;
+use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
 class ChatMessageResource extends JsonResource
 {
     public ?string $wrap = null;
+
+    /**
+     * 建立集合，並先把來源 session 掛回每一則訊息。
+     *
+     * image 片段要靠 session.media_id 才簽得出 URL，而關聯是反指回來源本身的——
+     * 讓每則訊息各自去查會變成 N+1。呼叫端手上本來就有 session，直接塞回去。
+     *
+     * @param null|iterable<int, ChatMessage> $messages 預設取 session 已載入的全部訊息
+     */
+    public static function forSession(ChatSession $session, ?iterable $messages = null): AnonymousResourceCollection
+    {
+        $items = $messages ?? $session->getAttribute('messages');
+
+        foreach ($items as $message) {
+            $message->setRelation('session', $session);
+        }
+
+        return static::collection($items);
+    }
 
     public function toArray(): array
     {

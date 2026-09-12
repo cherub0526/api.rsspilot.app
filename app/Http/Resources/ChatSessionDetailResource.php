@@ -17,7 +17,10 @@ class ChatSessionDetailResource extends JsonResource
             'title'      => strval($this->resource->getAttribute('title') ?? ''),
             'created_at' => $this->resource->getAttribute('created_at')?->toIso8601String(),
             'updated_at' => $this->resource->getAttribute('updated_at')?->toIso8601String(),
-            'messages'   => ChatMessageResource::collection($this->whenLoaded('messages')),
+            'messages'   => $this->whenLoaded(
+                'messages',
+                fn () => ChatMessageResource::forSession($this->resource)
+            ),
         ];
     }
 }
