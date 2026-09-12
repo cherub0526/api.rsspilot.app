@@ -72,7 +72,30 @@ node: bad option: --experimental-strip-types
 | 22.18 / 24 | 正常 |
 
 這個錯誤訊息容易誤導——它看起來像 `railway.ts` 寫壞了，實際上跟檔案內容
-無關，純粹是執行它的 Node 太舊。用 nvm 的話 `nvm use 24` 即可。
+無關，純粹是執行它的 Node 太舊。**請直接用 Node 24**（實測 v24.15.0），
+用 nvm 的話 `nvm use 24` 即可。
+
+### 從 script 或非互動 shell 跑的話，還有兩個坑
+
+兩個都跟 railway 本身無關，但每次都會擋下來，完整因果見
+`docs/lore/framework/pitfalls.md`：
+
+1. **nvm 把 `node` 定義成 lazy-load 的 shell function。**非互動 shell 裡
+   `_nvm_lazy_load` 不存在，`node` 會一路遞迴到
+   `maximum nested function level reached`。先 `unset -f node`，改 PATH 沒用
+   ——function 的優先序比 PATH 高。
+2. **`railway/iac` 用 `process.env._` 去找 CLI 執行檔**來檢查版本。包了
+   `timeout`、`env` 或從 script 呼叫時 `$_` 會指到別的東西，於是丟出
+   「requires Railway CLI 5.42.1 or newer」——即使 CLI 已經是 5.52.1。
+
+能跑的寫法：
+
+```bash
+unset -f node
+export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
+RB="$(command -v railway)"
+env _="$RB" "$RB" config plan
+```
 
 ### 這個 repo 只擁有自己的 service
 
@@ -105,7 +128,7 @@ partial 定位為「separate repositories cannot share that file」時的最後�
 `api.rsspilot.app scheduler`（含空格）都刻意沿用 Railway 上原本的名字，
 不要為了整齊而改成 `api` / `scheduler`。
 
-`worker-fast` 與 `worker-slow` 是真正的新增，面板上還不存在。
+`worker-fast` 與 `worker-slow` 當初是真正的新增，現在兩個都已經建在面板上。
 
 ### 先 plan 再 apply
 

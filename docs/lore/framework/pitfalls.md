@@ -312,3 +312,41 @@ $this->createTestResponse(
 ```
 
 `TestClient::json()`（注意第一個參數是 method）才會把 `json_encode($data, JSON_UNESCAPED_UNICODE)` 當 body。**簽章要用同一組 flag 算**，否則中文或斜線的跳脫方式一不同就過不了。
+
+## Railway IaC 要 Node 24 才跑得動，而且會被 nvm 的 lazy-load 與 `$_` 擋下
+
+`code:` `.railway/railway.ts` · `code:` `.railway/README.md` · `updated:` `2026-09-13` · `status:` `active`
+
+`railway config plan` / `apply` 不是純 Rust CLI 做完的：CLI 會用
+`node --experimental-strip-types` 直接執行 `.railway/railway.ts`。實務上請用
+**Node 24**（本機實測 v24.15.0 可跑）。低於 22.6 的 node 沒有 strip-types，
+會停在語法錯誤；而這台機器的預設 node 是 v20，等於預設狀態下一定跑不起來。
+
+在這之前還有兩個跟 railway 本身無關、但每次都會擋住的坑：
+
+**1. nvm 的 lazy-load 讓 `node` 變成會遞迴的 shell function。**非互動 shell
+（script、agent、CI step）裡 `_nvm_lazy_load` 不存在，於是 `node` 這個 function
+一路自己呼叫自己，畫面刷出幾百行 `command not found: _nvm_lazy_load`，最後以
+`maximum nested function level reached` 收場。看起來像 node 壞了，其實 node
+好好的。解法是先 `unset -f node`（`nvm`、`npm`、`npx` 通常也一起被包），再把
+要用的版本放進 PATH——改 PATH 本身沒有用，function 的優先序高於 PATH。
+
+**2. `railway/iac` 用 `process.env._` 去找 CLI 執行檔。**它會跑
+`execFileSync(process.env._ ?? "railway", ["--version"])` 來檢查 CLI 版本，
+所以只要你不是直接在互動 shell 裡打 `railway`——例如包了 `timeout`、`env`、
+或從 script 呼叫——`$_` 指到的就是別的東西，版本比對失敗，然後丟出一句
+**完全誤導**的錯誤：
+
+```
+Error: This version of railway/iac requires Railway CLI 5.42.1 or newer.
+```
+
+CLI 明明是 5.52.1。真正的解法不是升級 CLI，是把 `_` 明確指給它：
+
+```bash
+unset -f node
+export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
+RB="$(command -v railway)"
+env _="$RB" "$RB" config plan
+```
+
