@@ -78,6 +78,34 @@ trait ResolvesUserPlan
     }
 
     /**
+     * 播放器截圖是付費功能，擋下方案沒開通的使用者。
+     *
+     * 判準與前兩道相同，用 plans.screenshot_enabled 而不是方案名稱。
+     * 沒有方案時一併擋下：無從判斷權益的預設是不給。
+     *
+     * 這道閘門要在**兩處**執行：上傳截圖，以及帶圖提問。真正的成本在後者——
+     * vision 推論的單次成本明顯高於純文字，而每日 chat 額度沒有為帶圖加權。
+     * 只擋上傳的話，理論上仍能引用別人存過的同一張畫面去問。
+     *
+     * 已經存在於對話歷史裡的截圖不受影響：降級之後回頭看舊對話仍該看得到圖，
+     * 讓歷史破圖不是權益該有的表達方式。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertScreenshotEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('screenshot_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.thumbnails.plan_required')]]
+        );
+    }
+
+    /**
      * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
      * 否則一律回 null 當成「不指定」。
      *

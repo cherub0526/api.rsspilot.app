@@ -1591,7 +1591,7 @@
                     "Media"
                 ],
                 "summary": "Upload the screenshot for one second of the video",
-                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。",
+                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。\n\n截圖是 Pro 以上的功能（plans.screenshot_enabled）。GET 不設這道閘門——\n它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。",
                 "operationId": "api.v1.media.thumbnails.store",
                 "parameters": [
                     {
@@ -3880,6 +3880,10 @@
                         "example": true
                     },
                     "custom_summary_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "screenshot_enabled": {
                         "type": "boolean",
                         "example": true
                     },

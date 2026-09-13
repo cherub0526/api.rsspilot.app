@@ -32,6 +32,7 @@ class Plan extends Model
     public const bool AGENT_ENABLED_DEFAULT = false;
     public const bool ADVANCED_MODEL_ENABLED_DEFAULT = false;
     public const bool CUSTOM_SUMMARY_ENABLED_DEFAULT = false;
+    public const bool SCREENSHOT_ENABLED_DEFAULT = false;
 
     public static array $statusMaps = [
         self::STATUS_ACTIVE   => 'Active',
@@ -56,6 +57,7 @@ class Plan extends Model
         'agent_enabled',
         'advanced_model_enabled',
         'custom_summary_enabled',
+        'screenshot_enabled',
         'ai_quality',
         'ai_routing',
         'sort',
@@ -72,6 +74,7 @@ class Plan extends Model
         'agent_enabled'          => 'boolean',
         'advanced_model_enabled' => 'boolean',
         'custom_summary_enabled' => 'boolean',
+        'screenshot_enabled'     => 'boolean',
     ];
 
     public function scopeActive($query)

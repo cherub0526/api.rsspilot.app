@@ -26,6 +26,7 @@ class PlanPriceSeeder extends Seeder
                 'agent_enabled'          => false,
                 'advanced_model_enabled' => false,
                 'custom_summary_enabled' => false,
+                'screenshot_enabled'     => false,
                 'ai_quality'             => Plan::AI_QUALITY_PRO,
                 'ai_routing'             => ['model' => 'openrouter/free'],
                 'prices'                 => [
@@ -43,13 +44,14 @@ class PlanPriceSeeder extends Seeder
                 'agent_enabled'          => false,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
+                'screenshot_enabled'     => true,
                 'ai_quality'             => Plan::AI_QUALITY_ADVANCED,
                 'ai_routing'             => [
                     'model'    => 'openrouter/auto',
                     'plugins'  => [['id' => 'auto-router', 'cost_tier' => 'low']],
                     'provider' => ['max_price' => ['prompt' => 0.5, 'completion' => 2]],
                 ],
-                'prices'                 => [
+                'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
                 ],
@@ -64,13 +66,14 @@ class PlanPriceSeeder extends Seeder
                 'agent_enabled'          => true,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
+                'screenshot_enabled'     => true,
                 'ai_quality'             => Plan::AI_QUALITY_DEEP,
                 'ai_routing'             => [
                     'model'    => 'openrouter/auto',
                     'plugins'  => [['id' => 'auto-router', 'cost_tier' => 'medium']],
                     'provider' => ['max_price' => ['prompt' => 1.5, 'completion' => 5]],
                 ],
-                'prices'                 => [
+                'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 249],
                 ],

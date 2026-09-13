@@ -28,11 +28,13 @@ use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
 use App\Exceptions\ChatQuotaExceededException;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
 
 class ChatController
 {
     use ResolvesMedia;
+    use ResolvesUserPlan;
 
     /**
      * 一則使用者訊息最多帶幾張截圖，見 ChatValidator。
@@ -184,6 +186,14 @@ class ChatController
         // 截圖在扣額度之前就驗完：指到不存在的圖是請求本身有問題，不該先扣一次
         // 額度再退還。imageUrls 的 key 是 "秒數:checksum"，值是當下簽出的限時 URL。
         $imageRefs = $this->collectImages($params['messages']);
+
+        // 帶圖提問是 Pro 以上的功能。真正的成本在這裡而不是上傳——vision 推論的
+        // 單次成本明顯高於純文字，而每日 chat 額度沒有為帶圖加權。純文字提問
+        // 不受影響，所以只在真的帶了圖時才檢查。
+        if ($imageRefs !== []) {
+            $this->assertScreenshotEnabled($request);
+        }
+
         $this->assertThumbnailsExist($mediaKey, $imageRefs);
         $imageUrls = [];
 

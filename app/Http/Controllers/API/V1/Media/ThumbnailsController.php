@@ -19,6 +19,7 @@ use App\Http\Resources\ThumbnailResource;
 use App\OpenApi\Parameters\Path\Checksum;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
 use App\OpenApi\Schemas\ThumbnailResource as ThumbnailSchema;
 
@@ -35,6 +36,7 @@ use App\OpenApi\Schemas\ThumbnailResource as ThumbnailSchema;
 class ThumbnailsController extends AbstractController
 {
     use ResolvesMedia;
+    use ResolvesUserPlan;
 
     public function __construct(private ThumbnailService $thumbnails)
     {
@@ -102,6 +104,9 @@ class ThumbnailsController extends AbstractController
      * checksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端
      * 自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。
      *
+     * 截圖是 Pro 以上的功能（plans.screenshot_enabled）。GET 不設這道閘門——
+     * 它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。
+     *
      * @throws InvalidRequestException
      * @throws NotFoundHttpException
      */
@@ -157,7 +162,12 @@ class ThumbnailsController extends AbstractController
                 description: 'These exact bytes are already stored; the existing URL is returned',
                 content: new OAT\JsonContent(ref: ThumbnailSchema::class)
             ),
-            new OAT\Response(ref: Http422::class, response: 422),
+            new OAT\Response(
+                ref: Http422::class,
+                response: 422,
+                description: 'Validation failed, the checksum does not match the file, '
+                    . 'or the current plan does not include screenshots'
+            ),
             new OAT\Response(ref: Http401::class, response: 401),
             new OAT\Response(ref: Http404::class, response: 404),
         ]
@@ -165,6 +175,7 @@ class ThumbnailsController extends AbstractController
     public function store(Request $request, string $mediaId): ResponseInterface
     {
         $media = $this->resolveMedia($request, $mediaId);
+        $this->assertScreenshotEnabled($request);
         $key = (string) $media->getKey();
 
         $v = new ThumbnailValidator($request->only(['file', 'second', 'checksum']));

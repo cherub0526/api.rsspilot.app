@@ -166,3 +166,24 @@ The rule, the reasoning, and edge cases.
 `checksum` 由前端算、由後端**重算比對**（`hash_equals`）。採信客戶端自己說的值等於讓它把任意內容擺到任意 key 上，上面那個保證就沒了。
 
 另外兩道防線不變：`second` 要落在 `media.duration` 內（`duration` 為 0 代表還沒抓到片長，此時上界由 `MAX_SECOND` 接手），以及 `resolveMedia()` 的存取權檢查照常跑（共用的是圖，不是看影片的權限）。
+
+## 截圖是 Pro 以上的功能，閘門設在兩處
+
+`code:` `app/Http/Controllers/Concerns/ResolvesUserPlan.php` → `assertScreenshotEnabled()` · `updated:` `2026-09-13` · `status:` `active`
+
+判準是 `plans.screenshot_enabled`（Free 為 false，付費方案為 true），不是比對方案名稱——那個欄位本來就是產品用來表達權益的方式，寫死「Pro 以上」會在新增方案或調整權益時，程式與資料各說各話。沒有方案時一併擋下：無從判斷權益的預設是不給。
+
+**擋在兩個地方，不是一個：**
+
+1. `POST /v1/media/{mediaId}/thumbnails` —— 上傳截圖
+2. `POST /v1/media/{mediaId}/chat`，而且只在 `images` 非空時 —— 帶圖提問
+
+第二處才是真正必要的。截圖是內容定址的共用物件，理論上可以引用別人已經存過的同一張畫面直接問，完全跳過上傳；而**成本落在推論而不是儲存**——vision 的單次成本明顯高於純文字，且每日 `chat_limit` 沒有為帶圖加權（見 `docs/lore/prompts/business-rules.md`〈帶圖提問有兩層上限〉）。只擋上傳等於把閘門設在便宜的那一端。
+
+純文字提問完全不受影響，所以條件是「有帶圖才檢查」而不是「這個方案能不能用 chat」。
+
+**`GET /thumbnails/{second}/{checksum}` 不設閘門**，它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來——問得出來就代表已經截過了。
+
+**歷史裡的截圖不受影響。** `ChatMessageResource` 簽 URL 時不看方案：降級之後回頭看舊對話仍該看得到圖，讓歷史破圖不是權益該有的表達方式。`ScreenshotPlanGateTest::testDowngradedUserStillSeesScreenshotsInHistory` 釘住這件事。
+
+前端的 `captureLocked` 只是把鈕變灰、掛上 Pro 標記（刻意不隱藏——藏起來使用者就不知道有這個功能，也不會想升級），真正的判定在伺服器。

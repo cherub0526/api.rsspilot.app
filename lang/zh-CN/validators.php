@@ -40,6 +40,7 @@ return [
             'summary_required'      => '摘要完成后才能生成思维导图。',
         ],
         'thumbnails' => [
+            'plan_required' => '播放器截图需要 Pro 以上的方案。',
             'checksum_mismatch' => '截图的 checksum 与文件内容不符。',
             'not_found'    => '找不到指定秒数的截图，请重新截图后再发送。',
             'out_of_range' => '截图的秒数超出视频长度。',

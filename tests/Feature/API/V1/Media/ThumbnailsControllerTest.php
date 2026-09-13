@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1\Media;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Price;
 use DateTimeInterface;
 use Hypervel\Http\UploadedFile;
 use Hyperf\Testing\Http\TestResponse;
@@ -26,6 +28,25 @@ use Hypervel\Foundation\Testing\RefreshDatabase;
 class ThumbnailsControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * 截圖是 Pro 以上的功能（plans.screenshot_enabled），所以每個案例都需要一個
+     * 有開通的方案，否則會先被方案閘門擋在 422。
+     *
+     * 沒有訂閱時的預設方案是「有一筆月費 0 的價格」的那一筆，fixture 因此要長成
+     * 那樣。閘門本身的行為在 ScreenshotPlanGateTest 驗。
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $plan = Plan::factory()->create([
+            'title'              => 'Pro',
+            'screenshot_enabled' => true,
+            'sort'               => 0,
+        ]);
+        $plan->prices()->create(['unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+    }
 
     // ── helpers ────────────────────────────────────────────────
 
