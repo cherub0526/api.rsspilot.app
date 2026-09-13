@@ -529,6 +529,68 @@ class ChatControllerTest extends TestCase
     /**
      * 9. 多輪對話歷史 → 只有最後一則 user 訊息觸發 AI，整體仍回傳 200.
      */
+    /**
+     * 8-2. OpenRouter 的 session_id 帶的是這段對話的 session ——它是 sticky
+     *      routing key，同一段對話黏在同一家 provider，重送的摘要與歷史才
+     *      有機會命中對方的 prompt cache。
+     */
+    public function testStorePassesTheSessionIdToOpenRouter(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeOpenRouter();
+
+        $response = $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '第一句話']],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            $response->json('session_id'),
+            $streamer->sessionId
+        );
+    }
+
+    /**
+     * 8-3. 續談同一個 session 時送出的是同一個 id。這正是這個功能的重點：
+     *      id 每輪都變的話就沒有黏著效果，也就沒有快取可言。
+     *
+     * 兩輪共用同一個替身：Controller 在容器裡是 singleton，請求之間重新綁定
+     * 不會換掉已經注入進去的那一個。
+     */
+    public function testStoreKeepsTheSameSessionIdAcrossTurns(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeOpenRouter();
+        $uri = route('api.v1.media.chat.store', ['mediaId' => $media->id]);
+
+        $sessionId = $this->json('POST', $uri, [
+            'messages' => [['role' => 'user', 'content' => '第一句話']],
+        ])->assertStatus(200)->json('session_id');
+
+        $this->assertSame($sessionId, $streamer->sessionId);
+
+        $this->json('POST', $uri, [
+            'session_id' => $sessionId,
+            'messages'   => [
+                ['role' => 'user', 'content' => '第一句話'],
+                ['role' => 'assistant', 'content' => '第一回應'],
+                ['role' => 'user', 'content' => '第二句話'],
+            ],
+        ])->assertStatus(200)->assertJson(['session_id' => $sessionId]);
+
+        $this->assertSame(2, $streamer->calls);
+        $this->assertSame($sessionId, $streamer->sessionId);
+    }
+
     public function testStoreAcceptsConversationHistory(): void
     {
         /** @var User $user */

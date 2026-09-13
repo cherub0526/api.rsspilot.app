@@ -27,8 +27,12 @@ class FailingChatStreamer implements ChatStreamerInterface
     {
     }
 
-    public function stream(string $instructions, array $messages, ?User $user = null): Generator
-    {
+    public function stream(
+        string $instructions,
+        array $messages,
+        ?User $user = null,
+        ?string $sessionId = null
+    ): Generator {
         $this->instructions = $instructions;
         $this->messages = $messages;
 

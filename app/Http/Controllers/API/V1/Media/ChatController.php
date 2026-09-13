@@ -258,10 +258,13 @@ class ChatController
 
         try {
             // 帶使用者進去：對話是 per-user 的產物，吃這個人方案的路由設定。
+            // 帶 session 進去：讓同一段對話的每一輪黏在同一家 provider，重送的
+            // 摘要與歷史才有機會命中對方的 prompt cache。
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
                 $this->buildMessages($history, $userMessage, $currentImages, $imageUrls),
-                $request->user()
+                $request->user(),
+                (string) $session->getKey()
             );
 
             foreach ($stream as $token) {

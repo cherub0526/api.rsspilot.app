@@ -23,7 +23,15 @@ interface ChatStreamerInterface
      * @param null|User $user 用來套用方案的路由設定。**共用產物一律傳 null**——
      *                        心智圖與摘要全站只有一份，沒有「當前使用者」可言，
      *                        用觸發者的方案會讓先產生的人決定所有人拿到的品質。
+     * @param null|string $sessionId 把同一段對話的每一輪綁在一起的識別碼。只有
+     *                               多輪的路徑才有意義——單次產生的產物沒有「下
+     *                               一輪」可以共用快取，傳 null 即可。
      * @return Generator<int, string> 逐段產生的回應文字
      */
-    public function stream(string $instructions, array $messages, ?User $user = null): Generator;
+    public function stream(
+        string $instructions,
+        array $messages,
+        ?User $user = null,
+        ?string $sessionId = null
+    ): Generator;
 }

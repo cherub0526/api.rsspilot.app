@@ -32,12 +32,21 @@ use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
  */
 class NeuronChatStreamer implements ChatStreamerInterface
 {
-    public function stream(string $instructions, array $messages, ?User $user = null): Generator
-    {
+    public function stream(
+        string $instructions,
+        array $messages,
+        ?User $user = null,
+        ?string $sessionId = null
+    ): Generator {
         yield from RoutedInference::stream(
             self::class,
             $user,
-            fn (RoutingProfile $profile): Generator => $this->streamWith($profile, $instructions, $messages)
+            fn (RoutingProfile $profile): Generator => $this->streamWith(
+                $profile,
+                $instructions,
+                $messages,
+                $sessionId
+            )
         );
     }
 
@@ -45,14 +54,18 @@ class NeuronChatStreamer implements ChatStreamerInterface
      * @param array<int, array{role: string, content: string, images?: array<int, string>}> $messages
      * @return Generator<int, string>
      */
-    private function streamWith(RoutingProfile $profile, string $instructions, array $messages): Generator
-    {
+    private function streamWith(
+        RoutingProfile $profile,
+        string $instructions,
+        array $messages,
+        ?string $sessionId = null
+    ): Generator {
         $agent = Agent::make()
             ->setAiProvider(new OpenRouterProvider(
                 baseUri: (string) config('ai.openrouter.base_uri'),
                 key: (string) config('ai.openrouter.api_key'),
                 model: $profile->model,
-                parameters: $profile->parameters,
+                parameters: $this->parametersFor($profile, $sessionId),
             ))
             ->setInstructions($instructions);
 
@@ -63,6 +76,31 @@ class NeuronChatStreamer implements ChatStreamerInterface
                 yield $event->content;
             }
         }
+    }
+
+    /**
+     * 路由參數加上 OpenRouter 的 `session_id`。
+     *
+     * `session_id` 是 OpenRouter 的 sticky routing key：同一個 id 的請求會被送到
+     * 同一家 provider，讓對方的 prompt cache 有機會命中。對話每一輪都要重送整份
+     * 摘要與歷史，這個開關省下的是那一大段重複的 input token；它**不會**讓我們
+     * 少送 messages，OpenRouter 沒有替我們保存對話。
+     *
+     * 擺在後面蓋過路由參數：設定檔裡若真的寫了 session_id，那也只是個固定值，
+     * 而這裡拿到的是這次對話真正的識別碼。
+     *
+     * 退回用途層重試時沿用同一個 id——重試仍屬於同一段對話，換 id 只會讓那一輪
+     * 落到另一家 provider。
+     *
+     * @return array<string, mixed>
+     */
+    private function parametersFor(RoutingProfile $profile, ?string $sessionId): array
+    {
+        if ($sessionId === null || $sessionId === '') {
+            return $profile->parameters;
+        }
+
+        return array_merge($profile->parameters, ['session_id' => $sessionId]);
     }
 
     /**

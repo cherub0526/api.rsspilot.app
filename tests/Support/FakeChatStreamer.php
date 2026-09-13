@@ -23,16 +23,23 @@ class FakeChatStreamer implements ChatStreamerInterface
 
     public int $calls = 0;
 
+    public ?string $sessionId = null;
+
     /** @param string[] $tokens 依序產生的回應片段 */
     public function __construct(private array $tokens = ['Hello'])
     {
     }
 
-    public function stream(string $instructions, array $messages, ?User $user = null): Generator
-    {
+    public function stream(
+        string $instructions,
+        array $messages,
+        ?User $user = null,
+        ?string $sessionId = null
+    ): Generator {
         ++$this->calls;
         $this->instructions = $instructions;
         $this->messages = $messages;
+        $this->sessionId = $sessionId;
 
         yield from $this->tokens;
     }
