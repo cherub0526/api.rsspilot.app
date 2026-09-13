@@ -65,12 +65,12 @@ chat 與 customPrompt 的回應語言來自 `settings.data.ai.language`，但這
 
 ## 帶圖提問有兩層上限，整個請求只送最新的 4 張
 
-`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `collectImageSeconds()` · `updated:` `2026-09-13` · `status:` `active`
+`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `collectImages()` · `updated:` `2026-09-13` · `status:` `active`
 
-- **每則訊息 4 張**（`ChatValidator` 的 `messages.*.images` → `max:4`）
+- **每則訊息 4 張**（`ChatValidator` 的 `messages.*.images` → `max:4`）—— 條目是 `{second, checksum}`，識別畫面的是 checksum
 - **整個請求 4 張**（`IMAGES_PER_REQUEST`），由新到舊取，同一則訊息內也是由新到舊
 
-第二層才是重點。前端會把完整歷史送回來，裡頭每一則提問都帶著當時附的截圖秒數；照單全收的話，對話愈長、每一輪要重付的圖片 token 就愈多，而圖片 token 遠貴於文字。
+第二層才是重點。前端會把完整歷史送回來，裡頭每一則提問都帶著當時附的截圖（`{second, checksum}`）；照單全收的話，對話愈長、每一輪要重付的圖片 token 就愈多，而圖片 token 遠貴於文字。
 
 取最新的而不是直接丟掉歷史圖片，是為了讓「剛剛那張圖的旁邊那欄呢」這種接續追問仍然成立。被擠掉的截圖只留下它們當時的文字，AI 上一輪對那張圖的描述本來就在歷史裡。
 

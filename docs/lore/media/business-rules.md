@@ -136,28 +136,33 @@ The rule, the reasoning, and edge cases.
 
 新增需要授權的端點時直接呼叫它，不要另外寫一份。
 
-## 播放器截圖沒有資料表，S3 的路徑就是那筆紀錄
+## 播放器截圖以內容定址，S3 的路徑就是那筆紀錄
 
 `code:` `app/Services/ThumbnailService.php` → `path()` · `updated:` `2026-09-13` · `status:` `active`
 
-截圖存在 `media/{mediaId}/thumbnails/{秒數補零6位}.jpg`。這個 key 完全由 `(mediaId, second)` 推導得出，所以「這一秒有沒有截過」問 S3 就有答案，不需要另一張表去描述 S3 已經知道的事。
+截圖存在 `media/{mediaId}/thumbnails/{秒數補零6位}.{sha256}.jpg`。key 完全由
+`(mediaId, second, checksum)` 推導得出，所以「這張圖存過了嗎」問 S3 就有答案，不需要另一張表去描述 S3 已經知道的事。
 
 連帶消失的三個問題，是選這個設計而不是「另開 `chat_screenshots` 表 / 擴充 `images` 表」的實際理由：
 
 - **孤兒列**——截了圖但沒送出訊息，只是留下一張別人也能重用的快取，不是要清的垃圾
-- **並發**——兩個人同時截同一秒就是覆寫同一個 key，內容本來就一樣，不需要 unique index 也不需要鎖
-- **簽章過期**——`chat_messages.parts` 的 image 片段只存 `second`，URL 由 `ChatMessageResource` 在輸出當下才簽。存 URL 進 parts 的話，隔天回頭看同一段對話就是一排破圖
+- **並發**——兩個人同時送同一張圖就是寫同一個 key，內容相同，不需要 unique index 也不需要鎖
+- **簽章過期**——`chat_messages.parts` 的 image 片段只存 `second` 與 `checksum`，URL 由 `ChatMessageResource` 在輸出當下才簽。存 URL 進 parts 的話，隔天回頭看同一段對話就是一排破圖
+
+**識別靠的是 checksum，不是秒數。** 秒數留在路徑裡只為了可讀與可排序（人工翻 bucket 時看得出這張圖在影片的哪裡）；一秒有 24–60 幀，用它當身分會出事，理由見 `pitfalls.md`〈秒級 key 會讓同一秒的不同幀互相頂替〉。
 
 `images` 表（polymorphic，feedback 附圖在用）被評估過但沒採用：它缺 `user_id` / `checksum` / `second`，而且 `foreign_*` 對不上時序——截圖發生在第一則訊息之前，那時 `ChatSession` 還不存在。
 
-副檔名與補零位數都是 key 的一部分，改動等於讓既有截圖全部失去命中，所以定義成 `ThumbnailService` 的常數。用 JPEG 而不是 PNG：1280px 的影片畫面存 PNG 約 1.5–3MB、JPEG 約 150KB。
+副檔名、補零位數與 checksum 的大小寫都是 key 的一部分，改動等於讓既有截圖全部失去命中，所以定義成 `ThumbnailService` 的常數（`CHECKSUM_REGEX` 只收小寫 hex，否則同一份內容會有兩個 key）。用 JPEG 而不是 PNG：1280px 的影片畫面存 PNG 約 1.5–3MB、JPEG 約 150KB。
 
-## 截圖跨使用者共用，而且第一個寫入的人說了算
+## 內容定址讓「替換掉別人看到的畫面」不再可能
 
 `code:` `app/Http/Controllers/API/V1/Media/ThumbnailsController.php` → `store()` · `updated:` `2026-09-13` · `status:` `active`
 
-同一個 `mediaId` 的同一秒，影片內容對所有人都一樣，所以路徑裡沒有 `user_id`——第二個人截同一秒時直接拿既有的圖，不必再上傳。
+路徑裡沒有 `user_id`，所以同樣的 bytes 全站只存一份；但因為 key 是**從內容推導出來的**，寫入者也就沒辦法把別人引用的那張圖換成別的內容——要寫到某個 key，手上就得先有算出那個 key 的 bytes。
 
-**但已存在時一律不覆寫。** 這不是省一次寫入的最佳化，而是唯一的防線：這張圖是所有使用者在那一秒共同看到的畫面，允許覆寫就等於允許後來的人把它替換掉。`ThumbnailsControllerTest::testStoreReturnsExistingImageWithoutOverwriting` 釘住這個行為。
+這取代了早期版本的 first-write-wins。當時 key 只有秒數，「不覆寫」是唯一能防止後來者替換畫面的手段；改成內容定址之後，覆寫本身已經無害（同一個 checksum 就是同一份 bytes），跳過寫入只是省一次沒有意義的 PUT。
 
-另外兩道：`second` 要落在 `media.duration` 內（`duration` 為 0 代表還沒抓到片長，此時不做上界判斷——否則剛加入的影片完全不能截圖），以及 `resolveMedia()` 的存取權檢查照常跑（共用的是圖，不是看影片的權限）。
+`checksum` 由前端算、由後端**重算比對**（`hash_equals`）。採信客戶端自己說的值等於讓它把任意內容擺到任意 key 上，上面那個保證就沒了。
+
+另外兩道防線不變：`second` 要落在 `media.duration` 內（`duration` 為 0 代表還沒抓到片長，此時上界由 `MAX_SECOND` 接手），以及 `resolveMedia()` 的存取權檢查照常跑（共用的是圖，不是看影片的權限）。

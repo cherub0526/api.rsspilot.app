@@ -100,27 +100,40 @@ sources : id, type, external_id, title, url, thumbnail, description,
 
 討論「RSS 同步」時指的一律是後者。
 
-## 截圖的去重必須發生在上傳之前，否則只省到儲存
+## 秒級 key 會讓同一秒的不同幀互相頂替
 
-`code:` `routes/v1.php` → `api.v1.media.thumbnails.show` · `updated:` `2026-09-13` · `status:` `active`
+`code:` `app/Services/ThumbnailService.php` → `path()` · `updated:` `2026-09-13` · `status:` `active`
 
-截圖端點刻意是**兩支**而不是一支：
+第一版的截圖 key 只有秒數（`.../{秒數}.jpg`），踩到的坑值得記下來，因為它看起來完全合理：
 
-```
-GET  /v1/media/{mediaId}/thumbnails/{second}   → 200 有了 / 404 沒有
-POST /v1/media/{mediaId}/thumbnails            → 201 存入 / 200 早就有了
-```
+一秒有 24–60 幀，而 YouTube iframe API 只給浮點秒的 `currentTime`、每秒回報幾次，**拿不到 fps 也不能 seek 到幀**。所以「同一秒」必然對應到很多張不同的畫面：使用者在 `125.04` 截的圖與在 `125.97` 截的圖落在同一個 key 上。搭配 first-write-wins，後者會拿到前者那張。
 
-單一端點（POST 上去再判斷重複）看起來更簡潔，但那會讓瀏覽器**每次都把整張圖傳完**，後端才回「這張已經有了」——省到的只有 S3 儲存，最貴的上傳頻寬照付。截圖跨使用者共用，命中率本來就高，浪費的正好是命中的那些次。
+平常看不出來（講者鏡頭一秒內幾乎沒變），但只要那一秒裡有硬切、投影片翻頁、圖表動畫或捲動，兩張圖就是完全不同的內容——**使用者看著切換後的畫面，AI 收到的是切換前那張，而且他自己看到的縮圖也是錯的**。這種錯不會報錯，只會讓回答莫名其妙。
 
-前端（`src/renderer/src/lib/thumbnails.ts`）因此是三層短路：本地 Map → `GET` → 才真的截圖上傳，而且 `capture` 是以函式傳進 `ensureThumbnail()` 的，前兩層命中時擷取與 JPEG 編碼根本不會執行。
+更細的量化（250ms 桶）只能縮小窗口、消不掉它：只要 key 比幀粗，就一定有兩張不同的畫面共用同一個 key。所以改成內容定址——`{秒數}.{sha256}.jpg`，不同的畫面就是不同的物件。
 
-改成單一端點之前，先想清楚這件事。
+代價講清楚：**截圖與 JPEG 編碼再也省不掉了**，因為不先算出 hash 就問不出「這張存過了嗎」。GET 因此也要帶 checksum。能省的只剩上傳那 150KB。
 
-## 秒數一定要量化，播放器回報的是浮點數
+## 前端的去重要看 checksum，不是秒數
+
+`code:` `src/renderer/src/views/PlayerView.vue` → `takeScreenshot()` · `updated:` `2026-09-13` · `status:` `active`
+
+同一則訊息裡「已經附過這一秒」不是重複的判準——畫面在一秒內換過就是另一張圖，該讓它附上去。只有 checksum 相同才真的是同一張。
+
+而且判斷到重複時要給回饋。早期版本在這裡直接 `return`，使用者按了截圖卻什麼都沒發生、也沒有任何訊息，只會以為按鈕壞了。
+
+## 秒數仍然要量化，但理由已經不同
 
 `code:` `src/renderer/src/lib/thumbnails.ts` → `toSecond()` · `updated:` `2026-09-13` · `status:` `active`
 
-YouTube iframe 的 `infoDelivery` 每 100–250ms 才回報一次 `currentTime`，而且是 float。使用者在「第 125 秒」連點兩下，拿到的可能是 `125.13` 與 `125.38`——直接當 key 就是兩個不同的值，去重完全失效，同一格畫面會在 S3 上長出兩份。
+`currentTime` 是浮點數，路徑與 route pattern 都只接整數，所以前端一律 `Math.floor()`。
 
-所以前端一律 `Math.floor()` 成整數秒才往下走，後端的路徑也只接整數（route pattern `{second:[0-9]{1,6}}`）。整數秒同時也對齊使用者心中的「同一秒」。
+但這個值**不再參與識別**（那是 checksum 的事），只用來排序與顯示時間標記。改成內容定址之前，量化的粗細直接決定去重的正確性；現在它只影響可讀性，粗一點細一點都不會讓兩張圖混在一起。
+
+## 秒數的上界有兩條，不只是片長
+
+`code:` `app/Services/ThumbnailService.php` → `MAX_SECOND` · `updated:` `2026-09-13` · `status:` `active`
+
+`media.duration` 預設是 0（片長還沒抓到），此時 `isWithinDuration()` 直接放行——否則剛加入的影片完全不能截圖。於是只比對片長的話，`second = 1234567` 會成功寫進 S3 並回 201，但 GET 的路由 pattern 是 `{second:[0-9]{1,6}}`，七位數永遠匹配不到，那個物件從此取不回來。
+
+`MAX_SECOND = 999999` 與那條 pattern 是**同一條界線**，改一個要改另一個。這是補測試邊界時才發現的，不是設計時想到的。
