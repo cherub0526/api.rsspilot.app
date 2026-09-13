@@ -16,6 +16,7 @@ use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Http\Resources\ThumbnailResource;
+use App\OpenApi\Parameters\Path\Checksum;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\Http\Controllers\API\V1\Media\Chat\ResolvesMedia;
@@ -24,10 +25,12 @@ use App\OpenApi\Schemas\ThumbnailResource as ThumbnailSchema;
 /**
  * 影片畫面截圖：使用者在播放器按下截圖後，把該秒的畫面存成可以餵給 AI 的圖片。
  *
- * 刻意拆成 GET 與 POST 兩支而不是「POST 上去再判斷有沒有重複」：同一個 mediaId 的
- * 畫面內容對所有使用者都一樣，截圖因此是跨使用者共用的、命中率很高，而單一端點的
- * 形狀會逼瀏覽器每次都把整張圖傳完，後端才回「這張已經有了」——省到的只有儲存，
- * 最貴的上傳頻寬照付。前端先 GET 問一次（一個 S3 HEAD），沒有才編碼上傳。
+ * 圖片以內容定址：key 是 (second, checksum)，而真正識別畫面的是 checksum。一秒有
+ * 24–60 幀，只用秒數當 key 會讓同一秒的不同畫面互相頂替（見 ThumbnailService）。
+ *
+ * GET 因此要帶 checksum，也就是說前端必須先截圖、編碼、算完 hash 才問得出來——
+ * 這一步省不掉了，能省的只有上傳那 150KB。相對地，內容定址換到一個更重要的性質：
+ * **沒有人能替換掉別人在某一秒看到的畫面**，因為 key 是從內容推導出來的。
  */
 class ThumbnailsController extends AbstractController
 {
@@ -45,51 +48,59 @@ class ThumbnailsController extends AbstractController
      * @throws NotFoundHttpException
      */
     #[OAT\Get(
-        path: '/v1/media/{mediaId}/thumbnails/{second}',
+        path: '/v1/media/{mediaId}/thumbnails/{second}/{checksum}',
         operationId: 'api.v1.media.thumbnails.show',
-        summary: 'Get the cached screenshot for one second of the video',
+        summary: 'Check whether this exact frame is already stored',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
         parameters: [
             new OAT\Parameter(ref: MediaId::class),
             new OAT\Parameter(ref: Second::class),
+            new OAT\Parameter(ref: Checksum::class),
         ],
         responses: [
             new OAT\Response(
                 response: 200,
-                description: 'The screenshot already exists',
+                description: 'This frame is already stored; upload can be skipped',
                 content: new OAT\JsonContent(ref: ThumbnailSchema::class)
             ),
             new OAT\Response(ref: Http401::class, response: 401),
             new OAT\Response(
                 ref: Http404::class,
                 response: 404,
-                description: 'Media not accessible, or nothing captured at this second yet'
+                description: 'Media not accessible, or this frame has not been stored yet'
             ),
         ]
     )]
-    public function show(Request $request, string $mediaId, string $second): ResponseInterface
-    {
+    public function show(
+        Request $request,
+        string $mediaId,
+        string $second,
+        string $checksum
+    ): ResponseInterface {
         $media = $this->resolveMedia($request, $mediaId);
         $key = (string) $media->getKey();
         $offset = (int) $second;
 
-        if (!$this->thumbnails->exists($key, $offset)) {
+        if (!$this->thumbnails->exists($key, $offset, $checksum)) {
             throw new NotFoundHttpException();
         }
 
         return response()->json(new ThumbnailResource([
             'media_id' => $key,
             'second'   => $offset,
-            'url'      => $this->thumbnails->url($key, $offset),
+            'checksum' => $checksum,
+            'url'      => $this->thumbnails->url($key, $offset, $checksum),
         ]));
     }
 
     /**
      * POST /v1/media/{mediaId}/thumbnails.
      *
-     * 存下這一秒的截圖。已經有了就原樣回傳既有的那張，**不覆寫**——這張圖是所有
-     * 使用者在那一秒共同看到的畫面，允許覆寫等於允許後來的人替換掉它。
+     * 存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。
+     *
+     * checksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端
+     * 自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。
      *
      * @throws InvalidRequestException
      * @throws NotFoundHttpException
@@ -104,7 +115,7 @@ class ThumbnailsController extends AbstractController
             content: new OAT\MediaType(
                 mediaType: 'multipart/form-data',
                 schema: new OAT\Schema(
-                    required: ['file', 'second'],
+                    required: ['file', 'second', 'checksum'],
                     properties: [
                         new OAT\Property(
                             property: 'file',
@@ -115,9 +126,17 @@ class ThumbnailsController extends AbstractController
                         new OAT\Property(
                             property: 'second',
                             description: 'Whole-second offset. Must not exceed the video duration, '
-                                . 'nor 999999 — the GET route only addresses up to 6 digits.',
+                                . 'nor 999999 — the GET route only addresses up to 6 digits. '
+                                . 'Used for ordering and readability, not for identity.',
                             type: 'integer',
                             example: 125
+                        ),
+                        new OAT\Property(
+                            property: 'checksum',
+                            description: 'Lowercase hex SHA-256 of the uploaded bytes. Recomputed and '
+                                . 'compared server-side; a mismatch is rejected with 422.',
+                            type: 'string',
+                            example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
                         ),
                     ]
                 )
@@ -135,7 +154,7 @@ class ThumbnailsController extends AbstractController
             ),
             new OAT\Response(
                 response: 200,
-                description: 'Already captured by someone else; the existing image is returned untouched',
+                description: 'These exact bytes are already stored; the existing URL is returned',
                 content: new OAT\JsonContent(ref: ThumbnailSchema::class)
             ),
             new OAT\Response(ref: Http422::class, response: 422),
@@ -148,7 +167,7 @@ class ThumbnailsController extends AbstractController
         $media = $this->resolveMedia($request, $mediaId);
         $key = (string) $media->getKey();
 
-        $v = new ThumbnailValidator($request->only(['file', 'second']));
+        $v = new ThumbnailValidator($request->only(['file', 'second', 'checksum']));
         $v->setStoreRules();
 
         if (!$v->passes()) {
@@ -163,10 +182,19 @@ class ThumbnailsController extends AbstractController
             ]);
         }
 
+        $sourcePath = (string) $request->file('file')->getRealPath();
+        $checksum = (string) $request->input('checksum');
+
+        if (!hash_equals($this->thumbnails->checksumOf($sourcePath), $checksum)) {
+            throw new InvalidRequestException([
+                'checksum' => [__('validators.controllers.thumbnails.checksum_mismatch')],
+            ]);
+        }
+
         $created = false;
 
-        if (!$this->thumbnails->exists($key, $second)) {
-            $this->thumbnails->put($key, $second, (string) $request->file('file')->getRealPath());
+        if (!$this->thumbnails->exists($key, $second, $checksum)) {
+            $this->thumbnails->put($key, $second, $checksum, $sourcePath);
             $created = true;
         }
 
@@ -174,7 +202,8 @@ class ThumbnailsController extends AbstractController
             new ThumbnailResource([
                 'media_id' => $key,
                 'second'   => $second,
-                'url'      => $this->thumbnails->url($key, $second),
+                'checksum' => $checksum,
+                'url'      => $this->thumbnails->url($key, $second, $checksum),
             ]),
             $created ? 201 : 200
         );

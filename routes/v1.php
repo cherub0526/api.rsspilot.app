@@ -331,10 +331,11 @@ Route::group('/media', function () {
         );
     }, ['as' => 'captions']);
 
-    // 播放器截圖。同一支影片的同一秒對所有使用者都是同一張畫面，所以這裡是共用的
-    // 快取：GET 先問這一秒有沒有人截過，沒有（404）前端才編碼上傳，命中就直接拿。
+    // 播放器截圖。以內容定址：key 是 (second, checksum)，識別畫面的是 checksum——
+    // 一秒有 24–60 幀，只用秒數會讓同一秒的不同畫面互相頂替。GET 因此也要帶
+    // checksum，前端算完 hash 先問一次，命中就不必再把那 150KB 傳上來。
     Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/thumbnails', function () {
-        // 上傳會寫進所有人共用的路徑、也是唯一會花到頻寬的一支，成本上限交給 throttle。
+        // 唯一會花到頻寬的一支，成本上限交給 throttle。
         Route::post(
             '/',
             [
@@ -343,8 +344,9 @@ Route::group('/media', function () {
                 'middleware' => ['auth', 'throttle:30,1'],
             ]
         );
+        // second 的 6 位上限與 ThumbnailService::MAX_SECOND 是同一條界線，要一起改。
         Route::get(
-            '/{second:[0-9]{1,6}}',
+            '/{second:[0-9]{1,6}}/{checksum:[0-9a-f]{64}}',
             [
                 'as'         => 'show',
                 'uses'       => ThumbnailsController::class . '@show',

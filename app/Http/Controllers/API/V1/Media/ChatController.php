@@ -101,12 +101,24 @@ class ChatController
                                 ),
                                 new OAT\Property(
                                     property: 'images',
-                                    description: 'Seconds of player screenshots attached to this turn. '
+                                    description: 'Player screenshots attached to this turn, each identified by '
+                                        . 'its second and the SHA-256 of its bytes (a second holds many frames). '
                                         . 'Upload them via POST /v1/media/{mediaId}/thumbnails first. '
                                         . 'At most 4 per message, and the 4 most recent across the whole request '
                                         . 'are the ones actually sent to the model.',
                                     type: 'array',
-                                    items: new OAT\Items(type: 'integer', example: 125),
+                                    items: new OAT\Items(
+                                        required: ['second', 'checksum'],
+                                        properties: [
+                                            new OAT\Property(property: 'second', type: 'integer', example: 125),
+                                            new OAT\Property(
+                                                property: 'checksum',
+                                                type: 'string',
+                                                example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+                                            ),
+                                        ],
+                                        type: 'object'
+                                    ),
                                     nullable: true
                                 ),
                             ]
@@ -170,13 +182,17 @@ class ChatController
         $mediaKey = (string) $media->getKey();
 
         // 截圖在扣額度之前就驗完：指到不存在的圖是請求本身有問題，不該先扣一次
-        // 額度再退還。imageUrls 的 key 是秒數，值是當下簽出的限時 URL。
-        $imageSeconds = $this->collectImageSeconds($params['messages']);
-        $this->assertThumbnailsExist($mediaKey, $imageSeconds);
+        // 額度再退還。imageUrls 的 key 是 "秒數:checksum"，值是當下簽出的限時 URL。
+        $imageRefs = $this->collectImages($params['messages']);
+        $this->assertThumbnailsExist($mediaKey, $imageRefs);
         $imageUrls = [];
 
-        foreach ($imageSeconds as $second) {
-            $imageUrls[$second] = $this->thumbnails->url($mediaKey, $second);
+        foreach ($imageRefs as $ref) {
+            $imageUrls[$this->imageKey($ref)] = $this->thumbnails->url(
+                $mediaKey,
+                $ref['second'],
+                $ref['checksum']
+            );
         }
 
         // 額度在建立 session 之前就扣，被擋下來的請求才不會留下一堆
@@ -185,7 +201,7 @@ class ChatController
 
         $lastMessage = collect($params['messages'])->last() ?? [];
         $userMessage = $lastMessage['content'] ?? '';
-        $currentImages = $this->allowedImagesOf($lastMessage, $imageSeconds);
+        $currentImages = $this->allowedImagesOf($lastMessage, $imageRefs);
         $session = $this->findOrCreateSession(
             $userId,
             $mediaId,
@@ -285,9 +301,9 @@ class ChatController
      * 合併同角色時圖片跟著文字一起併，順序不變——合併後仍是同一個人連續說的話，
      * 他附的圖也該留在同一則裡。
      *
-     * @param array<int, array{role: string, content: string, images?: array<int, int>}> $history
-     * @param array<int, int> $currentImages 本次提問附上的截圖秒數
-     * @param array<int, string> $imageUrls 秒數 => 限時 URL
+     * @param array<int, array<string, mixed>> $history
+     * @param array<int, array{second: int, checksum: string}> $currentImages 本次提問附上的截圖
+     * @param array<string, string> $imageUrls "秒數:checksum" => 限時 URL
      * @return array<int, array{role: string, content: string, images?: array<int, string>}>
      */
     private function buildMessages(
@@ -296,12 +312,14 @@ class ChatController
         array $currentImages,
         array $imageUrls
     ): array {
+        $allowed = $this->refsOf($imageUrls);
+
         // role / content 由 ChatValidator 保證必填，這裡不需再防禦性檢查。
         $messages = array_map(
             fn (array $message): array => [
                 'role'    => $message['role'] === 'assistant' ? 'assistant' : 'user',
                 'content' => $message['content'],
-                'images'  => $this->urlsFor($this->allowedImagesOf($message, array_keys($imageUrls)), $imageUrls),
+                'images'  => $this->urlsFor($this->allowedImagesOf($message, $allowed), $imageUrls),
             ],
             $history
         );
@@ -342,15 +360,62 @@ class ChatController
     }
 
     /**
-     * 從整個請求裡挑出要送進推論的截圖秒數，由新到舊取到額度用完為止。
+     * 一張截圖的身分。second 是位置、checksum 才是識別——同一秒有 24–60 幀，
+     * 只用秒數當 key 會讓同一秒的不同畫面互相頂替。
      *
-     * 回傳的順序是「影片時間軸的先後」而不是「被挑中的先後」：同一則訊息裡夾著
-     * 好幾張圖時，照秒數排才對得上使用者截圖的順序。
+     * @param array{second: int, checksum: string} $ref
+     */
+    private function imageKey(array $ref): string
+    {
+        return $ref['second'] . ':' . $ref['checksum'];
+    }
+
+    /**
+     * 從 imageUrls 的 key 還原成 ref 陣列。
+     *
+     * @param array<string, string> $imageUrls
+     * @return array<int, array{second: int, checksum: string}>
+     */
+    private function refsOf(array $imageUrls): array
+    {
+        return array_map(
+            function (string $key): array {
+                [$second, $checksum] = explode(':', $key, 2);
+
+                return ['second' => (int) $second, 'checksum' => $checksum];
+            },
+            array_keys($imageUrls)
+        );
+    }
+
+    /**
+     * 把一筆請求裡的截圖正規化成 ref；形狀不對就丟掉。
+     *
+     * @return null|array{second: int, checksum: string}
+     */
+    private function toRef(mixed $image): ?array
+    {
+        if (!is_array($image) || !isset($image['second'], $image['checksum'])) {
+            return null;
+        }
+
+        return [
+            'second'   => (int) $image['second'],
+            'checksum' => (string) $image['checksum'],
+        ];
+    }
+
+    /**
+     * 從整個請求裡挑出要送進推論的截圖，由新到舊取到額度用完為止。
+     *
+     * 回傳的順序是「影片時間軸的先後」而不是「被挑中的先後」，同一秒再以 checksum
+     * 排序讓結果可預測。這個順序只影響可讀性——真正決定每則訊息裡圖片順序的是
+     * allowedImagesOf()，它保留訊息自己的順序。
      *
      * @param array<int, array<string, mixed>> $messages
-     * @return array<int, int>
+     * @return array<int, array{second: int, checksum: string}>
      */
-    private function collectImageSeconds(array $messages): array
+    private function collectImages(array $messages): array
     {
         $picked = [];
 
@@ -365,27 +430,37 @@ class ChatController
             // 那一格，而不是他最早截的那一格。
             $recentFirst = array_reverse(array_slice($images, 0, self::IMAGES_PER_MESSAGE));
 
-            foreach ($recentFirst as $second) {
+            foreach ($recentFirst as $image) {
                 if (count($picked) >= self::IMAGES_PER_REQUEST) {
                     break 2;
                 }
 
-                $picked[(int) $second] = true;
+                $ref = $this->toRef($image);
+
+                if ($ref === null) {
+                    continue;
+                }
+
+                $picked[$this->imageKey($ref)] = $ref;
             }
         }
 
-        $seconds = array_keys($picked);
-        sort($seconds);
+        $refs = array_values($picked);
+        usort(
+            $refs,
+            fn (array $a, array $b): int => [$a['second'], $a['checksum']]
+                <=> [$b['second'], $b['checksum']]
+        );
 
-        return $seconds;
+        return $refs;
     }
 
     /**
-     * 這則訊息附的截圖裡，有被 collectImageSeconds() 選中的那些。
+     * 這則訊息附的截圖裡，有被 collectImages() 選中的那些，並保留訊息自己的順序。
      *
      * @param array<string, mixed> $message
-     * @param array<int, int> $allowed
-     * @return array<int, int>
+     * @param array<int, array{second: int, checksum: string}> $allowed
+     * @return array<int, array{second: int, checksum: string}>
      */
     private function allowedImagesOf(array $message, array $allowed): array
     {
@@ -395,21 +470,40 @@ class ChatController
             return [];
         }
 
-        $seconds = array_values(array_unique(array_map('intval', $images)));
+        $allowedKeys = array_flip(array_map($this->imageKey(...), $allowed));
+        $seen = [];
+        $kept = [];
 
-        return array_values(array_intersect($seconds, $allowed));
+        foreach ($images as $image) {
+            $ref = $this->toRef($image);
+
+            if ($ref === null) {
+                continue;
+            }
+
+            $key = $this->imageKey($ref);
+
+            if (!isset($allowedKeys[$key]) || isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $kept[] = $ref;
+        }
+
+        return $kept;
     }
 
     /**
-     * @param array<int, int> $seconds
-     * @param array<int, string> $imageUrls
+     * @param array<int, array{second: int, checksum: string}> $refs
+     * @param array<string, string> $imageUrls
      * @return array<int, string>
      */
-    private function urlsFor(array $seconds, array $imageUrls): array
+    private function urlsFor(array $refs, array $imageUrls): array
     {
         return array_values(array_filter(array_map(
-            fn (int $second): ?string => $imageUrls[$second] ?? null,
-            $seconds
+            fn (array $ref): ?string => $imageUrls[$this->imageKey($ref)] ?? null,
+            $refs
         )));
     }
 
@@ -420,13 +514,13 @@ class ChatController
      * 沒提到畫面，而且找不出哪裡不對。附圖上傳本來就在送出之前完成，真的缺圖
      * 代表前端狀態壞了，早點講清楚比較好。
      *
-     * @param array<int, int> $seconds
+     * @param array<int, array{second: int, checksum: string}> $refs
      * @throws InvalidRequestException
      */
-    private function assertThumbnailsExist(string $mediaKey, array $seconds): void
+    private function assertThumbnailsExist(string $mediaKey, array $refs): void
     {
-        foreach ($seconds as $second) {
-            if (!$this->thumbnails->exists($mediaKey, $second)) {
+        foreach ($refs as $ref) {
+            if (!$this->thumbnails->exists($mediaKey, $ref['second'], $ref['checksum'])) {
                 throw new InvalidRequestException([
                     'images' => [__('validators.controllers.thumbnails.not_found')],
                 ]);
@@ -465,27 +559,29 @@ class ChatController
     }
 
     /**
-     * @param array<int, int> $imageSeconds 這則訊息附上的截圖秒數（只有使用者訊息會有）
+     * @param array<int, array{second: int, checksum: string}> $images
+     *                                                                 這則訊息附上的截圖（只有使用者訊息會有）
      */
     private function saveMessage(
         string $sessionId,
         string $role,
         string $content,
-        array $imageSeconds = []
+        array $images = []
     ): void {
         if ($content === '') {
             return;
         }
 
         // 截圖排在文字前面，跟送進推論時的順序一致，重播歷史才不會前後顛倒。
-        // 片段只記秒數：圖片在 S3 的位置由 (media_id, second) 推導，存 URL 會在
-        // 簽章過期後變成一排破圖，輸出時才由 ChatMessageResource 現簽。
+        // 片段記秒數與 checksum：圖片在 S3 的位置由這兩者加 media_id 推導，存 URL
+        // 會在簽章過期後變成一排破圖，輸出時才由 ChatMessageResource 現簽。
         $parts = array_map(
-            fn (int $second): array => [
-                'type'   => ChatMessage::PART_IMAGE,
-                'second' => $second,
+            fn (array $image): array => [
+                'type'     => ChatMessage::PART_IMAGE,
+                'second'   => $image['second'],
+                'checksum' => $image['checksum'],
             ],
-            array_values($imageSeconds)
+            array_values($images)
         );
 
         // AI 的回覆目前只有純文字，所以片段就是單一 text。thinking 與 tool_call

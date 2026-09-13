@@ -39,11 +39,18 @@ use OpenApi\Attributes as OAT;
                     new OAT\Property(property: 'is_error', type: 'boolean', nullable: true, description: 'tool_result'),
                     new OAT\Property(property: 'second', type: 'integer', nullable: true, description: 'image', example: 125),
                     new OAT\Property(
+                        property: 'checksum',
+                        type: 'string',
+                        nullable: true,
+                        description: 'image — SHA-256 of the frame; this is what identifies it',
+                        example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+                    ),
+                    new OAT\Property(
                         property: 'url',
                         type: 'string',
                         nullable: true,
                         description: 'image — pre-signed, valid 24 hours. Re-fetch the session instead of storing it.',
-                        example: 'https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=...'
+                        example: 'https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.e3b0c442....jpg?X-Amz-Signature=...'
                     ),
                 ],
                 type: 'object'

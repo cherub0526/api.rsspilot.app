@@ -50,7 +50,7 @@ class ChatMessageResource extends JsonResource
     /**
      * 幫 image 片段補上當下簽出的 URL。
      *
-     * 片段本身只存秒數，簽章是有效期限 24 小時的東西——存進 parts 的話，隔天回頭
+     * 片段本身只存秒數與 checksum，簽章是有效期限 24 小時的東西——存進 parts 的話，隔天回頭
      * 看同一段對話就是一排破圖。代價是每次輸出都要簽一次，但簽章是本機運算，
      * 不會多打一次 S3。
      *
@@ -62,7 +62,11 @@ class ChatMessageResource extends JsonResource
         $mediaId = null;
 
         foreach ($parts as $index => $part) {
-            if (($part['type'] ?? null) !== ChatMessage::PART_IMAGE || !isset($part['second'])) {
+            if (($part['type'] ?? null) !== ChatMessage::PART_IMAGE) {
+                continue;
+            }
+
+            if (!isset($part['second'], $part['checksum'])) {
                 continue;
             }
 
@@ -74,8 +78,11 @@ class ChatMessageResource extends JsonResource
                 continue;
             }
 
-            $parts[$index]['url'] = app(ThumbnailService::class)
-                ->url((string) $mediaId, (int) $part['second']);
+            $parts[$index]['url'] = app(ThumbnailService::class)->url(
+                (string) $mediaId,
+                (int) $part['second'],
+                (string) $part['checksum']
+            );
         }
 
         return $parts;

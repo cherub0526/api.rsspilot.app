@@ -40,6 +40,7 @@ return [
             'summary_required'      => 'The mind map can only be generated once the summary is ready.',
         ],
         'thumbnails' => [
+            'checksum_mismatch' => 'The checksum does not match the uploaded file.',
             'not_found'    => 'No screenshot exists at that second; capture it again before sending.',
             'out_of_range' => 'The requested second is beyond the length of the video.',
         ],
@@ -114,10 +115,19 @@ return [
                 'string'   => 'The content must be a string.',
             ],
             'images' => [
-                'array'   => 'The screenshots must be an array.',
-                'max'     => 'A message may carry at most 4 screenshots.',
-                'integer' => 'The screenshot second must be an integer.',
-                'min'     => 'The screenshot second may not be less than 0.',
+                'array' => 'The screenshots must be an array.',
+                'max'   => 'A message may carry at most 4 screenshots.',
+                'second' => [
+                    'required' => 'The screenshot second is required.',
+                    'integer'  => 'The screenshot second must be an integer.',
+                    'min'      => 'The screenshot second may not be less than 0.',
+                    'max'      => 'The screenshot second is beyond the addressable range.',
+                ],
+                'checksum' => [
+                    'required' => 'The screenshot checksum is required.',
+                    'string'   => 'The screenshot checksum must be a string.',
+                    'regex'    => 'The screenshot checksum must be a 64-character lowercase hex SHA-256.',
+                ],
             ],
         ],
     ],
@@ -334,6 +344,11 @@ return [
             'integer'  => 'The second must be an integer.',
             'min'      => 'The second may not be less than 0.',
             'max'      => 'The second is beyond the addressable range.',
+        ],
+        'checksum' => [
+            'required' => 'The screenshot checksum is required.',
+            'string'   => 'The checksum must be a string.',
+            'regex'    => 'The checksum must be a 64-character lowercase hex SHA-256.',
         ],
     ],
 ];

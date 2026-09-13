@@ -40,6 +40,7 @@ return [
             'summary_required'      => '摘要完成后才能生成思维导图。',
         ],
         'thumbnails' => [
+            'checksum_mismatch' => '截图的 checksum 与文件内容不符。',
             'not_found'    => '找不到指定秒数的截图，请重新截图后再发送。',
             'out_of_range' => '截图的秒数超出视频长度。',
         ],
@@ -114,10 +115,19 @@ return [
                 'string'   => '内容必须是字符串。',
             ],
             'images' => [
-                'array'   => '截图必须是数组。',
-                'max'     => '一条消息最多只能附上 4 张截图。',
-                'integer' => '截图的秒数必须是整数。',
-                'min'     => '截图的秒数不能小于 0。',
+                'array' => '截图必须是数组。',
+                'max'   => '一条消息最多只能附上 4 张截图。',
+                'second' => [
+                    'required' => '截图的秒数为必填。',
+                    'integer'  => '截图的秒数必须是整数。',
+                    'min'      => '截图的秒数不能小于 0。',
+                    'max'      => '截图的秒数超出可处理的范围。',
+                ],
+                'checksum' => [
+                    'required' => '截图的 checksum 为必填。',
+                    'string'   => '截图的 checksum 必须是字符串。',
+                    'regex'    => '截图的 checksum 必须是 64 位小写十六进制的 SHA-256。',
+                ],
             ],
         ],
     ],
@@ -334,6 +344,11 @@ return [
             'integer'  => '秒数必须是整数。',
             'min'      => '秒数不能小于 0。',
             'max'      => '秒数超出可处理的范围。',
+        ],
+        'checksum' => [
+            'required' => '请提供截图的 checksum。',
+            'string'   => 'checksum 必须是字符串。',
+            'regex'    => 'checksum 必须是 64 位小写十六进制的 SHA-256。',
         ],
     ],
 ];

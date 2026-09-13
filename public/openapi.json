@@ -1247,11 +1247,24 @@
                                                     "example": "What is this video about?"
                                                 },
                                                 "images": {
-                                                    "description": "Seconds of player screenshots attached to this turn. Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole request are the ones actually sent to the model.",
+                                                    "description": "Player screenshots attached to this turn, each identified by its second and the SHA-256 of its bytes (a second holds many frames). Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole request are the ones actually sent to the model.",
                                                     "type": "array",
                                                     "items": {
-                                                        "type": "integer",
-                                                        "example": 125
+                                                        "required": [
+                                                            "second",
+                                                            "checksum"
+                                                        ],
+                                                        "properties": {
+                                                            "second": {
+                                                                "type": "integer",
+                                                                "example": 125
+                                                            },
+                                                            "checksum": {
+                                                                "type": "string",
+                                                                "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                                                            }
+                                                        },
+                                                        "type": "object"
                                                     },
                                                     "nullable": true
                                                 }
@@ -1528,12 +1541,12 @@
                 ]
             }
         },
-        "/v1/media/{mediaId}/thumbnails/{second}": {
+        "/v1/media/{mediaId}/thumbnails/{second}/{checksum}": {
             "get": {
                 "tags": [
                     "Media"
                 ],
-                "summary": "Get the cached screenshot for one second of the video",
+                "summary": "Check whether this exact frame is already stored",
                 "description": "GET /v1/media/{mediaId}/thumbnails/{second}.\n\n取這一秒已存在的截圖。沒有就是 404，前端據此決定要不要上傳。",
                 "operationId": "api.v1.media.thumbnails.show",
                 "parameters": [
@@ -1542,11 +1555,14 @@
                     },
                     {
                         "$ref": "#/components/parameters/second"
+                    },
+                    {
+                        "$ref": "#/components/parameters/checksum"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "The screenshot already exists",
+                        "description": "This frame is already stored; upload can be skipped",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -1575,7 +1591,7 @@
                     "Media"
                 ],
                 "summary": "Upload the screenshot for one second of the video",
-                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這一秒的截圖。已經有了就原樣回傳既有的那張，**不覆寫**——這張圖是所有\n使用者在那一秒共同看到的畫面，允許覆寫等於允許後來的人替換掉它。",
+                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。",
                 "operationId": "api.v1.media.thumbnails.store",
                 "parameters": [
                     {
@@ -1589,7 +1605,8 @@
                             "schema": {
                                 "required": [
                                     "file",
-                                    "second"
+                                    "second",
+                                    "checksum"
                                 ],
                                 "properties": {
                                     "file": {
@@ -1598,9 +1615,14 @@
                                         "format": "binary"
                                     },
                                     "second": {
-                                        "description": "Whole-second offset. Must not exceed the video duration, nor 999999 — the GET route only addresses up to 6 digits.",
+                                        "description": "Whole-second offset. Must not exceed the video duration, nor 999999 — the GET route only addresses up to 6 digits. Used for ordering and readability, not for identity.",
                                         "type": "integer",
                                         "example": 125
+                                    },
+                                    "checksum": {
+                                        "description": "Lowercase hex SHA-256 of the uploaded bytes. Recomputed and compared server-side; a mismatch is rejected with 422.",
+                                        "type": "string",
+                                        "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                                     }
                                 },
                                 "type": "object"
@@ -1620,7 +1642,7 @@
                         }
                     },
                     "200": {
-                        "description": "Already captured by someone else; the existing image is returned untouched",
+                        "description": "These exact bytes are already stored; the existing URL is returned",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -3579,10 +3601,16 @@
                                     "example": 125,
                                     "nullable": true
                                 },
+                                "checksum": {
+                                    "description": "image — SHA-256 of the frame; this is what identifies it",
+                                    "type": "string",
+                                    "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                    "nullable": true
+                                },
                                 "url": {
                                     "description": "image — pre-signed, valid 24 hours. Re-fetch the session instead of storing it.",
                                     "type": "string",
-                                    "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=...",
+                                    "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.e3b0c442....jpg?X-Amz-Signature=...",
                                     "nullable": true
                                 }
                             },
@@ -3957,10 +3985,15 @@
                         "type": "integer",
                         "example": 125
                     },
+                    "checksum": {
+                        "description": "Lowercase hex SHA-256 of the JPEG bytes — this is what identifies the frame.",
+                        "type": "string",
+                        "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    },
                     "url": {
                         "description": "Pre-signed S3 URL, valid for 24 hours. Re-request instead of storing it.",
                         "type": "string",
-                        "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.jpg?X-Amz-Signature=..."
+                        "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.e3b0c442....jpg?X-Amz-Signature=..."
                     }
                 },
                 "type": "object"
@@ -4196,6 +4229,16 @@
                 "schema": {
                     "type": "string",
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
+                }
+            },
+            "checksum": {
+                "name": "checksum",
+                "in": "path",
+                "description": "Lowercase hex SHA-256 of the JPEG bytes",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                 }
             },
             "mediaId": {

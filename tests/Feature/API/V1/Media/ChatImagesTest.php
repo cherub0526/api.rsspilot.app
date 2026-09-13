@@ -63,21 +63,38 @@ class ChatImagesTest extends TestCase
         ]);
     }
 
-    private function path(Media $media, int $second): string
+    private function path(Media $media, int $second, string $checksum): string
     {
-        return sprintf('media/%s/thumbnails/%06d.jpg', $media->id, $second);
+        return sprintf('media/%s/thumbnails/%06d.%s.jpg', $media->id, $second, $checksum);
     }
 
+    /** 一張截圖的 checksum；以秒數當 seed 讓測試裡好對照。 */
+    private function sum(int $second, string $variant = ''): string
+    {
+        return hash('sha256', "frame-{$second}-{$variant}");
+    }
+
+    /** 把這些畫面放進 fake S3，等同於「使用者已經截過」。 */
     private function captureAt(Media $media, int ...$seconds): void
     {
         foreach ($seconds as $second) {
-            Storage::disk('s3')->put($this->path($media, $second), 'jpeg-bytes');
+            Storage::disk('s3')->put($this->path($media, $second, $this->sum($second)), 'bytes');
         }
     }
 
-    private function signed(Media $media, int $second): string
+    private function signed(Media $media, int $second, string $variant = ''): string
     {
-        return 'https://signed.test/' . $this->path($media, $second);
+        return 'https://signed.test/' . $this->path($media, $second, $this->sum($second, $variant));
+    }
+
+    /**
+     * 請求裡的 images 條目。
+     *
+     * @return array{second: int, checksum: string}
+     */
+    private function ref(int $second, string $variant = ''): array
+    {
+        return ['second' => $second, 'checksum' => $this->sum($second, $variant)];
     }
 
     // ── 送進推論 ───────────────────────────────────────────────
@@ -94,7 +111,7 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '這一格在講什麼？', 'images' => [125]],
+                ['role' => 'user', 'content' => '這一格在講什麼？', 'images' => [$this->ref(125)]],
             ],
         ])->assertStatus(200);
 
@@ -133,9 +150,9 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '第一問', 'images' => [10, 20]],
+                ['role' => 'user', 'content' => '第一問', 'images' => [$this->ref(10), $this->ref(20)]],
                 ['role' => 'assistant', 'content' => '第一答'],
-                ['role' => 'user', 'content' => '第二問', 'images' => [30, 40, 50]],
+                ['role' => 'user', 'content' => '第二問', 'images' => [$this->ref(30), $this->ref(40), $this->ref(50)]],
             ],
         ])->assertStatus(200);
 
@@ -163,8 +180,8 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '先看這格', 'images' => [10]],
-                ['role' => 'user', 'content' => '再看這格', 'images' => [20]],
+                ['role' => 'user', 'content' => '先看這格', 'images' => [$this->ref(10)]],
+                ['role' => 'user', 'content' => '再看這格', 'images' => [$this->ref(20)]],
             ],
         ])->assertStatus(200);
 
@@ -173,6 +190,70 @@ class ChatImagesTest extends TestCase
             [$this->signed($media, 10), $this->signed($media, 20)],
             $streamer->imagesAt(0)
         );
+    }
+
+    /**
+     * 同一秒的兩張不同畫面要能各自附上、各自送進推論。
+     *
+     * 這是內容定址的整個理由：硬切前後同屬一秒，秒級 key 會讓兩張圖互相頂替，
+     * 使用者看著切換後的畫面、AI 卻收到切換前那張。
+     */
+    public function testTwoDifferentFramesInTheSameSecondBothReachTheModel(): void
+    {
+        $this->fakeS3();
+        $streamer = $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+
+        Storage::disk('s3')->put($this->path($media, 125, $this->sum(125, 'a')), 'frame-a');
+        Storage::disk('s3')->put($this->path($media, 125, $this->sum(125, 'b')), 'frame-b');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                [
+                    'role'    => 'user',
+                    'content' => '切換前後差在哪？',
+                    'images'  => [$this->ref(125, 'a'), $this->ref(125, 'b')],
+                ],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            [$this->signed($media, 125, 'a'), $this->signed($media, 125, 'b')],
+            $streamer->imagesAt(0)
+        );
+
+        $message = ChatMessage::where('role', ChatMessage::ROLE_USER)->firstOrFail();
+        $this->assertSame([
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 125, 'checksum' => $this->sum(125, 'a')],
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 125, 'checksum' => $this->sum(125, 'b')],
+            ['type' => ChatMessage::PART_TEXT, 'text' => '切換前後差在哪？'],
+        ], $message->contentParts());
+    }
+
+    /** checksum 對不上任何已存物件時整個請求擋下來，即使那一秒有別的畫面。 */
+    public function testUnknownChecksumIsRejectedEvenWhenTheSecondHasOtherFrames(): void
+    {
+        $this->fakeS3();
+        $streamer = $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+
+        Storage::disk('s3')->put($this->path($media, 125, $this->sum(125, 'a')), 'frame-a');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '這格', 'images' => [$this->ref(125, 'nope')]],
+            ],
+        ])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['images']]);
+
+        $this->assertSame(0, $streamer->calls);
     }
 
     /** 同一秒重複附上沒有意義，送進推論與落庫都只該留一張。 */
@@ -188,7 +269,7 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '這格', 'images' => [125, 125]],
+                ['role' => 'user', 'content' => '這格', 'images' => [$this->ref(125), $this->ref(125)]],
             ],
         ])->assertStatus(200);
 
@@ -196,7 +277,7 @@ class ChatImagesTest extends TestCase
 
         $message = ChatMessage::where('role', ChatMessage::ROLE_USER)->firstOrFail();
         $this->assertSame([
-            ['type' => ChatMessage::PART_IMAGE, 'second' => 125],
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 125, 'checksum' => $this->sum(125)],
             ['type' => ChatMessage::PART_TEXT, 'text' => '這格'],
         ], $message->contentParts());
     }
@@ -215,15 +296,15 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '比較這兩格', 'images' => [60, 125]],
+                ['role' => 'user', 'content' => '比較這兩格', 'images' => [$this->ref(60), $this->ref(125)]],
             ],
         ])->assertStatus(200);
 
         $message = ChatMessage::where('role', ChatMessage::ROLE_USER)->firstOrFail();
 
         $this->assertSame([
-            ['type' => ChatMessage::PART_IMAGE, 'second' => 60],
-            ['type' => ChatMessage::PART_IMAGE, 'second' => 125],
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 60, 'checksum' => $this->sum(60)],
+            ['type' => ChatMessage::PART_IMAGE, 'second' => 125, 'checksum' => $this->sum(125)],
             ['type' => ChatMessage::PART_TEXT, 'text' => '比較這兩格'],
         ], $message->contentParts());
 
@@ -244,7 +325,7 @@ class ChatImagesTest extends TestCase
         $this->captureAt($media, 125);
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [125]]],
+            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [$this->ref(125)]]],
         ])->assertStatus(200);
 
         $session = ChatSession::firstOrFail();
@@ -256,6 +337,7 @@ class ChatImagesTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('messages.0.parts.0.type', ChatMessage::PART_IMAGE)
             ->assertJsonPath('messages.0.parts.0.second', 125)
+            ->assertJsonPath('messages.0.parts.0.checksum', $this->sum(125))
             ->assertJsonPath('messages.0.parts.0.url', $this->signed($media, 125));
     }
 
@@ -271,7 +353,7 @@ class ChatImagesTest extends TestCase
         $this->captureAt($media, 125);
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [125]]],
+            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [$this->ref(125)]]],
         ])->assertStatus(200);
 
         $this->json('GET', route('api.v1.users.sessions.index'))
@@ -296,7 +378,7 @@ class ChatImagesTest extends TestCase
         $media = $this->freeMedia();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [125]]],
+            'messages' => [['role' => 'user', 'content' => '這一格？', 'images' => [$this->ref(125)]]],
         ])
             ->assertStatus(422)
             ->assertJsonStructure(['messages' => ['images']]);
@@ -317,7 +399,13 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '太多了', 'images' => [1, 2, 3, 4, 5]],
+                [
+                    'role'    => 'user',
+                    'content' => '太多了',
+                    'images'  => [
+                        $this->ref(1), $this->ref(2), $this->ref(3), $this->ref(4), $this->ref(5),
+                    ],
+                ],
             ],
         ])->assertStatus(422);
     }
@@ -332,7 +420,7 @@ class ChatImagesTest extends TestCase
         $media = $this->freeMedia();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [['role' => 'user', 'content' => '壞資料', 'images' => [-1]]],
+            'messages' => [['role' => 'user', 'content' => '壞資料', 'images' => [$this->ref(-1)]]],
         ])->assertStatus(422);
     }
 
@@ -347,7 +435,11 @@ class ChatImagesTest extends TestCase
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
             'messages' => [
-                ['role' => 'user', 'content' => '壞資料', 'images' => ['abc']],
+                [
+                    'role'    => 'user',
+                    'content' => '壞資料',
+                    'images'  => [['second' => 'abc', 'checksum' => $this->sum(1)]],
+                ],
             ],
         ])->assertStatus(422);
     }

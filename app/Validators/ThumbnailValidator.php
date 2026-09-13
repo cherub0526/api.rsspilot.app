@@ -32,6 +32,9 @@ class ThumbnailValidator extends BaseValidator
             // 比對 media.duration 的上界屬於業務判斷，留在 Controller；這裡擋的是
             // 定址上界——超過 6 位的秒數 GET 的路由永遠匹配不到（見 MAX_SECOND）。
             'second' => 'required|integer|min:0|max:' . ThumbnailService::MAX_SECOND,
+            // 路徑由 checksum 決定，所以格式要嚴格（小寫 hex、64 位）。值本身
+            // 不採信，Controller 會以檔案內容重算比對。
+            'checksum' => ['required', 'string', 'regex:' . ThumbnailService::CHECKSUM_REGEX],
         ];
 
         return $this;
