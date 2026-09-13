@@ -37,6 +37,17 @@ class ChatController
     use ResolvesUserPlan;
 
     /**
+     * 帶圖提問要扣幾點每日額度。
+     *
+     * vision 推論的單次成本明顯高於純文字，扣一樣的點數等於讓帶圖的人用同樣的
+     * 額度買到更貴的東西。純文字仍是 1 點。
+     *
+     * 剩餘不足時整個請求被擋下來、不做部分扣點——所以剩 1 點的使用者附了圖就會
+     * 拿到 429，即使畫面上顯示「還有 1 次」。前端因此在附圖時會標明這則要扣 2 點。
+     */
+    public const int QUOTA_COST_WITH_IMAGES = 2;
+
+    /**
      * 一則使用者訊息最多帶幾張截圖，見 ChatValidator。
      */
     private const int IMAGES_PER_MESSAGE = 4;
@@ -141,7 +152,8 @@ class ChatController
                 headers: [
                     new OAT\Header(
                         header: 'X-RateLimit-Limit',
-                        description: 'Daily question limit of the current plan. Absent when the plan is unlimited.',
+                        description: 'Daily question limit of the current plan. A question carrying screenshots '
+                            . 'costs 2 instead of 1. Absent when the plan is unlimited.',
                         schema: new OAT\Schema(type: 'integer', example: 3)
                     ),
                     new OAT\Header(
@@ -207,7 +219,10 @@ class ChatController
 
         // 額度在建立 session 之前就扣，被擋下來的請求才不會留下一堆
         // 只有提問、沒有回應的空 session。
-        $quota = $this->quota->consume($request->user());
+        $quota = $this->quota->consume(
+            $request->user(),
+            $imageRefs === [] ? 1 : self::QUOTA_COST_WITH_IMAGES
+        );
 
         $lastMessage = collect($params['messages'])->last() ?? [];
         $userMessage = $lastMessage['content'] ?? '';

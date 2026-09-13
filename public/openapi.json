@@ -1284,7 +1284,7 @@
                         "description": "AI response dispatched via SSE events",
                         "headers": {
                             "X-RateLimit-Limit": {
-                                "description": "Daily question limit of the current plan. Absent when the plan is unlimited.",
+                                "description": "Daily question limit of the current plan. A question carrying screenshots costs 2 instead of 1. Absent when the plan is unlimited.",
                                 "schema": {
                                     "type": "integer",
                                     "example": 3

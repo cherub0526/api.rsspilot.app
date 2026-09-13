@@ -178,7 +178,7 @@ The rule, the reasoning, and edge cases.
 1. `POST /v1/media/{mediaId}/thumbnails` —— 上傳截圖
 2. `POST /v1/media/{mediaId}/chat`，而且只在 `images` 非空時 —— 帶圖提問
 
-第二處才是真正必要的。截圖是內容定址的共用物件，理論上可以引用別人已經存過的同一張畫面直接問，完全跳過上傳；而**成本落在推論而不是儲存**——vision 的單次成本明顯高於純文字，且每日 `chat_limit` 沒有為帶圖加權（見 `docs/lore/prompts/business-rules.md`〈帶圖提問有兩層上限〉）。只擋上傳等於把閘門設在便宜的那一端。
+第二處才是真正必要的。截圖是內容定址的共用物件，理論上可以引用別人已經存過的同一張畫面直接問，完全跳過上傳；而**成本落在推論而不是儲存**——vision 的單次成本明顯高於純文字（每日額度因此為帶圖提問扣 2 點，見 `docs/lore/prompts/business-rules.md`〈帶圖提問扣 2 點〉）。只擋上傳等於把閘門設在便宜的那一端。
 
 純文字提問完全不受影響，所以條件是「有帶圖才檢查」而不是「這個方案能不能用 chat」。
 

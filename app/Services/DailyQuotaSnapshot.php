@@ -23,12 +23,16 @@ final class DailyQuotaSnapshot
      * @param CarbonInterface $resetAt 額度重置時刻（隔日 00:00，額度時區）
      * @param string $quotaDate 這份狀態所屬的額度日（Y-m-d）。退還額度時要用它，
      *                          否則跨過午夜才失敗的串流會退到隔天的額度上
+     * @param int $cost 這次扣了幾點。理由同 quotaDate——退還時讀這裡而不是讓呼叫端
+     *                  再傳一次，consume 與 release 就不可能對不起來。由 snapshot()
+     *                  產出的唯讀狀態沒有扣點行為，維持預設值 1 且不會被讀到
      */
     public function __construct(
         public readonly int $limit,
         public readonly int $used,
         public readonly CarbonInterface $resetAt,
         public readonly string $quotaDate,
+        public readonly int $cost = 1,
     ) {
     }
 

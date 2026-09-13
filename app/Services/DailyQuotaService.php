@@ -65,46 +65,56 @@ abstract class DailyQuotaService
     }
 
     /**
-     * 扣掉一次額度並回傳扣完後的狀態。
+     * 扣掉額度並回傳扣完後的狀態。
      *
      * 判斷與遞增在同一個交易、同一把列鎖裡完成——否則同一位使用者併發送出的請求
      * 會各自讀到還沒遞增的數字，免費方案的次數可以被刷成任意多次。
      *
-     * @throws Exception 當日額度已用盡（此時不會扣點），實際型別由子類別決定
+     * @param int $cost 這次要扣幾點。不是每種請求都等價——帶圖提問的 vision 推論
+     *                  明顯貴於純文字，所以由呼叫端決定權重（見
+     *                  ChatController::QUOTA_COST_WITH_IMAGES）。
+     *                  剩餘不足 $cost 就整個擋下來，不做部分扣點。
+     * @throws Exception 當日額度不足（此時不會扣點），實際型別由子類別決定
      */
-    public function consume(User $user): DailyQuotaSnapshot
+    public function consume(User $user, int $cost = 1): DailyQuotaSnapshot
     {
+        $cost = max(1, $cost);
         $limit = $this->limitFor($user);
         $date = $this->quotaDate();
         $userId = (string) $user->getKey();
 
         $this->ensureRow($userId, $date);
 
-        $used = DB::transaction(function () use ($userId, $date, $limit): int {
+        $used = DB::transaction(function () use ($userId, $date, $limit, $cost): int {
             $usage = $this->lockRow($userId, $date);
+            $current = (int) $usage->getAttribute('count');
 
             // 超限就在交易裡拋出，遞增連同整個交易一起回滾：被擋下來的請求
             // 不該留下用量，否則使用者每重試一次，usage 顯示的數字就再長一格。
-            if ($limit > 0 && (int) $usage->getAttribute('count') >= $limit) {
+            //
+            // 判斷是 used + cost > limit 而不是 used >= limit：剩 1 點時不該讓
+            // 一個要扣 2 點的請求通過。cost 為 1 時兩者等價，行為不變。
+            if ($limit > 0 && $current + $cost > $limit) {
                 throw $this->exceededException(
-                    new DailyQuotaSnapshot($limit, (int) $usage->getAttribute('count'), $this->resetAt(), $date)
+                    new DailyQuotaSnapshot($limit, $current, $this->resetAt(), $date, $cost)
                 );
             }
 
             // increment() 會一併把記憶體裡的 count 加上去，不要再自己加一次。
-            $usage->increment('count');
+            $usage->increment('count', $cost);
 
             return (int) $usage->getAttribute('count');
         });
 
-        return new DailyQuotaSnapshot($limit, $used, $this->resetAt(), $date);
+        return new DailyQuotaSnapshot($limit, $used, $this->resetAt(), $date, $cost);
     }
 
     /**
-     * 把 consume() 扣掉的那一次還回去。
+     * 把 consume() 扣掉的那幾點還回去。
      *
-     * 要傳入 consume() 當時回傳的 snapshot，不能重新算一次日期：串流可能跨過
-     * 午夜才失敗，那時候重算會退到隔天的額度上。
+     * 要傳入 consume() 當時回傳的 snapshot，不能重新算一次日期或權重：串流可能跨過
+     * 午夜才失敗（重算日期會退到隔天的額度上），而扣了 2 點只退 1 點同樣是錯的。
+     * snapshot 把兩者都帶著，所以這裡不接受任何額外參數。
      */
     public function release(User $user, DailyQuotaSnapshot $consumed): void
     {
@@ -112,12 +122,14 @@ abstract class DailyQuotaService
 
         DB::transaction(function () use ($userId, $consumed): void {
             $usage = $this->lockRow($userId, $consumed->quotaDate);
+            $current = (int) $usage->getAttribute('count');
 
-            if ((int) $usage->getAttribute('count') <= 0) {
+            if ($current <= 0) {
                 return;
             }
 
-            $usage->decrement('count');
+            // 退不到負數：降級或人工改過用量時，count 可能已經比當初扣的還少。
+            $usage->decrement('count', min($consumed->cost, $current));
         });
     }
 
