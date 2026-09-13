@@ -40,7 +40,7 @@ return [
             'summary_required'      => '摘要完成後才能產生心智圖。',
         ],
         'thumbnails' => [
-            'plan_required' => '播放器截圖需要 Pro 以上的方案。',
+            'plan_required' => '播放器截圖是 Advance 方案的功能。',
             'checksum_mismatch' => '截圖的 checksum 與檔案內容不符。',
             'not_found'    => '找不到指定秒數的截圖，請重新截圖後再送出。',
             'out_of_range' => '截圖的秒數超出影片長度。',

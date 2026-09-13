@@ -167,11 +167,13 @@ The rule, the reasoning, and edge cases.
 
 另外兩道防線不變：`second` 要落在 `media.duration` 內（`duration` 為 0 代表還沒抓到片長，此時上界由 `MAX_SECOND` 接手），以及 `resolveMedia()` 的存取權檢查照常跑（共用的是圖，不是看影片的權限）。
 
-## 截圖是 Pro 以上的功能，閘門設在兩處
+## 截圖只開放給 Advance，閘門設在兩處
 
 `code:` `app/Http/Controllers/Concerns/ResolvesUserPlan.php` → `assertScreenshotEnabled()` · `updated:` `2026-09-13` · `status:` `active`
 
-判準是 `plans.screenshot_enabled`（Free 為 false，付費方案為 true），不是比對方案名稱——那個欄位本來就是產品用來表達權益的方式，寫死「Pro 以上」會在新增方案或調整權益時，程式與資料各說各話。沒有方案時一併擋下：無從判斷權益的預設是不給。
+判準是 `plans.screenshot_enabled`（目前只有 Advance 為 true），不是比對方案名稱——那個欄位本來就是產品用來表達權益的方式，寫死方案名稱會在新增方案或調整權益時，程式與資料各說各話。沒有方案時一併擋下：無從判斷權益的預設是不給。
+
+**權益範圍改過一次。** 最初開放給所有付費方案（`add_screenshot_enabled_to_plans_table` 依 `download_enabled` 回填），後來收斂成只有 Advance（`restrict_screenshots_to_advance_plan`）。因為執行期只讀旗標，這次調整沒有動到任何一行判斷邏輯——只有資料與文案。那兩支 migration 的 `where('title', ...)` 是一次性資料修正要指名既有資料列，與執行期的判斷無關。
 
 **擋在兩個地方，不是一個：**
 
@@ -186,4 +188,4 @@ The rule, the reasoning, and edge cases.
 
 **歷史裡的截圖不受影響。** `ChatMessageResource` 簽 URL 時不看方案：降級之後回頭看舊對話仍該看得到圖，讓歷史破圖不是權益該有的表達方式。`ScreenshotPlanGateTest::testDowngradedUserStillSeesScreenshotsInHistory` 釘住這件事。
 
-前端的 `captureLocked` 只是把鈕變灰、掛上 Pro 標記（刻意不隱藏——藏起來使用者就不知道有這個功能，也不會想升級），真正的判定在伺服器。
+前端的 `captureLocked` 只是把鈕變灰、掛上 Advance 標記（刻意不隱藏——藏起來使用者就不知道有這個功能，也不會想升級），真正的判定在伺服器。

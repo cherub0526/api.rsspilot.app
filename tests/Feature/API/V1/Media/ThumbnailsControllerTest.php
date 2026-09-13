@@ -30,7 +30,7 @@ class ThumbnailsControllerTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * 截圖是 Pro 以上的功能（plans.screenshot_enabled），所以每個案例都需要一個
+     * 截圖是 Advance 方案的功能（plans.screenshot_enabled），所以每個案例都需要一個
      * 有開通的方案，否則會先被方案閘門擋在 422。
      *
      * 沒有訂閱時的預設方案是「有一筆月費 0 的價格」的那一筆，fixture 因此要長成
@@ -41,7 +41,7 @@ class ThumbnailsControllerTest extends TestCase
         parent::setUp();
 
         $plan = Plan::factory()->create([
-            'title'              => 'Pro',
+            'title'              => 'Advance',
             'screenshot_enabled' => true,
             'sort'               => 0,
         ]);

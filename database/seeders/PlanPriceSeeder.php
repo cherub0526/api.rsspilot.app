@@ -44,9 +44,10 @@ class PlanPriceSeeder extends Seeder
                 'agent_enabled'          => false,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
-                'screenshot_enabled'     => true,
-                'ai_quality'             => Plan::AI_QUALITY_ADVANCED,
-                'ai_routing'             => [
+                // 截圖只開放給 Advance
+                'screenshot_enabled' => false,
+                'ai_quality'         => Plan::AI_QUALITY_ADVANCED,
+                'ai_routing'         => [
                     'model'    => 'openrouter/auto',
                     'plugins'  => [['id' => 'auto-router', 'cost_tier' => 'low']],
                     'provider' => ['max_price' => ['prompt' => 0.5, 'completion' => 2]],

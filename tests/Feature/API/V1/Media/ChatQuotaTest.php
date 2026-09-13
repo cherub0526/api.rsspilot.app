@@ -91,7 +91,7 @@ class ChatQuotaTest extends TestCase
     {
         return Plan::withoutEvents(function () use ($chatLimit) {
             $plan = Plan::factory()->create([
-                'title'              => 'Pro',
+                'title'              => 'Advance',
                 'chat_limit'         => $chatLimit,
                 'screenshot_enabled' => true,
                 'status'             => Plan::STATUS_ACTIVE,

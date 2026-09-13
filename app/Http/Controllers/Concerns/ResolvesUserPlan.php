@@ -78,7 +78,7 @@ trait ResolvesUserPlan
     }
 
     /**
-     * 播放器截圖是付費功能，擋下方案沒開通的使用者。
+     * 播放器截圖是 Advance 方案的功能，擋下方案沒開通的使用者。
      *
      * 判準與前兩道相同，用 plans.screenshot_enabled 而不是方案名稱。
      * 沒有方案時一併擋下：無從判斷權益的預設是不給。

@@ -22,7 +22,7 @@ use Hypervel\Foundation\Testing\RefreshDatabase;
 /**
  * 播放器截圖的方案門檻。
  *
- * 判準是 plans.screenshot_enabled——Free 為 false，Pro 以上為 true。閘門在兩處：
+ * 判準是 plans.screenshot_enabled——只有 Advance 為 true。閘門在兩處：
  * 上傳截圖，以及帶圖提問。真正的成本在後者（vision 推論明顯貴於純文字，而每日
  * chat 額度沒有為帶圖加權），所以只擋上傳是不夠的。
  *
@@ -42,7 +42,7 @@ class ScreenshotPlanGateTest extends TestCase
     private function defaultPlan(bool $screenshotEnabled): Plan
     {
         $plan = Plan::factory()->create([
-            'title'              => $screenshotEnabled ? 'Pro' : 'Free',
+            'title'              => $screenshotEnabled ? 'Advance' : 'Free',
             'screenshot_enabled' => $screenshotEnabled,
             'sort'               => 0,
         ]);
@@ -114,7 +114,7 @@ class ScreenshotPlanGateTest extends TestCase
 
     // ── 上傳 ───────────────────────────────────────────────────
 
-    public function testFreePlanCannotUploadScreenshots(): void
+    public function testPlanWithoutScreenshotsCannotUpload(): void
     {
         $this->fakeS3();
         $this->defaultPlan(false);
@@ -127,7 +127,7 @@ class ScreenshotPlanGateTest extends TestCase
         $this->assertSame([], Storage::disk('s3')->allFiles());
     }
 
-    public function testPaidPlanCanUploadScreenshots(): void
+    public function testAdvancePlanCanUploadScreenshots(): void
     {
         $this->fakeS3();
         $this->defaultPlan(true);
@@ -154,7 +154,7 @@ class ScreenshotPlanGateTest extends TestCase
      * 只擋上傳是不夠的：截圖是內容定址的共用物件，理論上能引用別人存過的同一張
      * 畫面直接問，而推論才是貴的那一段。
      */
-    public function testFreePlanCannotAskWithAnExistingScreenshot(): void
+    public function testPlanWithoutScreenshotsCannotAskWithAnExistingScreenshot(): void
     {
         $this->fakeS3();
         $this->defaultPlan(false);
@@ -176,7 +176,7 @@ class ScreenshotPlanGateTest extends TestCase
         $this->assertSame(0, ChatSession::count());
     }
 
-    public function testPaidPlanCanAskWithAScreenshot(): void
+    public function testAdvancePlanCanAskWithAScreenshot(): void
     {
         $this->fakeS3();
         $this->defaultPlan(true);
@@ -194,7 +194,7 @@ class ScreenshotPlanGateTest extends TestCase
     }
 
     /** 純文字提問不受影響——閘門只在真的帶了圖時才檢查。 */
-    public function testFreePlanCanStillAskWithTextOnly(): void
+    public function testPlanWithoutScreenshotsCanStillAskWithTextOnly(): void
     {
         $this->fakeS3();
         $this->defaultPlan(false);

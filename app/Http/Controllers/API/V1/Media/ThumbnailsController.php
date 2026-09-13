@@ -104,7 +104,7 @@ class ThumbnailsController extends AbstractController
      * checksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端
      * 自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。
      *
-     * 截圖是 Pro 以上的功能（plans.screenshot_enabled）。GET 不設這道閘門——
+     * 截圖是 Advance 方案的功能（plans.screenshot_enabled）。GET 不設這道閘門——
      * 它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。
      *
      * @throws InvalidRequestException
