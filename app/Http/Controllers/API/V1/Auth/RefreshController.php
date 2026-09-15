@@ -40,8 +40,19 @@ class RefreshController extends AbstractController
             new OAT\Response(ref: Http401::class, response: 401),
         ]
     )]
+    /**
+     * 刻意用 login() 而不是 guard()->refresh()。
+     *
+     * JWTManager::refresh() 產出的 claims 只有 sub 與原始 iat（見 buildRefreshClaims()），
+     * encode() 不補預設值，於是換發出來的 token **沒有 exp**；而 ExpiredClaim 對缺少
+     * exp 的 payload 直接放行，等於發出一張永不過期的憑證。
+     * login() 走的是登入那條路徑，iat / exp 齊全，也保證三支發 token 的端點形狀一致。
+     *
+     * 代價是 iat 會跟著換發更新，所以「從首次登入起算」的上限不存在——本來也不存在，
+     * 這個套件沒有任何 validation 在檢查 refresh_ttl。見 docs/lore/auth/business-rules.md。
+     */
     public function store(Request $request): ResponseInterface
     {
-        return $this->responseAccessToken($this->guard()->refresh());
+        return $this->responseAccessToken($this->guard()->login($request->user()));
     }
 }
