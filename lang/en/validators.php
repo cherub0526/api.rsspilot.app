@@ -60,6 +60,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => 'Transaction status is not completed.',
+                'ip_not_allowed'            => 'Request IP is not in the allowlist.',
             ],
         ],
     ],

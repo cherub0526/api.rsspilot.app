@@ -60,6 +60,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => '交易状态未完成。',
+                'ip_not_allowed'            => '来源 IP 不在允许清单内。',
             ],
         ],
     ],

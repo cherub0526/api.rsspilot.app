@@ -10,6 +10,7 @@ use Hypervel\Http\Request;
 use App\Models\Transaction;
 use App\Models\Subscription;
 use App\Services\PaddleClient;
+use App\Services\PaddleWebhookIpAllowlist;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
 use Hypervel\Support\Facades\Log;
@@ -79,6 +80,7 @@ class PaddleController extends AbstractController
     {
         // 驗簽排在驗證之前：未經認證的輸入連解析都不該做。少了這一步，任何人
         // 都能對這個端點送請求，讓伺服器替他去 Paddle 查一輪，而且它會改訂閱狀態。
+        $this->assertAllowedIp($request);
         $this->assertValidSignature($request);
 
         $params = $request->all();
@@ -147,6 +149,46 @@ class PaddleController extends AbstractController
             return response()->make(self::RESPONSE_OK);
         } catch (ApiError $e) {
         } catch (MalformedResponse $e) {
+        }
+    }
+
+    /**
+     * 來源 IP 檢查（縱深防禦，主要防線仍是下面的驗簽）。
+     *
+     * **預設關閉**，要靠 PADDLE_WEBHOOK_IP_ALLOWLIST=true 才會生效。這不是保守
+     * 過頭：這個服務跑在反向代理後面（Railway），`remote_addr` 看到的是代理的
+     * IP 而不是 Paddle 的，貿然開啟會把**每一則** webhook 都擋掉，而且症狀是
+     * 「訂閱莫名其妙不會生效」。開之前先看一次下面那行 log 確認我們到底收到什麼 IP。
+     *
+     * 代理會把真正的來源放在 X-Forwarded-For 的最左邊，但那個標頭是外部可寫的，
+     * 只有在確定前面那層代理會覆寫它時才可信——所以要用它得再開
+     * PADDLE_WEBHOOK_TRUSTED_PROXY=true，兩個旗標分開，避免「想開 IP 檢查」
+     * 不小心連「相信一個偽造得了的標頭」一起開下去。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertAllowedIp(Request $request): void
+    {
+        if (!filter_var(env('PADDLE_WEBHOOK_IP_ALLOWLIST', false), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        $ip = (string) ($request->getServerParams()['remote_addr'] ?? '');
+
+        if (filter_var(env('PADDLE_WEBHOOK_TRUSTED_PROXY', false), FILTER_VALIDATE_BOOLEAN)) {
+            $forwarded = (string) $request->header('X-Forwarded-For', '');
+
+            if ($forwarded !== '') {
+                $ip = trim(explode(',', $forwarded)[0]);
+            }
+        }
+
+        if ($ip === '' || !(new PaddleWebhookIpAllowlist())->allows($ip)) {
+            Log::warning('Rejected a Paddle webhook from an IP outside the allowlist', ['ip' => $ip]);
+
+            throw new InvalidRequestException(
+                ['ip' => [__('validators.controllers.webhook.paddle.ip_not_allowed')]]
+            );
         }
     }
 
