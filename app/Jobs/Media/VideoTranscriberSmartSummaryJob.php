@@ -11,6 +11,8 @@ use App\Models\Caption;
 use App\Models\Summary;
 use App\Utils\Const\ISO6391;
 use Hypervel\Queue\Queueable;
+use App\Utils\AI\SummaryPayload;
+use Hypervel\Support\Facades\Log;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Exceptions\VideoTranscriberAuthException;
@@ -114,7 +116,7 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         // body carrying no SSE frames at all, and a model can always ignore
         // the output format — both clear on a retry, so it is worth another
         // attempt rather than storing something unusable.
-        $text = $this->decode($response);
+        $text = SummaryPayload::decode($response);
 
         if ($text === null) {
             $this->releaseOrFail($summary, self::RETRY_DELAY_SECONDS);
@@ -128,6 +130,36 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         ])->save();
 
         $this->media->fill(['status' => Media::STATUS_SUMMARIZED])->save();
+
+        $this->dispatchTranslations($summary);
+    }
+
+    /**
+     * Fan the finished summary out to every other UI locale.
+     *
+     * Dispatched from here rather than picked up by a scheduled command the way
+     * the rest of the pipeline is, because translation owns no `media.status`
+     * of its own to be selected by — same shape as the `VideoTranscriberFetchJob`
+     * → `VideoTranscriberArchiveJob` hand-off, and with the same consequence:
+     * a media only ever gets this one chance, there is no back-fill.
+     *
+     * A failing dispatch must not undo a summary that is already saved, so the
+     * loop swallows its own errors: the worst case is a missing translation,
+     * and `Media::summaryFor()` falls back to this summary for those readers.
+     */
+    private function dispatchTranslations(Summary $summary): void
+    {
+        foreach (SummaryTranslationJob::targetLocales((string) $summary->locale) as $locale) {
+            try {
+                dispatch(new SummaryTranslationJob($summary, $locale));
+            } catch (Throwable $e) {
+                Log::warning('failed to dispatch a summary translation', [
+                    'summary' => $summary->id,
+                    'locale'  => $locale,
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -153,52 +185,6 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
             : null;
 
         $this->markFailed($summary);
-    }
-
-    /**
-     * Decode the JSON the prompt asks for, or null when the response cannot be
-     * used.
-     *
-     * `long_summary.content` is the one field worth failing over — the rest is
-     * normalised so a model that omits an optional array does not cost a whole
-     * summary. The fenced-block tolerance is deliberate: the prompt forbids
-     * code fences, but models add them anyway often enough that discarding an
-     * otherwise-good summary over one would be the wrong trade.
-     *
-     * @return null|array<string, mixed>
-     */
-    private function decode(string $response): ?array
-    {
-        $decoded = json_decode($this->stripCodeFence(trim($response)), true);
-
-        if (!is_array($decoded) || !is_string($decoded['long_summary']['content'] ?? null)) {
-            return null;
-        }
-
-        return [
-            'short_summary' => (string) ($decoded['short_summary'] ?? ''),
-            'long_summary'  => [
-                'content'    => $decoded['long_summary']['content'],
-                'key_points' => array_values((array) ($decoded['long_summary']['key_points'] ?? [])),
-                'keywords'   => array_values((array) ($decoded['long_summary']['keywords'] ?? [])),
-            ],
-        ];
-    }
-
-    /**
-     * Unwrap a ```json … ``` block, leaving anything else untouched.
-     */
-    private function stripCodeFence(string $response): string
-    {
-        if (!str_starts_with($response, '```')) {
-            return $response;
-        }
-
-        // Drop the opening fence with its optional language tag, then the
-        // closing one.
-        $response = (string) preg_replace('/^```[a-zA-Z]*\R?/', '', $response);
-
-        return rtrim((string) preg_replace('/\R?```$/', '', $response));
     }
 
     /**

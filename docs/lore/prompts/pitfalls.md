@@ -167,6 +167,60 @@ OpenRouter 的型錄對 auto 系列回報的每 token 單價是 **`-1`**（意�
 
 品質也要注意：隨機挑的第一次就挑到 `nvidia/nemotron-3.5-content-safety:free`——那是審核模型，不是聊天模型。
 
+## 免費模型的限流是「整個帳號」共用的，20 RPM / 1000 RPD
+
+`code:` `app/Utils/AI/RoutingProfile.php` · `code:` `database/migrations/2026_09_16_100000_drop_openrouter_free_routing.php` · `updated:` `2026-09-16` · `status:` `active`
+
+OpenRouter 對 `:free` 模型的平台限流（2026-09 查官方文件）：
+
+| 限制 | 值 | 能不能提高 |
+|---|---|---|
+| 每分鐘請求數 | **20** | 不能，所有帳號一律 20 |
+| 每日請求數 | **50** | 歷史累計購買 < 10 credits 時 |
+| 每日請求數 | **1000** | 歷史累計購買 ≥ 10 credits 時 |
+
+兩件文件講得很明白、但很容易誤判的事：
+
+1. **限流是帳號層級，不是 key 層級。**原文：「Making additional accounts or API keys will
+   not affect your rate limits, as we govern capacity globally.」多開 key 沒有用。
+2. **50 → 1000 的門檻是「累計買過 10 credits」，不是「現在還有 10 credits」。**
+
+本專案的位置（2026-09-16 實測 `GET https://openrouter.ai/api/v1/key`）：`is_free_tier`
+為 `false`，所以吃的是 **1000 RPD**。要重新確認時打同一個端點，它會回 `limit_remaining`
+與 `usage_daily`。
+
+### 這就是專案撤掉免費模型的原因
+
+**現況：2026-09-16 起專案沒有任何路徑走 `openrouter/free`**（見 business-rules
+〈專案不用免費模型，因為它的限流是帳號共用的〉）。這一則留著不是描述現狀，是留給
+「下次有人想省錢再走一次這條路」的人。
+
+當時的配置是 Free 方案的 chat／延伸問題／自訂摘要試跑，加上背景的摘要翻譯，**四條路
+共用同一個 1000**，不是各自 1000。要命的組合有兩個：
+
+- **20 RPM 比 1000 RPD 先撞到。**批次補跑或一次同步進大量新影片時，摘要完成是密集發生
+  的，一分鐘內超過 20 個翻譯請求就開始吃 429，而**重試本身也算一次請求**。
+- **撞牆不會停下來，會轉付費。**`RoutedInference` 失敗時退回用途層的付費 Auto Router，
+  只留一行 log。
+
+所以要再評估免費模型時，先算「N 支影片 × 語系數 + 使用者互動量 ≤ 1000」，再回答「撞牆時
+退去哪裡、那個退路會不會計費」。
+
+### 429 長什麼樣
+
+- **非串流**：標準 error body，附 `X-RateLimit-Limit` / `X-RateLimit-Remaining` /
+  `X-RateLimit-Reset`，有時還有 `Retry-After`。注意 `Completion` 不會對非 2xx 拋例外，
+  這種回應到呼叫端會是一個**沒有 `choices` 的陣列**。
+- **串流且已經開始吐**：HTTP 200 已經送出去了，所以改用 SSE event 帶
+  `finish_reason: "error"` 通知——不會有 429 狀態碼可以攔。
+
+### 未確認的部分
+
+`openrouter/free` 這個 slug **官方文件沒有記載**（只寫了 `openrouter/auto` 與
+`openrouter/auto-beta`），它的限流沒有明文。目前的假設是比照 `:free` 模型，因為它挑的就是
+那批模型——但這是推定不是實測。另外「失敗的請求算不算進每日額度」文件也沒寫，第三方文章說
+會算，同樣未經我們自己驗證。
+
 ## Auto Router 各價格帶的實際落點
 
 `code:` `app/Utils/AI/OpenRouterRouting.php` · `updated:` `2026-09-09` · `status:` `active`

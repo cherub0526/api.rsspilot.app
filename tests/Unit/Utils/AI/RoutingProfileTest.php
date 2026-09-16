@@ -98,8 +98,9 @@ class RoutingProfileTest extends TestCase
     }
 
     /**
-     * Free 的 profile 只有 model：openrouter/free 不吃 auto-router 的 plugin，
-     * 用途層那組 cost_tier 不該被一起帶過去。
+     * 方案只指定 model 時，用途層那組 cost_tier 不該被一起帶過去——路由參數是配著
+     * 另一個模型設的。（歷史上這是 Free 方案走 openrouter/free 的形狀，該設定已於
+     * 2026-09-16 撤掉，但這個行為本身仍然要成立。）.
      */
     public function testAModelOnlyProfileDropsThePurposeParameters(): void
     {

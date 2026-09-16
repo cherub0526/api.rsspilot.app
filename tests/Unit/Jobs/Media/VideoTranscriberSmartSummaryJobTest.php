@@ -12,6 +12,8 @@ use App\Models\Caption;
 use App\Models\Summary;
 use Hypervel\Queue\Jobs\FakeJob;
 use Hypervel\Support\Facades\Http;
+use Hypervel\Support\Facades\Queue;
+use App\Jobs\Media\SummaryTranslationJob;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Jobs\Media\VideoTranscriberSmartSummaryJob;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
@@ -23,6 +25,19 @@ use App\Services\VideoTranscriber\VideoTranscriberClient;
 class VideoTranscriberSmartSummaryJobTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Every test here is about the summary itself. The queue is faked so the
+     * translations it fans out to stay out of the way — the test queue runs
+     * synchronously, so a real dispatch would write their `summaries` rows in
+     * the middle of assertions about this job's own row.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Queue::fake();
+    }
 
     /**
      * Fake prod-config plus a summary stream that yields $body verbatim.
@@ -350,6 +365,42 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
         (new VideoTranscriberSmartSummaryJob($media))->failed(new RuntimeException('boom'));
 
         $this->assertSame(Media::STATUS_SUMMARIZE_FAILED, $media->refresh()->status);
+    }
+
+    public function testDispatchesATranslationForEveryOtherUiLocale(): void
+    {
+        $this->fakeStream($this->summaryJson('# Title'));
+
+        $media = $this->transcribedMediaWithCaption();
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $summary = $media->summaries()->first();
+
+        Queue::assertPushed(
+            SummaryTranslationJob::class,
+            fn (SummaryTranslationJob $job) => $job->uniqueId() === $summary->id . ':' . Summary::LOCALE_ZH_TW
+        );
+        Queue::assertPushed(
+            SummaryTranslationJob::class,
+            fn (SummaryTranslationJob $job) => $job->uniqueId() === $summary->id . ':zh-CN'
+        );
+
+        // The caption's own locale is not translated back into itself.
+        Queue::assertPushed(SummaryTranslationJob::class, 2);
+    }
+
+    public function testDispatchesNoTranslationWhenTheSummaryItselfFailed(): void
+    {
+        $this->fakeStream('# Just markdown, no JSON');
+
+        $job = new VideoTranscriberSmartSummaryJob($this->transcribedMediaWithCaption());
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle(new VideoTranscriberClient());
+
+        Queue::assertNotPushed(SummaryTranslationJob::class);
     }
 
     public function testUniqueIdIsScopedToTheMedia(): void

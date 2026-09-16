@@ -17,7 +17,7 @@ The rule, the reasoning, and edge cases.
 
 ## 轉錄 pipeline 靠 media.status 交棒，不是靠 job 串 job
 
-`code:` `app/Console/Kernel.php` · `code:` `app/Console/Commands/VideoTranscriber/` · `code:` `app/Jobs/Media/VideoTranscriberFetchJob.php` · `updated:` `2026-09-13` · `status:` `active`
+`code:` `app/Console/Kernel.php` · `code:` `app/Console/Commands/VideoTranscriber/` · `code:` `app/Jobs/Media/VideoTranscriberFetchJob.php` · `code:` `app/Jobs/Media/SummaryTranslationJob.php` · `updated:` `2026-09-16` · `status:` `active`
 
 三個階段之間沒有任何 job 直接呼叫下一個 job。每支指令每分鐘跑一次、用 `media.status`
 撈出屬於自己那一段的 media 派工，狀態就是交接點：
@@ -39,11 +39,25 @@ created →(start)→ transcribing →(fetch)→ transcribed →(summarize)→ s
 2. **中間狀態代表「有人正在處理或正在退避重試」**，不代表卡住。fetch 的退避期間 media
    就是停在 `transcribing`。
 
-**唯一的例外是 `VideoTranscriberArchiveJob`**：它由 `VideoTranscriberFetchJob` 在成功
-寫完 caption 後直接 dispatch，而不是由指令撈狀態派工。因為它不擁有任何 media 狀態 ——
-歸檔成功與否都不該改變 media 的處境。代價是**既有的 media 沒有自動補派的機制**：它只在
-「這次剛轉錄完」的那一刻被派一次，要補跑舊資料得用 `videotranscriber:archive --id=`。
-這支指令刻意不排進 scheduler，也刻意不支援批次，因為每支 media 會拉一份十幾 MB 的 mp3。
+**例外是那些「不擁有任何 media 狀態」的後續工作**，目前有兩支，都由前一支 job 直接
+dispatch 而不是由指令撈狀態派工：
+
+| job | 由誰派 | 為什麼不能有自己的狀態 |
+|---|---|---|
+| `VideoTranscriberArchiveJob` | `VideoTranscriberFetchJob` 寫完 caption 後 | 歸檔成功與否都不該改變 media 的處境 |
+| `SummaryTranslationJob` | `VideoTranscriberSmartSummaryJob` 寫完摘要後 | media 有了來源語言的摘要就是真的 `summarized`；少一種翻譯不該讓它看起來沒做完 |
+
+翻譯這一支還多一層理由：`Media::summaryFor()` 本來就會在找不到該語系時退回共用摘要，
+所以缺翻譯對使用者是**降級**而不是壞掉，不值得用一個 media 狀態去追蹤。它改用
+「`summaries` 一列一語系」承接進度——一個語系一支 job，各自重試、各自失敗。
+
+**代價是兩支都沒有自動補派的機制**：只在「這次剛做完」的那一刻被派一次。
+
+- 歸檔要補跑舊資料用 `videotranscriber:archive --id=`。這支指令刻意不排進 scheduler，
+  也刻意不支援批次，因為每支 media 會拉一份十幾 MB 的 mp3。
+- 翻譯**連補跑的指令都還沒有**：這個功能上線前就摘要完的 media 一律沒有翻譯，
+  要補得另外寫。判斷「要不要補」時記得它是靠 `available_locales` 展開的——
+  之後多開一個語系，同樣只有新影片會有，既有的全部缺。
 
 ## 新增 queue 一定要同步開 worker，兩邊都要
 

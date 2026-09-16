@@ -27,7 +27,7 @@ chat 與 customPrompt 的回應語言來自 `settings.data.ai.language`，但這
 
 ## 方案覆寫用途，但共用產物只吃用途
 
-`code:` `app/Utils/AI/RoutingProfile.php` · `code:` `app/Models/Plan.php` → `aiRouting` · `updated:` `2026-09-09` · `status:` `active`
+`code:` `app/Utils/AI/RoutingProfile.php` · `code:` `app/Models/Plan.php` → `aiRouting` · `updated:` `2026-09-16` · `status:` `active`
 
 一次推論用哪個模型、帶哪些路由參數，解析順序是兩層：
 
@@ -49,9 +49,11 @@ chat 與 customPrompt 的回應語言來自 `settings.data.ai.language`，但這
 
 | 方案 | model | cost_tier | max_price |
 |---|---|---|---|
-| Free | `openrouter/free` | 不適用 | 不適用（不計費） |
+| Free | `openrouter/auto` | `low` | `{prompt: 0.5, completion: 2}` |
 | Pro | `openrouter/auto` | `low` | `{prompt: 0.5, completion: 2}` |
 | Advance | `openrouter/auto` | `medium` | `{prompt: 1.5, completion: 5}` |
+
+**Free 與 Pro 目前的路由完全相同**，這是 2026-09-16 撤掉 `openrouter/free` 的結果（原因見下一條）。也就是說**兩者的差異現在完全在額度與功能上，不在模型品質上**：Free 是 `chat_limit` 3、`video_limit` 3，Pro 是 20。要重新拉開模型層的差距，改 Free 的 `cost_tier` 或 `max_price` 即可——但先想清楚 `ai_quality`（定價頁文案）寫的是什麼，兩邊不同步就是對使用者說謊。
 
 用途層：摘要 `medium`，其餘 `low`。**摘要刻意比 chat 高一階**——它一支影片只付一次、全站攤提，而且是 chat 與心智圖的輸入素材（`MindmapController::buildInput()`、`ChatController` 的參考資料）。摘要爛掉，付費使用者的 chat 也跟著爛，而他們的方案救不了他們。
 
@@ -62,6 +64,31 @@ chat 與 customPrompt 的回應語言來自 `settings.data.ai.language`，但這
 ### 使用者自選模型時，方案設定完全不套用
 
 `custom_prompts.model_id` 讓訂閱使用者自選模型（授權走 `ResolvesUserPlan::allowedModelId()` → `plan_ai_models`），這條路**已經在運作**。自選時 `TemplateCompletionManager` 只取模型、不帶任何路由參數：使用者明講了 `claude-opus-5`，再附一個 `cost_tier: low` 的 plugin 是自相矛盾的指示，而 `max_price` 有機會把他自己選的模型擋掉。判準是 `$model !== ''`。
+
+## 專案不用免費模型，因為它的限流是帳號共用的
+
+`code:` `database/migrations/2026_09_16_100000_drop_openrouter_free_routing.php` · `code:` `app/Jobs/Media/SummaryTranslationJob.php` · `updated:` `2026-09-16` · `status:` `active`
+
+2026-09-16 起，專案裡**沒有任何路徑走 `openrouter/free`**。撤掉的有兩處：Free 方案的
+`plans.ai_routing`（chat、延伸問題、自訂摘要試跑），以及摘要翻譯這個用途。兩者都改成
+Auto Router 的 `low` 帶。
+
+放棄的理由不是品質，是**限流的形狀**（數字見 pitfalls〈免費模型的限流是「整個帳號」共用的〉）：
+
+1. **20 RPM / 1000 RPD 是整個帳號共用的**，不是每把 key、每個用途各一份。每分鐘那道
+   還不能靠買 credits 提高。所以「Free 使用者的互動」與「背景批次翻譯」是在同一個桶子
+   裡互相排擠——而背景批次的量是隨影片數長的，使用者互動則是隨行銷活動跳的，兩者誰把
+   誰餓死完全不受控。
+2. **撞牆的後果是計費，不是停下來。**`RoutedInference` 在方案這層失敗時會退回用途層，
+   而用途層是付費的 Auto Router，只留一行 `Log::warning`。於是「省錢的設定」在用量上來
+   的那一天會自己變成「花錢的設定」，而且帳單出來之前沒有人會發現。
+
+這就是判準：**一個會靜默退到付費路徑的免費方案，等於把成本風險藏起來，不是省錢。**
+省錢要省在看得見的地方——`cost_tier` 與 `provider.max_price` 都是明碼標價、算得出天花板
+的東西（`low` 帶實測約 $0.065 / $0.18 每百萬 token，翻譯一份摘要只有千把 token）。
+
+要再走一次免費路線之前，先回答這三題：誰跟誰共用那 1000？撞牆時退去哪裡？那個退路會不會
+計費？三題有一題答不出來就不要做。
 
 ## 帶圖提問有兩層上限，整個請求只送最新的 4 張
 

@@ -29,18 +29,29 @@ class OpenRouterModelsTest extends TestCase
             'App/Services/FollowUpQuestions/NeuronFollowUpQuestions' => $default,
             'App/Services/Prompts/SummaryTemplate'                   => $default,
             'App/Services/Prompts/CustomPromptTemplate'              => $default,
+            'App/Jobs/Media/SummaryTranslationJob'                   => $default,
         ], OpenRouterModels::defaults());
     }
 
     /**
      * 遷移就該把整張表寫進去，程式跑起來不必先手動同步。
+     *
+     * 摘要翻譯是唯一的例外：`2026_09_16_100000_drop_openrouter_free_routing`
+     * 把它釘成 `openrouter/auto`，而不是留給 `AI_DEFAULT_MODEL` 決定——那一欄要的
+     * 是「Auto Router 的 low 帶」這個明確決定，不是各環境剛好的預設值。
      */
     public function testTheMigrationSeedsTheConfigRow(): void
     {
-        $this->assertSame(
-            OpenRouterModels::defaults(),
-            Config::getValue(Config::KEY_OPENROUTER_MODELS)
-        );
+        $seeded = Config::getValue(Config::KEY_OPENROUTER_MODELS);
+
+        $this->assertSame('openrouter/auto', $seeded['App/Jobs/Media/SummaryTranslationJob']);
+
+        unset($seeded['App/Jobs/Media/SummaryTranslationJob']);
+
+        $defaults = OpenRouterModels::defaults();
+        unset($defaults['App/Jobs/Media/SummaryTranslationJob']);
+
+        $this->assertSame($defaults, $seeded);
     }
 
     public function testSyncWritesTheWholeTableIntoConfigs(): void

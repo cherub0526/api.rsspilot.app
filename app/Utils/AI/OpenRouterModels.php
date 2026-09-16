@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Utils\AI;
 
 use App\Models\Config;
+use App\Jobs\Media\SummaryTranslationJob;
 use App\Services\Prompts\SummaryTemplate;
 use App\Services\Prompts\CustomPromptTemplate;
 use App\Services\FollowUpQuestions\NeuronFollowUpQuestions;
@@ -32,6 +33,9 @@ class OpenRouterModels
      * 新增用途時一併加進來，sync() 才知道要在資料表補哪個 key。Completion 不在
      * 這裡 —— 它只是 HTTP 傳輸層，模型由呼叫端決定。
      *
+     * 摘要翻譯沒有專屬模板（prompt 是 VideoTranscriber\Prompts\TranslationTemplate，
+     * 不走 TemplateCompletionManager），所以直接用 job 當 key。
+     *
      * @var array<int, class-string>
      */
     public const CLASSES = [
@@ -39,6 +43,7 @@ class OpenRouterModels
         NeuronFollowUpQuestions::class,
         SummaryTemplate::class,
         CustomPromptTemplate::class,
+        SummaryTranslationJob::class,
     ];
 
     /**

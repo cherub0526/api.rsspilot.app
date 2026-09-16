@@ -21,8 +21,8 @@ use App\Services\SubscriptionService;
  * 讀，沒有「當前使用者」可言，只吃用途層。詳見
  * docs/lore/prompts/business-rules.md〈方案覆寫用途，但共用產物只吃用途〉。
  *
- * 方案的 profile 可以只給 `model` 而不給參數（Free 就是這樣：`openrouter/free`
- * 不吃 auto-router 的 plugin），也可以只給參數而沿用用途層的模型。
+ * 方案的 profile 可以只給 `model` 而不給參數（此時用途層那組路由參數不會被帶過去，
+ * 因為它們是配著另一個模型設的），也可以只給參數而沿用用途層的模型。
  */
 final class RoutingProfile
 {

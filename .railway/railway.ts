@@ -168,6 +168,10 @@ export default defineRailway((ctx) => {
 
     // media.info、media.caption、media.youtube-data-caption 暫停中，
     // 恢復時加回 --queue 清單即可，順序即優先序。
+    //
+    // media.summary-translation 排在最後：它是摘要完成後的加值翻譯，讓它跟
+    // 轉錄的入口搶 worker 只會延後新影片開工。單次執行是一個 OpenRouter 請求，
+    // 上限就是 Completion 自己的 60 秒 HTTP timeout，塞得進 120 那組。
     const workerFast = service("worker-fast", {
         source,
         env: mirrorOf(api),
@@ -175,7 +179,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.start,videotranscriber.fetch' ` +
+                `--queue='videotranscriber.start,videotranscriber.fetch,media.summary-translation' ` +
                 `--timeout=120 ${WORKER_FLAGS}`,
             // 必須是 ALWAYS：worker 因 --max-time 自我了結時退出碼是 0，
             // ON_FAILURE 不會把它拉起來，service 會顯示部署成功但永久停擺。

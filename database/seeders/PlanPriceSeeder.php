@@ -28,8 +28,12 @@ class PlanPriceSeeder extends Seeder
                 'custom_summary_enabled' => false,
                 'screenshot_enabled'     => false,
                 'ai_quality'             => Plan::AI_QUALITY_PRO,
-                'ai_routing'             => ['model' => 'openrouter/free'],
-                'prices'                 => [
+                'ai_routing'             => [
+                    'model'    => 'openrouter/auto',
+                    'plugins'  => [['id' => 'auto-router', 'cost_tier' => 'low']],
+                    'provider' => ['max_price' => ['prompt' => 0.5, 'completion' => 2]],
+                ],
+                'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 0],
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 0],
                 ],

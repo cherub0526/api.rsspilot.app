@@ -9,6 +9,7 @@ One file per queue. Supervisor programs address **queues**, not job classes, so
 | `media-caption.conf` | `media.caption` | `CaptionJob`, `YoutubeCaptionJob` | 120 |
 | `media-youtube-data-caption.conf` | `media.youtube-data-caption` | `YoutubeDataCaptionJob` | 120 |
 | `media-summary.conf` | `media.summary` | `SummaryJob` | 300 |
+| `media-summary-translation.conf` | `media.summary-translation` | `SummaryTranslationJob` | 120 |
 | `media-notify.conf` | `media.notify` | `DailyDigestJob` | 120 |
 | `videotranscriber-start.conf` | `videotranscriber.start` | `VideoTranscriberStartJob` | 120 |
 | `videotranscriber-fetch.conf` | `videotranscriber.fetch` | `VideoTranscriberFetchJob` | 120 |
