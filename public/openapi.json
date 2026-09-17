@@ -542,6 +542,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/422"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
                     }
                 },
                 "security": [
