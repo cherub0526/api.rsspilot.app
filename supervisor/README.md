@@ -60,9 +60,18 @@ See `docs/lore/transcription/pitfalls.md` for the full write-up.
 - **No `--quiet`.** It empties `stdout_logfile`, which is the only place a
   self-inflicted SIGKILL leaves a trace.
 - **No `--daemon`.** Deprecated in `WorkCommand` and does nothing.
-- **`--max-time=3600`** rotates each worker hourly instead of waiting for it to
-  hit the memory ceiling. Note `Worker::stop()` does not drain in-flight
-  coroutines, so this can still cut a job short once an hour — rare, but real.
+- **No `--max-time`.** It used to be `3600`, to rotate each worker hourly rather
+  than wait for the memory ceiling. On hypervel/framework v0.3.17 it does not
+  rotate anything — it turns the worker into a zombie. `Worker::stop()` only
+  dispatches an event and returns (no `exit`), while the Swoole timer registered
+  by `monitorTimeoutJobs()` is never cleared (`monitorId` is only ever written,
+  never `Timer::clear`ed). The daemon loop returns, the event loop still holds
+  that timer, so **the process never exits**: supervisor sees it RUNNING and
+  `autorestart` never fires, while the worker stops reserving jobs for good.
+  Measured on Railway 2026-09-18: both workers had been "Online" but idle for
+  ~29 hours, 26 jobs untouched with `attempts = 0`, zero CPU over a 20s sample.
+  Removed 2026-09-18. The same path is still reachable through `--memory`, just
+  far less often; the real fix is upstream in `stop()`.
 - **`--memory=256`** over the 128 default, which is low for a long-running
   Swoole process.
 
