@@ -313,6 +313,31 @@ $this->createTestResponse(
 
 `TestClient::json()`（注意第一個參數是 method）才會把 `json_encode($data, JSON_UNESCAPED_UNICODE)` 當 body。**簽章要用同一組 flag 算**，否則中文或斜線的跳脫方式一不同就過不了。
 
+## `Http::fake()` 的 stub 先註冊先贏，擺進 setUp() 會蓋掉個別案例
+
+`code:` `tests/Unit/Console/Commands/VideoTranscriber/StartTest.php` · `updated:` `2026-09-18` · `status:` `active`
+
+同一個 URL 被註冊兩次時，**先註冊的那個回應會贏**，不是後蓋前。所以把共用的
+`Http::fake()` 收進 `setUp()` 看起來很整潔，實際上會讓每一個「想模擬失敗」的案例
+全部失效——它們自己註冊的 401 永遠輪不到。
+
+症狀很難讀：指令照著成功路徑跑完，於是斷言掛在一個看似無關的地方（實測是退出碼
+斷言先失敗，而真正該失敗的 `Queue::assertNotPushed` 根本沒被執行到，因為它排在後面）。
+花了三輪才定位到是 stub 順序。
+
+做法：**共用的 fake 寫成一個 helper，每個案例自己呼叫**，不要放 setUp()。
+
+### 附帶：沒有 fake 的測試會真的對外送請求
+
+同一支測試補 fake 之前，它每跑一次就對 videotranscriber.ai **真的登入七次**
+（測試用的 sqlite 資料庫裡沒有 token，於是每個案例都走 relogin）。時間是最明顯的
+訊號：7 個案例 18 秒，補上 fake 之後 0.5 秒。
+
+那組帳號是全站共用的，而且〈videotranscriber.ai 只允許單一裝置登入〉那一則說過
+換一次登入就會讓別處的 token 失效。這次事後確認 staging 的 token 仍然可用，但
+「跑一次單元測試可能踢掉正式環境的登入」這個風險是真的存在——**新增任何會打外部
+服務的程式碼時，要同時檢查既有測試有沒有把它蓋住**。
+
 ## Railway IaC 要 Node 24 才跑得動，而且會被 nvm 的 lazy-load 與 `$_` 擋下
 
 `code:` `.railway/railway.ts` · `code:` `.railway/README.md` · `updated:` `2026-09-13` · `status:` `active`

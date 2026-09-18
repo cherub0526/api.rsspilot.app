@@ -51,6 +51,8 @@ class VideoTranscriberClient
 
     protected string $loginEndpoint = 'https://videotranscriber.ai/api/v1/auth/email/login';
 
+    protected string $userInfoEndpoint = 'https://videotranscriber.ai/api/v1/userinfo';
+
     public function __construct(
         protected SignatureGenerator $signatureGenerator = new SignatureGenerator(),
         protected ?string $cookie = null,
@@ -186,6 +188,69 @@ class VideoTranscriberClient
         return $this->authenticated(fn () => Http::withHeaders($this->headers())->get($this->transcriptionEndpoint, [
             'record_id' => $recordId,
         ]));
+    }
+
+    /**
+     * 目前這個 token 對應到哪個帳號，`null` 代表它已經不能用了。
+     *
+     * 判準有三層，缺一不可：HTTP 是 2xx、業務碼是 100000、而且真的回了
+     * `data.user_id`。**不能只看狀態碼**——這個服務對過期的 session 也可能回
+     * 200 配一個非 100000 的業務碼（`isUnauthorized()` 就是為此存在的）。
+     *
+     * 這支端點刻意不包 authenticated()：它是用來「判斷 token 還能不能用」的，
+     * 包進去就會在失敗時自己重新登入再重放一次，那就什麼都驗不出來了。
+     *
+     * @return null|array<string, mixed> `data` 區塊
+     */
+    public function userInfo(): ?array
+    {
+        try {
+            $response = Http::withHeaders($this->headers())->get($this->userInfoEndpoint);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (!$response->successful()) {
+            return null;
+        }
+
+        $result = $response->json();
+
+        if (($result['code'] ?? null) !== self::CODE_SUCCESS) {
+            return null;
+        }
+
+        $data = $result['data'] ?? null;
+
+        return is_array($data) && isset($data['user_id']) ? $data : null;
+    }
+
+    /**
+     * 確認手上的 token 還能用，不能用就重新登入一次。
+     *
+     * 給「要送出一批請求之前」用：先問一次 userinfo，壞了就走跟
+     * `videotranscriber:login` 同一條路（`relogin()` 讀的是同一組
+     * `services.videotranscriber` 帳密，成功會把新 token 寫回 configs），
+     * 然後**再驗一次**——登入回成功但 token 實際不通的情況要在這裡就攔下來，
+     * 而不是留給後面每一支 job 各自撞牆。
+     *
+     * @return null|array<string, mixed> 可用時回使用者資料，否則 null
+     */
+    public function ensureAuthenticated(): ?array
+    {
+        if ($user = $this->userInfo()) {
+            return $user;
+        }
+
+        if (!$this->relogin()) {
+            return null;
+        }
+
+        // relogin() 換了 configs 裡的 token，這個實例若帶著建構時傳入的 cookie
+        // 就不會跟著更新——清掉它，下一次 headers() 才會去讀新的。
+        $this->cookie = null;
+
+        return $this->userInfo();
     }
 
     /**
