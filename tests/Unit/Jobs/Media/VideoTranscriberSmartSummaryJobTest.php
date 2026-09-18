@@ -17,6 +17,7 @@ use App\Jobs\Media\SummaryTranslationJob;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Jobs\Media\VideoTranscriberSmartSummaryJob;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
+use App\Services\VideoTranscriber\Prompts\SmartSummaryTemplate;
 
 /**
  * @internal
@@ -243,6 +244,128 @@ class VideoTranscriberSmartSummaryJobTest extends TestCase
 
         Http::assertSent(fn ($request) => !str_contains($request->url(), '/summary/completions')
             || str_contains($request->data()['text'], 'written exclusively in Traditional Chinese,'));
+    }
+
+    /**
+     * 影片是什麼語言，主摘要就是什麼語言——不帶語言時跟著字幕走。
+     */
+    public function testWritesTheSummaryInTheCaptionLanguageByDefault(): void
+    {
+        $this->fakeStream($this->summaryJson('# 標題'));
+
+        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'zh-CN',
+            'primary'  => true,
+            'text'     => 'the transcript',
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        Http::assertSent(fn ($request) => !str_contains($request->url(), '/summary/completions')
+            || str_contains($request->data()['text'], 'written exclusively in Simplified Chinese,'));
+
+        $this->assertSame('zh-CN', $media->summaries()->first()->locale);
+    }
+
+    /**
+     * locale 記的是「摘要寫成什麼語言」，不是字幕的語言。
+     *
+     * 兩者不一致時，SummaryTranslationJob 會把來源語言算錯——英文摘要被標成
+     * zh-CN 的話，它會去翻一份英文的英文版，而真正要的中文版永遠不會產生。
+     */
+    public function testTheLocaleRecordsTheSummaryLanguageNotTheCaptionLanguage(): void
+    {
+        $this->fakeStream($this->summaryJson('# Title'));
+
+        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'zh-CN',
+            'primary'  => true,
+            'text'     => 'the transcript',
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media, 'en'))->handle(new VideoTranscriberClient());
+
+        $this->assertSame(Caption::LOCAL_EN, $media->summaries()->first()->locale);
+    }
+
+    /** 字幕語系空著時退回模板預設值，不要寫出一列 locale 是空字串的摘要。 */
+    public function testFallsBackToTheDefaultLanguageWhenTheCaptionHasNoLocale(): void
+    {
+        $this->fakeStream($this->summaryJson('# Title'));
+
+        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => '',
+            'primary'  => true,
+            'text'     => 'the transcript',
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $this->assertSame(
+            SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE,
+            $media->summaries()->first()->locale
+        );
+    }
+
+    /**
+     * 翻譯的目標語系要從「摘要的語言」展開。中文影片的主摘要是中文，
+     * 該翻的是 en 與 zh-TW，不該再產一份 zh-CN。
+     */
+    public function testTranslationTargetsFollowTheSummaryLanguage(): void
+    {
+        $this->fakeStream($this->summaryJson('# 標題'));
+
+        $media = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'zh-CN',
+            'primary'  => true,
+            'text'     => 'the transcript',
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->handle(new VideoTranscriberClient());
+
+        $summary = $media->summaries()->first();
+
+        Queue::assertPushed(
+            SummaryTranslationJob::class,
+            fn (SummaryTranslationJob $job) => $job->uniqueId() === $summary->id . ':' . Caption::LOCAL_EN
+        );
+        Queue::assertPushed(
+            SummaryTranslationJob::class,
+            fn (SummaryTranslationJob $job) => $job->uniqueId() === $summary->id . ':' . Summary::LOCALE_ZH_TW
+        );
+        Queue::assertPushed(SummaryTranslationJob::class, 2);
+    }
+
+    /**
+     * failed() 要用跟 handle() 同一套語言解析，否則找不到該標記失敗的那一列。
+     */
+    public function testFailedHookFindsTheSummaryByTheSummaryLanguage(): void
+    {
+        $media = Media::factory()->create(['status' => Media::STATUS_SUMMARIZING]);
+        Caption::factory()->create([
+            'media_id' => $media->id,
+            'locale'   => 'zh-CN',
+            'primary'  => true,
+            'text'     => 'the transcript',
+        ]);
+
+        $summary = $media->summaries()->create([
+            'locale' => 'zh-CN',
+            'status' => Summary::STATUS_CREATED,
+        ]);
+
+        (new VideoTranscriberSmartSummaryJob($media))->failed(new RuntimeException('boom'));
+
+        $this->assertSame(Summary::STATUS_FAILED, $summary->refresh()->status);
+        $this->assertSame(Media::STATUS_SUMMARIZE_FAILED, $media->refresh()->status);
     }
 
     public function testOverwritesTheExistingSummaryForTheSameLocale(): void

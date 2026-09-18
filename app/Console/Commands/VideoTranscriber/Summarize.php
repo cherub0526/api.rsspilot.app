@@ -9,7 +9,6 @@ use Hypervel\Bus\UniqueLock;
 use Hypervel\Console\Command;
 use App\Jobs\Media\VideoTranscriberSmartSummaryJob;
 use Hypervel\Cache\Contracts\Factory as CacheFactory;
-use App\Services\VideoTranscriber\Prompts\SmartSummaryTemplate;
 
 class Summarize extends Command
 {
@@ -18,7 +17,7 @@ class Summarize extends Command
      */
     protected ?string $signature = 'videotranscriber:summary
         {--id= : Summarise a specific media by ID, whatever its status}
-        {--language= : ISO 639-1 code the summary must be written in, e.g. en or zh-TW}
+        {--language= : ISO 639-1 code to override the summary language, e.g. en or zh-TW; defaults to the caption language}
         {--force : Release the unique job lock before dispatching}';
 
     /**
@@ -44,7 +43,11 @@ class Summarize extends Command
         }
 
         $force = (bool) $this->option('force');
-        $language = (string) ($this->option('language') ?: SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE);
+
+        // 不帶 --language 就交給 job 去跟字幕語系對齊（影片是什麼語言，主摘要就是
+        // 什麼語言）。這裡不再預設 en——那會讓中文影片產出英文摘要，卻以字幕語系
+        // 存進 summaries.locale，見 VideoTranscriberSmartSummaryJob::languageFor()。
+        $language = ((string) $this->option('language')) ?: null;
 
         $query->chunkById(100, function ($medias) use ($force, $language) {
             foreach ($medias as $media) {

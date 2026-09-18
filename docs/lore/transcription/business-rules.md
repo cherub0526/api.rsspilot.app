@@ -59,6 +59,36 @@ dispatch 而不是由指令撈狀態派工：
   要補得另外寫。判斷「要不要補」時記得它是靠 `available_locales` 展開的——
   之後多開一個語系，同樣只有新影片會有，既有的全部缺。
 
+## summaries.locale 記的是摘要的語言，不是字幕的語言
+
+`code:` `app/Jobs/Media/VideoTranscriberSmartSummaryJob.php` → `languageFor` · `code:` `app/Console/Commands/VideoTranscriber/Summarize.php` · `updated:` `2026-09-18` · `status:` `active`
+
+兩條規則要一起看，缺一條就會產生「標示與內容不符」的資料：
+
+1. **影片是什麼語言，主摘要就是什麼語言**——`videotranscriber:summary` 不帶
+   `--language` 時，語言跟著 primary caption 的語系走。`--language` 是明確覆寫，
+   重跑成別的語言時才用。
+2. **`summaries.locale` 存的是這份摘要「寫成什麼語言」**，而不是它的字幕語系。
+
+2026-09-18 之前這兩件事是錯開的：指令預設 `--language=en`，資料列卻存字幕語系。
+於是中文影片會產出一列**標著 `zh-CN`、內容卻是英文**的摘要（staging 實測）。
+
+這不只是標示難看，它會讓翻譯整個失效：`SummaryTranslationJob` 以這一欄當來源語言
+展開目標語系（`available_locales` 扣掉來源），所以
+
+- 系統以為 `zh-CN` 已經有了 → **真正的中文版永遠不會被產生**
+- 反而去產一份 `en` → **把英文「翻譯」成英文**，白花一次推論
+
+排查提示：看到「中文影片的摘要是英文」不要先去看 prompt，先確認那一列的 `locale`
+跟內容語言是否一致——症狀出現在翻譯，根因在這裡。
+
+**既有資料沒有回填。**這個修正只影響之後產生的摘要；在那之前的共用摘要仍然是
+「內容英文、locale 是字幕語系」，要不要清一次是另一個決定（見下段的取捨）。
+
+回填會遇到的問題：光看 `locale` 分不出「舊的錯誤標示」與「新的正確標示」，得靠
+`ai_model` 反推（`VideoTranscriberClient::SUMMARY_MODEL` 產的是來源摘要、
+OpenRouter 模型產的是翻譯），而且改標之後同一支 media 可能出現兩列 `en`。
+
 ## 新增 queue 一定要同步開 worker，兩邊都要
 
 `code:` `.railway/railway.ts` · `code:` `supervisor/` · `updated:` `2026-09-13` · `status:` `active`
