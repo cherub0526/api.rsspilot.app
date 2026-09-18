@@ -10,14 +10,15 @@ use Hypervel\Http\Request;
 use App\Models\Transaction;
 use App\Models\Subscription;
 use App\Services\PaddleClient;
-use App\Services\PaddleWebhookIpAllowlist;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\HttpOk;
 use Hypervel\Support\Facades\Log;
 use App\OpenApi\Responses\Http400;
 use Paddle\SDK\Exceptions\ApiError;
 use Paddle\SDK\Notifications\Secret;
+use App\Services\PaddleWebhookIpAllowlist;
 use App\Exceptions\InvalidRequestException;
+use App\Services\PaddleSubscriptionService;
 use App\Http\Controllers\AbstractController;
 use Paddle\SDK\Notifications\PaddleSignature;
 use App\Validators\PaddleTransactionValidator;
@@ -109,10 +110,17 @@ class PaddleController extends AbstractController
                 );
             }
 
-            $paddleSubscription = $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId);
+            // 帶著試用結帳時，Paddle 的試用長度是設在 price 上的固定值，跟使用者
+            // 剩下多少試用無關。這一步把它改成我們真正的試用結束日（沒有剩餘試用
+            // 的人則立刻啟用計費），再照 Paddle 回報的日期寫入。
+            $service = new PaddleSubscriptionService();
+            $paddleSubscription = $service->alignTrialBilling(
+                $subscription,
+                $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
+            );
 
             $subscription->fill([
-                'start_date' => Carbon::parse($paddleSubscription->createdAt)->toDateTime(),
+                'start_date' => $service->startDateFor($paddleSubscription)->toDateTime(),
                 'next_date'  => Carbon::parse($paddleSubscription->nextBilledAt)->toDateTime(),
                 'status'     => Subscription::STATUS_ACTIVE,
             ])->save();
