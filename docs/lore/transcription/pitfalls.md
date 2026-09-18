@@ -168,10 +168,17 @@ videotranscriber.ai 的 `getTranscription()` 會對舊的 audio_id 回
 `{"code":100027,"message":"not found","data":null}` —— 記錄在服務端被清掉了。實測：
 8/3 建立的記錄，9/12 去查已經是 not found。確切的保留期沒有公開，只知道一個多月會過期。
 
-**但 `cdn.ng-resource.com` 上的檔案不會跟著消失。**同一筆記錄的 11 個資產在 API 說
-not found 之後全部照樣抓得到：`transcript_url`、`origin_transcript_url`、各 version 的
-`transcript_url` / `subtitle_url`、匯出的 mp3、YouTube 縮圖。也就是說服務端過期的是
+**但 `cdn.ng-resource.com` 上的檔案（大部分）不會跟著消失。**同一筆記錄的 11 個資產在
+API 說 not found 之後照樣抓得到：`transcript_url`、`origin_transcript_url`、各 version
+的 `transcript_url` / `subtitle_url`、匯出的 mp3、YouTube 縮圖。也就是說服務端過期的是
 「記錄索引」，不是檔案本身。
+
+**例外是匯出的 mp3。**2026-09-18 實測另一支五天前的 media：逐字稿與字幕全部照抓，
+`extra_data.video_audio_data.audio_url` 卻回 404。所以這一則的結論要收窄成「**字幕與
+逐字稿留得住，匯出的音檔不保證**」——要靠歸檔重建音檔的話，那條路可能是斷的。
+
+（`VideoTranscriberArchiveJob` 因此把 404／410 當成「這個資產沒了」而不是失敗，不然
+整批會為了一個永遠抓不到的檔案重試到 `MAX_ATTEMPTS` 為止。）
 
 實務上的意義：只要當初那份 response 有留下來，就算 API 已經查不到，字幕原始檔仍然能直接
 從 CDN 下載重建。這是把 response 歸檔到 S3（`videotranscriber.ai/{mediaId}/transcribe.json`）

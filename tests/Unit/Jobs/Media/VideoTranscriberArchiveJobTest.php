@@ -162,6 +162,10 @@ class VideoTranscriberArchiveJobTest extends TestCase
         ]);
     }
 
+    /**
+     * 403 仍然重試：CDN 會依 User-Agent 擋請求（見 lore），那是我們這邊的
+     * 問題，跟「檔案不存在」不是同一回事。
+     */
     public function testReleasesForRetryWhenAnAssetCannotBeDownloaded(): void
     {
         Http::fake([
@@ -181,6 +185,53 @@ class VideoTranscriberArchiveJobTest extends TestCase
         $this->assertSame(120, $job->job->releaseDelay);
         // The ones that did come down are kept: the retry overwrites them.
         Storage::disk('s3')->assertExists(sprintf('videotranscriber.ai/%s/original.transcript.json', $media->id));
+    }
+
+    /**
+     * 上游明確說「沒有這個檔案」時不重試——重試救不回一個已經不存在的東西。
+     *
+     * 實際踩到的情況（2026-09-18）：一支五天前的 media，逐字稿與字幕都還在、
+     * 匯出的 mp3 已經 404。舊行為會為了它整批重跑五次，在 log 裡留下五筆
+     * 一模一樣的 warning，而該抓的東西第一次就全抓完了。
+     */
+    public function testDoesNotRetryWhenAnAssetIsGone(): void
+    {
+        Http::fake([
+            'cdn.ng-resource.com/*c8d2f580.mp3*' => Http::response('gone', 404),
+            'cdn.ng-resource.com/*'              => Http::response(['blocks' => []], 200),
+        ]);
+
+        $media = $this->createMediaWithPayload();
+
+        $job = new VideoTranscriberArchiveJob($media);
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle();
+
+        $this->assertFalse($job->job->isReleased(), '404 不該觸發整批重試');
+
+        $base = sprintf('videotranscriber.ai/%s', $media->id);
+        Storage::disk('s3')->assertExists($base . '/original.transcript.json');
+        Storage::disk('s3')->assertExists($base . '/optimized.subtitle.json');
+        Storage::disk('s3')->assertMissing($base . '/audio.mp3');
+    }
+
+    /** 410 Gone 同理。 */
+    public function testDoesNotRetryOnGone(): void
+    {
+        Http::fake([
+            'cdn.ng-resource.com/*c8d2f580.mp3*' => Http::response('gone', 410),
+            'cdn.ng-resource.com/*'              => Http::response(['blocks' => []], 200),
+        ]);
+
+        $job = new VideoTranscriberArchiveJob($this->createMediaWithPayload());
+        $job->job = new FakeJob();
+        $job->job->attempts = 1;
+
+        $job->handle();
+
+        $this->assertFalse($job->job->isReleased());
     }
 
     public function testGivesUpOnceTheAttemptsRunOut(): void

@@ -61,6 +61,17 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      */
     protected const int TIME_BUDGET_SECONDS = 180;
 
+    /**
+     * 「這個檔案不在了」的 HTTP 狀態碼，重試沒有意義。
+     *
+     * 只收 404 與 410：兩者都是上游明確說「沒有這個資源」。403 不列入——CDN 會
+     * 依 User-Agent 擋請求（見 docs/lore/transcription/pitfalls.md），那是我們這
+     * 邊的問題，重試或修 UA 才是對的處理。
+     *
+     * @var array<int, int>
+     */
+    protected const array GONE_STATUSES = [404, 410];
+
     protected const string DISK = 's3';
 
     protected const string BASE_PATH = 'videotranscriber.ai/%s';
@@ -225,11 +236,28 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      * Download one asset and write it under the media's folder, overwriting
      * whatever was there. Overwriting is the point: a media holds exactly one
      * transcription, so a re-run is a refresh, never a second copy.
+     *
+     * @return bool false 代表「這次沒成功，值得再試一次」。**檔案確定不存在
+     *              （404）算成功**——見 GONE_STATUSES 的說明。
      */
     private function store(string $url, string $file): bool
     {
         try {
             $response = Http::timeout(self::DOWNLOAD_TIMEOUT_SECONDS)->get($url);
+
+            if (in_array($response->status(), self::GONE_STATUSES, true)) {
+                // 重試救不回一個已經不存在的檔案。不當成失敗，否則整批會為了它
+                // 重跑到 MAX_ATTEMPTS 為止（實測 2026-09-18：一支五天前的 media，
+                // 逐字稿與字幕都還在、匯出的 mp3 已經 404，於是整批重試五次、
+                // 在 log 裡留下五筆一模一樣的 warning，而該抓的東西第一次就抓完了）。
+                Log::warning('A videotranscriber.ai asset is gone; archiving without it.', [
+                    'media_id' => $this->media->id,
+                    'file'     => $file,
+                    'status'   => $response->status(),
+                ]);
+
+                return true;
+            }
 
             if (!$response->successful()) {
                 Log::warning('Failed to download a videotranscriber.ai asset.', [
