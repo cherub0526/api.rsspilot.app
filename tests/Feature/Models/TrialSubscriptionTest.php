@@ -20,24 +20,25 @@ class TrialSubscriptionTest extends TestCase
 {
     use RefreshDatabase;
 
-    private Plan $advancePlan;
+    private Plan $trialPlan;
 
-    private Price $advanceMonthlyPrice;
+    private Price $trialMonthlyPrice;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->advancePlan = Plan::withoutEvents(fn () => Plan::factory()->create([
-            'title'         => 'Advance',
-            'channel_limit' => 5,
-            'video_limit'   => 50,
+        // 註冊送的是 Pro 一個月（見 UserObserver::TRIAL_PLAN_TITLE）。
+        $this->trialPlan = Plan::withoutEvents(fn () => Plan::factory()->create([
+            'title'         => 'Pro',
+            'channel_limit' => 3,
+            'video_limit'   => 20,
         ]));
 
-        $this->advanceMonthlyPrice = Price::withoutEvents(fn () => Price::factory()->create([
-            'plan_id' => $this->advancePlan->id,
+        $this->trialMonthlyPrice = Price::withoutEvents(fn () => Price::factory()->create([
+            'plan_id' => $this->trialPlan->id,
             'unit'    => Price::UNIT_MONTHLY,
-            'price'   => 499,
+            'price'   => 12.99,
         ]));
     }
 
@@ -49,16 +50,20 @@ class TrialSubscriptionTest extends TestCase
 
         $this->assertNotNull($subscription);
         $this->assertEquals(Subscription::STATUS_TRIAL, $subscription->status);
-        $this->assertEquals($this->advancePlan->id, $subscription->plan_id);
-        $this->assertEquals($this->advanceMonthlyPrice->id, $subscription->price_id);
+        $this->assertEquals($this->trialPlan->id, $subscription->plan_id);
+        $this->assertEquals($this->trialMonthlyPrice->id, $subscription->price_id);
         $this->assertEquals(Subscription::PAYMENT_METHOD_TRIAL, $subscription->payment_method);
         $this->assertNotNull($subscription->start_date);
         $this->assertNotNull($subscription->next_date);
-        $this->assertTrue($subscription->next_date->isAfter(now()->addDays(13)));
-        $this->assertTrue($subscription->next_date->isBefore(now()->addDays(15)));
+
+        // 一個月，不是固定天數——月份長度不同，用 addMonth() 的結果來比。
+        $this->assertEquals(
+            now()->addMonth()->toDateString(),
+            $subscription->next_date->toDateString()
+        );
     }
 
-    public function testTrialGrantsAdvancePlanLimits(): void
+    public function testTrialGrantsProPlanLimits(): void
     {
         $user = User::factory()->create();
 
@@ -67,9 +72,9 @@ class TrialSubscriptionTest extends TestCase
         $plan = $service->getUserSubscriptionPlan($subscription);
 
         $this->assertNotNull($plan);
-        $this->assertEquals($this->advancePlan->id, $plan->id);
-        $this->assertEquals(5, $plan->channel_limit);
-        $this->assertEquals(50, $plan->video_limit);
+        $this->assertEquals($this->trialPlan->id, $plan->id);
+        $this->assertEquals(3, $plan->channel_limit);
+        $this->assertEquals(20, $plan->video_limit);
     }
 
     public function testExpiredTrialFallsBackToFreePlan(): void
@@ -131,9 +136,9 @@ class TrialSubscriptionTest extends TestCase
         $this->assertEquals(0, $activeCount);
     }
 
-    public function testNoTrialCreatedWhenAdvancePlanMissing(): void
+    public function testNoTrialCreatedWhenTheTrialPlanIsMissing(): void
     {
-        $this->advancePlan->forceDelete();
+        $this->trialPlan->forceDelete();
 
         $user = User::factory()->create();
 
