@@ -115,7 +115,8 @@ if ($this->hasTimeoutJobs()) {
 （`getTranscription()`、401 時 `relogin()` 再重放一次、成功後 `detectLocale()` 還要去
 CDN 抓字幕檔判斷語言），videotranscriber.ai 一慢就破表。
 
-三個參數的大小關係必須維持：
+三個參數的大小關係必須維持（完整的參數規則與目前的缺口見
+`docs/lore/framework/queue-workers.md`——`DB_QUEUE_RETRY_AFTER` 其實從來沒被設過）：
 
 ```
 --timeout  <  retry_after  ≤  stopwaitsecs
