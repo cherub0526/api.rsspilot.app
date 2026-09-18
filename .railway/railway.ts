@@ -105,6 +105,13 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
  * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
  *
+ * `DB_QUEUE_RETRY_AFTER` 同樣是後來補的（2026-09-18）。它決定佇列多久之後判定
+ * 「這個 job 沒人在跑」並重新發給別人，必須大於所有 worker 的 `--timeout`
+ * （目前最大 300，所以設 360）。沒設過的那段期間它是 config 的預設值 90，比兩支
+ * worker 的 timeout 都小，實測造成 26 筆 job 以 MaxAttemptsExceededException 收場。
+ * 它不在任何旗標旁邊，是最容易被漏掉的一個——被 IaC 刪掉的話會安靜地退回 90，
+ * 症狀看起來像外部服務一直失敗。
+ *
  * 六個 AWS_* 也是（2026-09-18 補）：S3 是在這個檔案寫完之後才接上的，變數直接
  * 開在面板上，所以 plan 提議把四個 service 上的它們全部刪掉，共 24 個破壞性變更。
  * 刪掉的後果是播放器截圖、頭像上傳與 VideoTranscriberArchiveJob 的歸檔一起壞掉，
@@ -119,7 +126,7 @@ const ENV_KEYS = [
     "AWS_SECRET_ACCESS_KEY", "AWS_USE_PATH_STYLE_ENDPOINT",
     "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
-    "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+    "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
     "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",

@@ -16,33 +16,52 @@ One file per queue. Supervisor programs address **queues**, not job classes, so
 | `videotranscriber-smart-summary.conf` | `videotranscriber.smart-summary` | `VideoTranscriberSmartSummaryJob` | 300 |
 | `videotranscriber-archive.conf` | `videotranscriber.archive` | `VideoTranscriberArchiveJob` | 300 |
 
-## The one rule that must hold
+## The two rules that must hold
+
+They are **independent**, and mixing them into one chain is what makes this
+confusing. One is global, one is per-program:
 
 ```
---timeout  <  DB_QUEUE_RETRY_AFTER  <  stopwaitsecs
+DB_QUEUE_RETRY_AFTER  >  the LARGEST --timeout in this directory   (global)
+stopwaitsecs          >  this program's own --timeout              (per file)
 ```
 
-**`DB_QUEUE_RETRY_AFTER` is global, not per-queue.** It lives in `.env` and
-feeds `config/queue.php` → `connections.database.retry_after` (default **90**),
-so a single value has to sit above the *largest* `--timeout` used by any file
-here. The largest is currently **300**, so:
+**`DB_QUEUE_RETRY_AFTER` is global, not per-queue.** It feeds `config/queue.php`
+→ `connections.database.retry_after` (default **90**), so a single value has to
+sit above every `--timeout` used here. The largest is **300**, so:
 
 ```
 DB_QUEUE_RETRY_AFTER=360
 ```
 
-Each side of that inequality breaks differently:
+`retry_after` does **not** need to be smaller than `stopwaitsecs`. With 360
+global, the `--timeout=120` programs keep `stopwaitsecs=180` and are perfectly
+correct: 120 < 180 satisfies their own rule, and 360 > 120 satisfies the global
+one. An earlier version of this file wrote the two as a single chain
+(`--timeout < DB_QUEUE_RETRY_AFTER < stopwaitsecs`), which only holds when every
+program shares the same `--timeout` — it does not, so the chain reads as broken
+even when the configuration is right.
+
+Each rule breaks differently:
 
 - **`--timeout` ≥ `retry_after`** — the queue decides a still-running job is
   stuck and hands it to a second worker. Two workers then run the same job at
   once: duplicate external API calls, and whichever finishes last overwrites
-  the other's result.
+  the other's result. Or, when `$tries` runs out first, the job dies with
+  `MaxAttemptsExceededException` while the external service was perfectly fine.
+  Measured 2026-09-18 on staging: `retry_after` was still the default 90 against
+  `--timeout=120`, and 26 jobs failed exactly this way.
 - **`stopwaitsecs` ≤ `--timeout`** — every deploy or restart SIGKILLs whatever
   is mid-flight, because supervisor stops waiting before the job's own budget
   is up.
 
-Raising any `--timeout` above 300 means raising `DB_QUEUE_RETRY_AFTER` and that
-file's `stopwaitsecs` in the same change.
+Raising any `--timeout` means checking both: the global value (if this becomes
+the largest) and that file's own `stopwaitsecs`.
+
+**`DB_QUEUE_RETRY_AFTER` lives nowhere near the flags** — not in these files,
+not in `.railway/railway.ts`. On Railway it is a service variable and must also
+be listed in `ENV_KEYS`, or the next `railway config apply` deletes it and the
+value silently falls back to 90.
 
 ## Why `--timeout` matters more than it looks
 

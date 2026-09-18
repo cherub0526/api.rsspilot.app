@@ -23,7 +23,7 @@ Forge（supervisor）與 Railway 兩條部署路徑跑的是同一份 PHP，但�
 | `--sleep` | 同上 | 沒 job 時的輪詢間隔 | 3 |
 | `--memory` | 同上 | 記憶體上限（MB），超過就走 stop() | 256 |
 | `--max-time` | — | **已移除**，見〈`--max-time` 是讓 worker 變活死人的開關〉 | 無 |
-| `retry_after` | `config/queue.php` ← `DB_QUEUE_RETRY_AFTER` | 佇列多久之後判定「這個 job 沒人在跑」並重新發給別人 | **90（預設值，沒人設過）** |
+| `retry_after` | `config/queue.php` ← `DB_QUEUE_RETRY_AFTER`（Railway 是 service variable，且必須列進 `ENV_KEYS`） | 佇列多久之後判定「這個 job 沒人在跑」並重新發給別人 | **360**（2026-09-18 之前從沒設過，一直是預設的 90） |
 | `stopwaitsecs` | 只有 supervisor 有 | 部署／重啟時等 job 收尾的寬限期 | 180 或 360 |
 | `numprocs` | 只有 supervisor 有 | 同一個佇列幾個 worker process | 2 |
 | `numReplicas` | 只有 Railway 有 | 同上 | 1 |
@@ -36,15 +36,22 @@ Forge（supervisor）與 Railway 兩條部署路徑跑的是同一份 PHP，但�
 
 `code:` `config/queue.php` → `connections.database.retry_after` · `code:` `supervisor/README.md` · `updated:` `2026-09-18` · `status:` `active`
 
-必須成立的關係（supervisor/README.md 早就寫了）：
+必須成立的是**兩條各自獨立的規則**，不是一條連鎖不等式：
 
 ```
---timeout  <  DB_QUEUE_RETRY_AFTER  <  stopwaitsecs
+DB_QUEUE_RETRY_AFTER  >  這個連線上所有 worker 裡最大的 --timeout   （全域一個值）
+stopwaitsecs          >  該 program 自己的 --timeout                （每個檔各自）
 ```
 
-**但 `DB_QUEUE_RETRY_AFTER` 在這個專案裡從來沒有被設定過。**2026-09-18 實測：
-Railway 的變數清單沒有、`.env.example` 沒有、`.railway/railway.ts` 的 `ENV_KEYS`
-沒有、本機 `.env` 也沒有。於是它一路退回 `config/queue.php` 的預設值：
+`retry_after` 跟 `stopwaitsecs` 之間**沒有必須成立的大小關係**。把兩者寫成一條鏈
+（`--timeout < retry_after < stopwaitsecs`）只有在所有 program 共用同一個
+`--timeout` 時才成立——實際上不是：`--timeout=120` 的那幾支配的是
+`stopwaitsecs=180`，全域值 360 比它大，但那完全正確（120 < 180 滿足自己那條，
+360 > 120 滿足全域那條）。看到 360 > 180 就以為設定壞了，是被舊的寫法誤導。
+
+**2026-09-18 之前 `DB_QUEUE_RETRY_AFTER` 在這個專案裡從來沒有被設定過**（當天已在
+staging 補上 360）：Railway 的變數清單沒有、`.env.example` 沒有、`.railway/railway.ts`
+的 `ENV_KEYS` 沒有、本機 `.env` 也沒有。於是它一路退回 `config/queue.php` 的預設值：
 
 ```php
 'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
@@ -60,16 +67,25 @@ worker 領走之後，全部以 `MaxAttemptsExceededException` 進 `failed_jobs`
 三件容易誤判的事：
 
 1. **`retry_after` 是連線層級的，不是 per-queue。**一個值要同時大於所有 worker 的
-   `--timeout`，所以它必須 ≥ 目前最大的那個（300）。README 建議 360。
+   `--timeout`，所以它必須大於目前最大的那個（300）。實際設定值是 360。
 2. **改 `--timeout` 時一定要同步檢查它。**它不在 supervisor 設定檔裡，也不在
    `railway.ts` 裡，是唯一一個「不在旗標旁邊」的參數，最容易漏。
 3. **兩條部署路徑都中。**這不是 Railway 專屬問題，Forge 的 `.env` 同樣沒設。
 
-怎麼確認現值：
+**在 Railway 上它還多一道關卡**：它是 service variable，必須同時列進
+`.railway/railway.ts` 的 `ENV_KEYS`，否則下一次 `railway config apply` 會把四個
+service 上的它刪掉（IaC 的 omit=delete 對變數同樣適用），值就安靜地退回 90。
+2026-09-18 實測：變數設好之後 plan 立刻出現四筆 `Delete variable
+*.DB_QUEUE_RETRY_AFTER`，補進 `ENV_KEYS` 才消失。
+
+怎麼確認現值（要在**跑 worker 的那個容器裡**問，不是在 api）：
 
 ```bash
 php artisan tinker --execute="echo config('queue.connections.database.retry_after');"
 ```
+
+2026-09-18 staging 驗證結果：四個 service 的變數都是 360，兩支 worker 的 runtime
+讀到的也是 360。
 
 ## `--max-time` 是讓 worker 變活死人的開關
 
