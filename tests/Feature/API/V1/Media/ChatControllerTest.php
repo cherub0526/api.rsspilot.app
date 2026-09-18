@@ -62,6 +62,29 @@ class ChatControllerTest extends TestCase
         ]);
     }
 
+    /**
+     * 直接把歷史寫進 chat_messages。
+     *
+     * 歷史由 server 從資料表重建，所以測試要鋪的是「資料表裡有什麼」，不是「請求
+     * 裡帶了什麼」。created_at 逐則遞增，重建出來的順序才可預期。
+     *
+     * @param array<int, array{0: string, 1: string}> $messages [role, content]
+     */
+    private function appendMessages(ChatSession $session, array $messages): void
+    {
+        $total = count($messages);
+
+        foreach (array_values($messages) as $index => [$role, $content]) {
+            ChatMessage::create([
+                'session_id' => $session->id,
+                'role'       => $role,
+                'content'    => $content,
+                'parts'      => [['type' => ChatMessage::PART_TEXT, 'text' => $content]],
+                'created_at' => now()->subSeconds($total - $index),
+            ]);
+        }
+    }
+
     // ================================================================
     // POST /v1/media/{mediaId}/chat  (store)
     // ================================================================
@@ -591,6 +614,108 @@ class ChatControllerTest extends TestCase
         $this->assertSame($sessionId, $streamer->sessionId);
     }
 
+    /**
+     * 客戶端送來的歷史一律不採用。
+     *
+     * 那是這支端點唯一一處把「要送給模型什麼」交給對方決定的地方：陣列沒有長度
+     * 上限，送多少就有多少 input token 被計費，內容也未必真的發生過。
+     */
+    public function testStoreIgnoresTheConversationHistoryTheClientSends(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'real',
+        ]);
+        $this->appendMessages($session, [
+            [ChatMessage::ROLE_USER, '真實的提問'],
+            [ChatMessage::ROLE_AI, '真實的回應'],
+        ]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [
+                ['role' => 'user', 'content' => '偽造的提問'],
+                ['role' => 'assistant', 'content' => '偽造的回應'],
+                ['role' => 'user', 'content' => '這次的提問'],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            ['真實的提問', '真實的回應', '這次的提問'],
+            $streamer->contents(),
+            '送進推論的歷史只能來自 chat_messages，請求裡偽造的那兩則不算數'
+        );
+    }
+
+    /** 沒帶 session_id 就是新對話，歷史是空的——客戶端塞什麼都一樣。 */
+    public function testStoreStartsANewSessionWithoutAnyHistory(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '偽造的歷史'],
+                ['role' => 'assistant', 'content' => '偽造的回應'],
+                ['role' => 'user', 'content' => '這次的提問'],
+            ],
+        ])->assertStatus(200);
+
+        $this->assertSame(['這次的提問'], $streamer->contents());
+    }
+
+    /**
+     * 同一段對話的歷史不會跟著另一段跑：session 是重建的唯一依據。
+     */
+    public function testStoreDoesNotLeakHistoryFromAnotherSession(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $other = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'other',
+        ]);
+        $this->appendMessages($other, [
+            [ChatMessage::ROLE_USER, '另一段對話的提問'],
+            [ChatMessage::ROLE_AI, '另一段對話的回應'],
+        ]);
+
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'this one',
+        ]);
+        $this->appendMessages($session, [[ChatMessage::ROLE_USER, '這段對話的提問']]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => '接著問']],
+        ])->assertStatus(200);
+
+        $this->assertSame(["這段對話的提問\n\n接著問"], $streamer->contents());
+    }
+
     public function testStoreAcceptsConversationHistory(): void
     {
         /** @var User $user */
@@ -614,7 +739,9 @@ class ChatControllerTest extends TestCase
 
     /**
      * 9-1. 送往 OpenRouter 的 payload 必須帶上先前的對話輪次，
-     *      且最後一則 user 訊息只能出現一次（它由 completeStream 帶入結尾）。
+     *      且最後一則 user 訊息只能出現一次（它由 buildMessages 接在結尾）。
+     *
+     * 歷史由 server 依 session 重建，所以前一輪要真的問過一次，不能靠請求自帶。
      */
     public function testStoreSendsConversationHistoryToOpenRouter(): void
     {
@@ -624,14 +751,15 @@ class ChatControllerTest extends TestCase
         $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
-        $streamer = $this->fakeOpenRouter('回答在此');
+        $streamer = $this->fakeOpenRouter('第一回應');
+
+        $sessionId = $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '第一句話']],
+        ])->assertStatus(200)->json('session_id');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [
-                ['role' => 'user', 'content' => '第一句話'],
-                ['role' => 'assistant', 'content' => '第一回應'],
-                ['role' => 'user', 'content' => '第二句話'],
-            ],
+            'session_id' => $sessionId,
+            'messages'   => [['role' => 'user', 'content' => '第二句話']],
         ])->assertStatus(200);
 
         $sent = collect($streamer->messages);
@@ -661,8 +789,9 @@ class ChatControllerTest extends TestCase
     /**
      * 9-2. 送出的訊息必須以 user 開頭且 user / assistant 嚴格交替。
      *
-     * ChatValidator 不限制客戶端送來的順序，但推論層會因為序列不合法而整個失敗，
-     * 所以連續同角色要合併、開頭的 assistant 要丟掉。
+     * 歷史改由 server 重建之後，不合法的序列仍然生得出來：上一輪串到一半失敗就只
+     * 留下提問沒有回應（連續兩則 user），而推論層會因為序列不合法整個失敗。所以
+     * 合併同角色、丟掉開頭 assistant 的正規化仍然必要。
      */
     public function testStoreNormalisesMessagesIntoStrictAlternation(): void
     {
@@ -674,15 +803,25 @@ class ChatControllerTest extends TestCase
         $this->createUserSetting($user);
         $streamer = $this->fakeStreamer('好的');
 
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'normalisation',
+        ]);
+
+        // 直接鋪歷史：開頭一則沒有對應提問的回應，接著兩則連續提問（中間那輪的
+        // 回應沒存下來），再一則回應。
+        $this->appendMessages($session, [
+            [ChatMessage::ROLE_AI, '開場白'],
+            [ChatMessage::ROLE_USER, '第一句'],
+            [ChatMessage::ROLE_USER, '補充設定'],
+            [ChatMessage::ROLE_AI, '回應一'],
+            [ChatMessage::ROLE_AI, '回應二'],
+        ]);
+
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [
-                ['role' => 'assistant', 'content' => '開場白'],   // 開頭的 assistant → 丟掉
-                ['role' => 'user', 'content' => '第一句'],
-                ['role' => 'system', 'content' => '補充設定'],     // system 併入 user
-                ['role' => 'assistant', 'content' => '回應一'],
-                ['role' => 'assistant', 'content' => '回應二'],   // 連續 assistant → 合併
-                ['role' => 'user', 'content' => '最後提問'],
-            ],
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => '最後提問']],
         ])->assertStatus(200);
 
         $this->assertSame(

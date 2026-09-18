@@ -97,6 +97,10 @@ class ChatController
                     ),
                     new OAT\Property(
                         property: 'messages',
+                        description: 'Only the LAST item is used — it is the question being asked. '
+                            . 'Earlier items are ignored: the conversation history is rebuilt server-side '
+                            . 'from the session, so it cannot be forged or padded by the client. '
+                            . 'Send just the new question and the session_id it belongs to.',
                         type: 'array',
                         items: new OAT\Items(
                             required: ['role', 'content'],
@@ -117,8 +121,10 @@ class ChatController
                                     description: 'Player screenshots attached to this turn, each identified by '
                                         . 'its second and the SHA-256 of its bytes (a second holds many frames). '
                                         . 'Upload them via POST /v1/media/{mediaId}/thumbnails first. '
-                                        . 'At most 4 per message, and the 4 most recent across the whole request '
-                                        . 'are the ones actually sent to the model.',
+                                        . 'At most 4 per message, and the 4 most recent across the whole '
+                                        . 'conversation (this question plus the stored history) are the ones '
+                                        . 'actually sent to the model. Only screenshots attached to THIS question '
+                                        . 'make it cost 2 quota units; ones inherited from earlier turns do not.',
                                     type: 'array',
                                     items: new OAT\Items(
                                         required: ['second', 'checksum'],
@@ -195,18 +201,40 @@ class ChatController
         $userId = (string) $request->user()->getKey();
         $mediaKey = (string) $media->getKey();
 
-        // 截圖在扣額度之前就驗完：指到不存在的圖是請求本身有問題，不該先扣一次
-        // 額度再退還。imageUrls 的 key 是 "秒數:checksum"，值是當下簽出的限時 URL。
-        $imageRefs = $this->collectImages($params['messages']);
+        // 客戶端送來的陣列只取最後一則——那是這次的提問。其餘的一律忽略，歷史
+        // 改由 server 依 session 重建（見 historyOf()）。
+        $lastMessage = collect($params['messages'])->last() ?? [];
+        $userMessage = $lastMessage['content'] ?? '';
+
+        // 有歷史可讀的前提是 session 已經存在，所以這裡只「找」不「建」：沒帶
+        // session_id 就是這段對話的第一句，歷史是空的。建立新 session 仍然留在
+        // 扣額度之後，被擋下來的請求才不會留下一堆只有提問、沒有回應的空 session。
+        $session = isset($params['session_id'])
+            ? $this->findSession($userId, $mediaId, (string) $params['session_id'])
+            : null;
+
+        $history = $session instanceof ChatSession
+            ? $this->historyOf((string) $session->getKey())
+            : [];
+
+        // 權限與扣點看的是「這一則附了圖沒有」，不是整包 payload 裡有沒有圖。歷史
+        // 中的截圖仍然會被送進推論（見 collectImages()），但那是前面幾輪已經扣過
+        // 點的東西——純文字追問不該因為稍早附過圖就變成 2 點。
+        $currentRefs = $this->refsIn($lastMessage);
 
         // 帶圖提問是 Pro 以上的功能。真正的成本在這裡而不是上傳——vision 推論的
-        // 單次成本明顯高於純文字，而每日 chat 額度沒有為帶圖加權。純文字提問
-        // 不受影響，所以只在真的帶了圖時才檢查。
-        if ($imageRefs !== []) {
+        // 單次成本明顯高於純文字。
+        if ($currentRefs !== []) {
             $this->assertScreenshotEnabled($request);
         }
 
-        $this->assertThumbnailsExist($mediaKey, $imageRefs);
+        // 截圖在扣額度之前就驗完：指到不存在的圖是請求本身有問題，不該先扣一次
+        // 額度再退還。imageUrls 的 key 是 "秒數:checksum"，值是當下簽出的限時 URL。
+        $imageRefs = $this->resolveImages(
+            $mediaKey,
+            $this->collectImages([...$history, $lastMessage]),
+            $currentRefs
+        );
         $imageUrls = [];
 
         foreach ($imageRefs as $ref) {
@@ -221,18 +249,12 @@ class ChatController
         // 只有提問、沒有回應的空 session。
         $quota = $this->quota->consume(
             $request->user(),
-            $imageRefs === [] ? 1 : self::QUOTA_COST_WITH_IMAGES
+            $currentRefs === [] ? 1 : self::QUOTA_COST_WITH_IMAGES
         );
 
-        $lastMessage = collect($params['messages'])->last() ?? [];
-        $userMessage = $lastMessage['content'] ?? '';
         $currentImages = $this->allowedImagesOf($lastMessage, $imageRefs);
-        $session = $this->findOrCreateSession(
-            $userId,
-            $mediaId,
-            $params['session_id'] ?? null,
-            $userMessage
-        );
+        $session ??= $this->createSession($userId, $mediaId, $userMessage);
+
         $this->saveMessage(
             (string) $session->getKey(),
             ChatMessage::ROLE_USER,
@@ -241,10 +263,6 @@ class ChatController
         );
         $buffer = '';
         $saved = false;
-
-        // 最後一句稍後單獨接在訊息陣列結尾，這裡去掉以免重複。
-        $history = $params['messages'];
-        array_pop($history);
 
         // 參考資料與 /summaries 端點取同一份摘要（使用者自己的 > 同語系共用的 >
         // 第一筆共用的），否則使用者讀到的摘要跟 AI 依據的會是不同版本。
@@ -536,54 +554,164 @@ class ChatController
     }
 
     /**
-     * 指到不存在的截圖就整個請求擋下來。
+     * 留下真的還在的截圖，並在「這次附的圖」指不到東西時擋下整個請求。
      *
-     * 不改成「靜默略過」是因為那會讓使用者看見自己送出的縮圖、AI 的回答卻完全
-     * 沒提到畫面，而且找不出哪裡不對。附圖上傳本來就在送出之前完成，真的缺圖
-     * 代表前端狀態壞了，早點講清楚比較好。
+     * 兩種缺圖的處理刻意不同：
      *
-     * @param array<int, array{second: int, checksum: string}> $refs
+     * - **這次附的**——整個請求擋下來。不靜默略過是因為那會讓使用者看見自己送出的
+     *   縮圖、AI 的回答卻完全沒提到畫面，而且找不出哪裡不對。附圖上傳本來就在送出
+     *   之前完成，真的缺圖代表前端狀態壞了，早點講清楚比較好。
+     * - **歷史裡的**——默默丟掉。歷史現在由 server 重建，使用者無從把它拿掉；讓一張
+     *   早就不存在的舊截圖把整段對話永久卡死，代價遠大於少送一張圖。被丟掉的那張
+     *   當時的文字仍然留在歷史裡。
+     *
+     * @param array<int, array{second: int, checksum: string}> $refs 整包 payload 要送的截圖
+     * @param array<int, array{second: int, checksum: string}> $currentRefs 其中屬於這次提問的
+     * @return array<int, array{second: int, checksum: string}>
      * @throws InvalidRequestException
      */
-    private function assertThumbnailsExist(string $mediaKey, array $refs): void
+    private function resolveImages(string $mediaKey, array $refs, array $currentRefs): array
     {
+        $currentKeys = array_flip(array_map($this->imageKey(...), $currentRefs));
+        $kept = [];
+
         foreach ($refs as $ref) {
-            if (!$this->thumbnails->exists($mediaKey, $ref['second'], $ref['checksum'])) {
+            if ($this->thumbnails->exists($mediaKey, $ref['second'], $ref['checksum'])) {
+                $kept[] = $ref;
+                continue;
+            }
+
+            if (isset($currentKeys[$this->imageKey($ref)])) {
                 throw new InvalidRequestException([
                     'images' => [__('validators.controllers.thumbnails.not_found')],
                 ]);
             }
         }
+
+        return $kept;
     }
 
     /**
-     * 找到或建立 ChatSession。
-     * session_id 有傳 → 驗證所有權；未傳 → 自動建立。
+     * 一則訊息自己附的截圖，正規化並去重，上限與 ChatValidator 的 `max:4` 一致。
+     *
+     * 與 allowedImagesOf() 的差別是這裡不比對任何白名單——它回答的是「這則訊息
+     * 附了什麼」，而不是「這則訊息附的東西裡有哪些被選中送出去」。
+     *
+     * @param array<string, mixed> $message
+     * @return array<int, array{second: int, checksum: string}>
+     */
+    private function refsIn(array $message): array
+    {
+        $images = $message['images'] ?? [];
+
+        if (!is_array($images)) {
+            return [];
+        }
+
+        $refs = [];
+
+        foreach (array_slice($images, 0, self::IMAGES_PER_MESSAGE) as $image) {
+            $ref = $this->toRef($image);
+
+            if ($ref === null) {
+                continue;
+            }
+
+            $refs[$this->imageKey($ref)] = $ref;
+        }
+
+        return array_values($refs);
+    }
+
+    /**
+     * 找出這位使用者在這支影片底下的既有 session。
+     *
+     * 找不到就是 404 而不是「當成新對話」：session_id 是使用者自己傳來的，指到別人
+     * 的（或不存在的）對話時安靜地開一段新的，會讓前端以為自己還在原本那一段。
+     *
+     * 建立新 session 分開成 createSession()，因為讀歷史必須在扣額度之前、而建立
+     * 必須在之後——合在一起就沒辦法同時滿足。
      *
      * @throws NotFoundHttpException
      */
-    private function findOrCreateSession(string $userId, string $mediaId, ?string $sessionId, string $userMessage): ChatSession
+    private function findSession(string $userId, string $mediaId, string $sessionId): ChatSession
     {
-        if ($sessionId !== null) {
-            $session = ChatSession::where('id', $sessionId)
-                ->where('user_id', $userId)
-                ->where('media_id', $mediaId)
-                ->first();
+        $session = ChatSession::where('id', $sessionId)
+            ->where('user_id', $userId)
+            ->where('media_id', $mediaId)
+            ->first();
 
-            if (!$session) {
-                throw new NotFoundHttpException();
-            }
-
-            return $session;
+        if (!$session) {
+            throw new NotFoundHttpException();
         }
 
-        $title = mb_substr($userMessage, 0, 50);
+        return $session;
+    }
 
+    private function createSession(string $userId, string $mediaId, string $userMessage): ChatSession
+    {
         return ChatSession::create([
             'user_id'  => $userId,
             'media_id' => $mediaId,
-            'title'    => $title,
+            'title'    => mb_substr($userMessage, 0, 50),
         ]);
+    }
+
+    /**
+     * 這段對話至今的訊息，由 server 自己的紀錄重建。
+     *
+     * **不採用客戶端送來的 `messages`**，那是這支端點唯一一處把「要送給模型什麼」
+     * 的決定權交出去的地方：陣列沒有長度上限，對方送多少就有多少 input token 被
+     * 計費，內容也未必真的發生過。改讀 `chat_messages` 之後，歷史的長度與內容都
+     * 由 server 決定，之後要加視窗上限或摘要壓縮也才有地方可加。
+     *
+     * 排序用 created_at 再用 id：同一輪的提問與回應常落在同一秒，ULID 是單調遞增
+     * 的，拿它當 tiebreaker 才能保證 user / assistant 的先後不會顛倒。
+     *
+     * @return array<int, array{role: string, content: string, images: array<int, array{second: int, checksum: string}>}>
+     */
+    private function historyOf(string $sessionId): array
+    {
+        return ChatMessage::query()
+            ->where('session_id', $sessionId)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ChatMessage $message): array => [
+                // content 是 text 片段的投影（見 ChatMessage::partsToText()），
+                // 送進推論的歷史只要文字，所以直接讀它。
+                'role'    => $message->role === ChatMessage::ROLE_AI ? 'assistant' : 'user',
+                'content' => (string) $message->content,
+                'images'  => $this->imagesOf($message),
+            ])
+            ->all();
+    }
+
+    /**
+     * 一則已存訊息當時附上的截圖。
+     *
+     * 存的是 `second` 與 `checksum` 而不是 URL——URL 帶簽章會過期，重建歷史時一律
+     * 現簽（見 ChatMessage 的 PART_IMAGE 註解）。
+     *
+     * @return array<int, array{second: int, checksum: string}>
+     */
+    private function imagesOf(ChatMessage $message): array
+    {
+        $images = [];
+
+        foreach ($message->contentParts() as $part) {
+            if (($part['type'] ?? null) !== ChatMessage::PART_IMAGE) {
+                continue;
+            }
+
+            $ref = $this->toRef($part);
+
+            if ($ref !== null) {
+                $images[] = $ref;
+            }
+        }
+
+        return $images;
     }
 
     /**

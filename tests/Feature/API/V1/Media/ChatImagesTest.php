@@ -118,6 +118,44 @@ class ChatImagesTest extends TestCase
         return ['second' => $second, 'checksum' => $this->sum($second, $variant)];
     }
 
+    /**
+     * 直接鋪一則帶截圖的歷史訊息。
+     *
+     * 歷史由 server 從 chat_messages 重建，截圖存的是 second + checksum（URL 帶
+     * 簽章會過期），所以測試要鋪的也是這個形狀。
+     *
+     * @param array<int, array{second: int, checksum: string}> $images
+     */
+    private function appendMessage(ChatSession $session, string $role, string $content, array $images = []): void
+    {
+        $parts = array_map(
+            fn (array $image): array => [
+                'type'     => ChatMessage::PART_IMAGE,
+                'second'   => $image['second'],
+                'checksum' => $image['checksum'],
+            ],
+            $images
+        );
+        $parts[] = ['type' => ChatMessage::PART_TEXT, 'text' => $content];
+
+        ChatMessage::create([
+            'session_id' => $session->id,
+            'role'       => $role,
+            'content'    => $content,
+            'parts'      => $parts,
+            'created_at' => now()->subSeconds(60 - ChatMessage::where('session_id', $session->id)->count()),
+        ]);
+    }
+
+    private function sessionFor(User $user, Media $media): ChatSession
+    {
+        return ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'images',
+        ]);
+    }
+
     // ── 送進推論 ───────────────────────────────────────────────
 
     public function testAttachedScreenshotsReachTheModelAsSignedUrls(): void
@@ -169,10 +207,13 @@ class ChatImagesTest extends TestCase
         $media = $this->freeMedia();
         $this->captureAt($media, 10, 20, 30, 40, 50);
 
+        $session = $this->sessionFor($user, $media);
+        $this->appendMessage($session, ChatMessage::ROLE_USER, '第一問', [$this->ref(10), $this->ref(20)]);
+        $this->appendMessage($session, ChatMessage::ROLE_AI, '第一答');
+
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [
-                ['role' => 'user', 'content' => '第一問', 'images' => [$this->ref(10), $this->ref(20)]],
-                ['role' => 'assistant', 'content' => '第一答'],
+            'session_id' => $session->id,
+            'messages'   => [
                 ['role' => 'user', 'content' => '第二問', 'images' => [$this->ref(30), $this->ref(40), $this->ref(50)]],
             ],
         ])->assertStatus(200);
@@ -199,9 +240,13 @@ class ChatImagesTest extends TestCase
         $media = $this->freeMedia();
         $this->captureAt($media, 10, 20);
 
+        // 上一輪串到一半失敗，只留下提問沒有回應——連續兩則 user 就是這樣來的。
+        $session = $this->sessionFor($user, $media);
+        $this->appendMessage($session, ChatMessage::ROLE_USER, '先看這格', [$this->ref(10)]);
+
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
-            'messages' => [
-                ['role' => 'user', 'content' => '先看這格', 'images' => [$this->ref(10)]],
+            'session_id' => $session->id,
+            'messages'   => [
                 ['role' => 'user', 'content' => '再看這格', 'images' => [$this->ref(20)]],
             ],
         ])->assertStatus(200);
@@ -211,6 +256,56 @@ class ChatImagesTest extends TestCase
             [$this->signed($media, 10), $this->signed($media, 20)],
             $streamer->imagesAt(0)
         );
+    }
+
+    /**
+     * 歷史裡的截圖不見了就默默丟掉，不能讓整段對話從此卡死。
+     *
+     * 歷史現在由 server 重建，使用者無從把那一則拿掉；若比照「這次附的圖」擋下整個
+     * 請求，一張早就不存在的舊截圖等於讓這段對話再也不能提問。
+     */
+    public function testAMissingScreenshotInTheHistoryIsDroppedInsteadOfFailingTheRequest(): void
+    {
+        $this->fakeS3();
+        $streamer = $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+        $this->captureAt($media, 20);
+
+        // 10 那一張從來沒放進 S3：等同於歷史留著紀錄、檔案已經不在。
+        $session = $this->sessionFor($user, $media);
+        $this->appendMessage($session, ChatMessage::ROLE_USER, '先看這格', [$this->ref(10)]);
+        $this->appendMessage($session, ChatMessage::ROLE_AI, '看到了');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [
+                ['role' => 'user', 'content' => '這格呢', 'images' => [$this->ref(20)]],
+            ],
+        ])->assertStatus(200);
+
+        // 舊的那一則只剩文字，這次附的那張照常送出。
+        $this->assertSame([], $streamer->imagesAt(0));
+        $this->assertSame([$this->signed($media, 20)], $streamer->imagesAt(2));
+    }
+
+    /** 這次附的圖指不到東西仍然整個擋下來——那代表前端狀態壞了，不該安靜地略過。 */
+    public function testAMissingScreenshotOnTheCurrentQuestionStillFailsTheRequest(): void
+    {
+        $this->fakeS3();
+        $this->fakeStreamer();
+
+        $user = $this->fakeLogin();
+        $this->createUserSetting($user);
+        $media = $this->freeMedia();
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [
+                ['role' => 'user', 'content' => '這格呢', 'images' => [$this->ref(99)]],
+            ],
+        ])->assertStatus(422);
     }
 
     /**

@@ -405,6 +405,40 @@ class ChatQuotaTest extends TestCase
     }
 
     /**
+     * 扣點看的是「這一則附了圖沒有」，不是整包 payload 裡有沒有圖。
+     *
+     * 歷史中的截圖仍然會被送進推論（見〈帶圖提問有兩層上限〉），但那是前一輪已經
+     * 扣過 2 點的東西。歷史改由 server 重建之後使用者無從把它拿掉，若沿用「payload
+     * 有圖就扣 2 點」，附過一次圖之後的每一則純文字追問都會變成 2 點，而且前端在
+     * 沒附圖時根本不會標示「這則扣 2 次」。
+     */
+    public function testTextOnlyFollowUpAfterAnImageQuestionStillConsumesOne(): void
+    {
+        $this->fakeS3();
+        $this->fakeStreamer();
+        $this->createPlanWithScreenshots(10);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $media = $this->createAccessibleMedia();
+
+        $sessionId = $this->askWithImage($media)
+            ->assertStatus(200)
+            ->assertHeader('X-RateLimit-Remaining', '8')
+            ->json('session_id');
+
+        // 同一段對話的純文字追問：歷史裡那張圖照樣送進推論，但不再扣一次點。
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $sessionId,
+            'messages'   => [['role' => 'user', 'content' => '所以結論是什麼？']],
+        ])
+            ->assertStatus(200)
+            ->assertHeader('X-RateLimit-Remaining', '7');
+
+        $this->assertSame(3, ChatUsage::query()->where('user_id', $user->id)->value('count'));
+    }
+
+    /**
      * 剩 1 點時帶圖提問要整個擋下來，不做部分扣點——否則會變成用 1 點買到 2 點的東西。
      */
     public function testImageQuestionIsRejectedWhenOnlyOneUnitRemains(): void

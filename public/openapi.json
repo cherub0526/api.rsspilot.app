@@ -209,6 +209,7 @@
                     "Auth"
                 ],
                 "summary": "Exchange the current access token for a new one",
+                "description": "刻意用 login() 而不是 guard()->refresh()。\n\nJWTManager::refresh() 產出的 claims 只有 sub 與原始 iat（見 buildRefreshClaims()），\nencode() 不補預設值，於是換發出來的 token **沒有 exp**；而 ExpiredClaim 對缺少\nexp 的 payload 直接放行，等於發出一張永不過期的憑證。\nlogin() 走的是登入那條路徑，iat / exp 齊全，也保證三支發 token 的端點形狀一致。\n\n代價是 iat 會跟著換發更新，所以「從首次登入起算」的上限不存在——本來也不存在，\n這個套件沒有任何 validation 在檢查 refresh_ttl。見 docs/lore/auth/business-rules.md。",
                 "operationId": "api.v1.auth.refresh.store",
                 "responses": {
                     "200": {
@@ -1229,6 +1230,7 @@
                                         "nullable": true
                                     },
                                     "messages": {
+                                        "description": "Only the LAST item is used — it is the question being asked. Earlier items are ignored: the conversation history is rebuilt server-side from the session, so it cannot be forged or padded by the client. Send just the new question and the session_id it belongs to.",
                                         "type": "array",
                                         "items": {
                                             "required": [
@@ -1250,7 +1252,7 @@
                                                     "example": "What is this video about?"
                                                 },
                                                 "images": {
-                                                    "description": "Player screenshots attached to this turn, each identified by its second and the SHA-256 of its bytes (a second holds many frames). Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole request are the ones actually sent to the model.",
+                                                    "description": "Player screenshots attached to this turn, each identified by its second and the SHA-256 of its bytes (a second holds many frames). Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole conversation (this question plus the stored history) are the ones actually sent to the model. Only screenshots attached to THIS question make it cost 2 quota units; ones inherited from earlier turns do not.",
                                                     "type": "array",
                                                     "items": {
                                                         "required": [
@@ -1594,7 +1596,7 @@
                     "Media"
                 ],
                 "summary": "Upload the screenshot for one second of the video",
-                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。\n\n截圖是 Pro 以上的功能（plans.screenshot_enabled）。GET 不設這道閘門——\n它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。",
+                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。\n\n截圖是 Advance 方案的功能（plans.screenshot_enabled）。GET 不設這道閘門——\n它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。",
                 "operationId": "api.v1.media.thumbnails.store",
                 "parameters": [
                     {
