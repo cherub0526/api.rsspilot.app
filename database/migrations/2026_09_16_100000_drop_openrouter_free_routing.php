@@ -62,14 +62,35 @@ return new class extends Migration {
     /**
      * 只改還停在舊值的那一列：上線後有人手動調過就不要蓋掉他。
      *
+     * 比對刻意在 PHP 裡做，不寫進 where。`plans.ai_routing` 在 Postgres 是真正的
+     * `json` 欄位，而 `json` 型別**沒有等號運算子**，`where('ai_routing', '{...}')`
+     * 會炸成：
+     *
+     *   SQLSTATE[42883]: operator does not exist: json = unknown
+     *
+     * 本機是 sqlite，json 欄位就是 TEXT，同一段 code 完全正常——所以這種寫法在
+     * 本機驗不出來，只會在部署時炸（實測 2026-09-18 staging）。
+     *
      * @param array<string, mixed> $routing
      * @param array<string, mixed> $expected
      */
     private function setFreePlanRouting(array $routing, array $expected): void
     {
+        $plan = DB::table('plans')->where('title', 'Free')->first();
+
+        if ($plan === null) {
+            return;
+        }
+
+        $current = json_decode((string) ($plan->ai_routing ?? ''), true);
+
+        // == 而不是 ===：兩邊都是關聯陣列，key 的順序不該影響判斷。
+        if (!is_array($current) || $current != $expected) {
+            return;
+        }
+
         DB::table('plans')
-            ->where('title', 'Free')
-            ->where('ai_routing', json_encode($expected, JSON_UNESCAPED_SLASHES))
+            ->where('id', $plan->id)
             ->update(['ai_routing' => json_encode($routing, JSON_UNESCAPED_SLASHES)]);
     }
 
