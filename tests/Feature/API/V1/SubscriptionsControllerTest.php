@@ -335,6 +335,102 @@ class SubscriptionsControllerTest extends TestCase
      * 已經有 customer 映射的使用者不該再建一次 customer——重複建會讓
      * 同一個人在 Stripe 上散成多個 customer，訂閱與發票就對不起來。
      */
+    /**
+     * 試用中結帳：首次扣款推到試用結束那天，付費週期也從那天起算。
+     *
+     * 在試用中途決定訂閱的人不該賠掉剩下的試用天數。
+     */
+    public function testStoreDefersStripeBillingToTheTrialEnd(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $trialEnd = now()->addDays(20)->startOfSecond();
+        $user->subscriptions()->create([
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'start_date'     => now(),
+            'next_date'      => $trialEnd,
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertSame(
+            $trialEnd->getTimestamp(),
+            $params['subscription_data']['trial_end'],
+            '首次扣款要落在試用結束那一刻'
+        );
+    }
+
+    /**
+     * Stripe 規定 trial_end 至少要是 48 小時之後，所以試用剩不到兩天時只能
+     * 當場計費——不能為了「補滿」而送出一個 Stripe 會拒絕的時間。
+     */
+    public function testStoreSkipsTheTrialEndWhenLessThanTwoDaysRemain(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->subscriptions()->create([
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'start_date'     => now()->subMonth(),
+            'next_date'      => now()->addHours(47),
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertArrayNotHasKey('subscription_data', $params);
+    }
+
+    /** 試用已經過期的人照一般方式結帳，不帶任何試用參數。 */
+    public function testStoreSkipsTheTrialEndWhenTheTrialHasExpired(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->subscriptions()->create([
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'start_date'     => now()->subMonths(2),
+            'next_date'      => now()->subDay(),
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertArrayNotHasKey('subscription_data', $params);
+    }
+
     public function testStoreReusesExistingStripeCustomer()
     {
         $http = $this->fakeStripeHttp();
