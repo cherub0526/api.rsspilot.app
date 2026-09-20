@@ -4,60 +4,26 @@ declare(strict_types=1);
 
 namespace App\Observers;
 
-use App\Models\Plan;
 use App\Models\User;
-use App\Models\Price;
-use App\Models\Subscription;
 use App\Services\PaddleClient;
 use Paddle\SDK\Resources\Customers\Operations\UpdateCustomer;
 
 class UserObserver
 {
     /**
-     * 註冊即贈送的試用方案。
-     *
-     * 用 title 找方案是既有做法，代價要知道：**方案改名或這個方案沒有月價，這裡
-     * 會直接 return，不報錯也不寫 log**，新會員就完全沒有訂閱，當場落到免費退路
-     * （見 SubscriptionService::getUserSubscriptionPlan()）。動方案名稱時要回來看
-     * 這一行。
-     */
-    private const TRIAL_PLAN_TITLE = 'Pro';
-
-    /**
-     * 試用期長度。
-     *
-     * 沒有任何排程去把過期的試用改成 canceled——`Subscription::scopeActive()` 以
-     * `next_date` 判斷，時間一到那筆訂閱就不再算數，使用者自然落到免費方案。
-     */
-    private const TRIAL_MONTHS = 1;
-
-    /**
      * Handle the User "created" event.
+     *
+     * 這裡**刻意不建立任何訂閱**。2026-09 之前註冊會自動送一個月 Pro 試用，現在
+     * 改成「首次訂閱時，第一個月免費」——贈送的時機從註冊移到結帳，所以新會員
+     * 一開始沒有訂閱紀錄，直接落到免費方案退路（見
+     * `SubscriptionService::getUserSubscriptionPlan()`）。
+     *
+     * 免費月怎麼給：Paddle 是 price 上的 `trial_period`（`paddle:sync` 設定）、
+     * Stripe 是結帳時的 `trial_end`；資格判定在
+     * `SubscriptionService::isEligibleForFreeMonth()`，終生一次。
      */
     public function created(User $user): void
     {
-        $trialPlan = Plan::query()->where('title', self::TRIAL_PLAN_TITLE)->first();
-
-        if (!$trialPlan) {
-            return;
-        }
-
-        $monthlyPrice = $trialPlan->prices()
-            ->where('unit', Price::UNIT_MONTHLY)
-            ->first();
-
-        if (!$monthlyPrice) {
-            return;
-        }
-
-        $user->subscriptions()->create([
-            'plan_id'        => $trialPlan->id,
-            'price_id'       => $monthlyPrice->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
-            'status'         => Subscription::STATUS_TRIAL,
-            'start_date'     => now(),
-            'next_date'      => now()->addMonths(self::TRIAL_MONTHS),
-        ]);
     }
 
     /**

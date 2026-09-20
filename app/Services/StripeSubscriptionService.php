@@ -16,15 +16,6 @@ use App\Exceptions\NotFoundHttpException;
 
 class StripeSubscriptionService
 {
-    /**
-     * Stripe 對 `subscription_data.trial_end` 的硬性規定：**必須至少是 48 小時
-     * 之後**。原文：「Has to be at least 48 hours in the future.」.
-     *
-     * 所以試用只剩不到兩天時就不能再把帳單往後推，只能當場開始計費——使用者會
-     * 損失那不到兩天的試用。這是 Stripe 的限制，不是我們的選擇。
-     */
-    private const MIN_TRIAL_END_HOURS = 48;
-
     public function createCheckout(User $user, Plan $plan, Price $price, Subscription $subscription): array
     {
         $stripe = new StripeClient();
@@ -45,9 +36,9 @@ class StripeSubscriptionService
             'metadata'   => ['subscriptionId' => $subscription->id],
         ];
 
-        // 還在試用期就把首次扣款推到試用結束那天，付費週期也從那天起算——在試用
-        // 中途決定訂閱的人不該賠掉剩下的試用天數。Stripe 這時仍然當場收取付款
-        // 方式，只是不扣款，到期才開第一張帳單。
+        // 第一次訂閱的話第一個月免費：Stripe 當下仍然收取付款方式、但不扣款，
+        // 一個月後才開第一張帳單，付費週期也從那天起算。Paddle 那邊的同一件事是
+        // 設在 price 上的 trial_period（見 PaddleSubscriptionService）。
         if ($trialEnd = $this->trialEndFor($user)) {
             $params['subscription_data'] = ['trial_end' => $trialEnd->getTimestamp()];
         }
@@ -69,22 +60,19 @@ class StripeSubscriptionService
     }
 
     /**
-     * 這位使用者的試用還剩多久——回傳試用結束的時間，沒有可用的試用時回 null。
+     * 這次結帳要不要帶免費月——要的話回傳首次扣款的時間，不用的話回 null。
      *
-     * 只認 `trial` 狀態的訂閱，而且 `next_date` 必須遠到過得了 Stripe 的 48 小時
-     * 門檻；剩不到兩天的話回 null，結帳就照一般方式當場計費。
+     * 資格判定是共用的（終生一次，見 `SubscriptionService::isEligibleForFreeMonth()`）。
+     * 這裡不用擔心 Stripe「trial_end 必須至少是 48 小時之後」的限制：送的固定是
+     * 一個月，永遠過得了那道門檻。
      */
     private function trialEndFor(User $user): ?Carbon
     {
-        /** @var null|Subscription $trial */
-        $trial = $user->subscriptions()
-            ->where('status', Subscription::STATUS_TRIAL)
-            ->whereNotNull('next_date')
-            ->where('next_date', '>', now()->addHours(self::MIN_TRIAL_END_HOURS))
-            ->orderByDesc('next_date')
-            ->first();
+        if (!(new SubscriptionService())->isEligibleForFreeMonth((string) $user->id)) {
+            return null;
+        }
 
-        return $trial?->next_date;
+        return now()->addMonths(Subscription::FREE_MONTHS);
     }
 
     public function cancel(Subscription $subscription): void
@@ -163,18 +151,21 @@ class StripeSubscriptionService
             'stripe_detail' => $stripeSub->toArray(),
         ]);
 
+        // 免費月期間記成 trial，首次扣款成功（invoice.paid）後才轉 active，跟
+        // Paddle 那條路一致——前端的 Trial 徽章與 trial_ends_at 都讀這個狀態。
         $insertData = [
-            'status'    => Subscription::STATUS_ACTIVE,
+            'status' => $stripeSub->status === 'trialing'
+                ? Subscription::STATUS_TRIAL
+                : Subscription::STATUS_ACTIVE,
             'next_date' => Carbon::createFromTimestamp($stripeSub->items->data[0]->current_period_end)->toDateTime(),
         ];
 
         if (!$subscription->start_date) {
-            // 帶著試用結帳時，這筆訂閱真正開始的日子是試用結束那天，不是刷卡那天。
-            // Stripe 在試用期間的 current_period 指的是「試用這一段」（start 是今天、
-            // end 是試用結束），直接拿 current_period_start 會把起始日記成刷卡日。
-            // next_date 則維持 current_period_end——它就是第一次扣款的日子。
+            // 訂閱開始的日子就是結帳這天。免費月是這筆訂閱的第一期（Stripe 在試用
+            // 期間的 current_period 就是那一段），不是它的前傳。next_date 則是
+            // current_period_end——第一次扣款的日子。
             $insertData['start_date'] = Carbon::createFromTimestamp(
-                $stripeSub->trial_end ?: $stripeSub->items->data[0]->current_period_start
+                $stripeSub->items->data[0]->current_period_start
             )->toDateTime();
         }
 

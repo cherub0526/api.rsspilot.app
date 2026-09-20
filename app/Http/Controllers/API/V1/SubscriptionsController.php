@@ -53,7 +53,13 @@ class SubscriptionsController extends AbstractController
                                     format: 'date-time',
                                     nullable: true,
                                     example: '2026-06-14T00:00:00+00:00',
-                                    description: 'Present only when status=trial'
+                                    description: 'First billing date; present only when status=trial'
+                                ),
+                                new OAT\Property(
+                                    property: 'first_month_free',
+                                    type: 'boolean',
+                                    example: true,
+                                    description: 'true = this account has not used its one-off free first month yet'
                                 ),
                             ]
                         ),
@@ -78,13 +84,16 @@ class SubscriptionsController extends AbstractController
         ]);
 
         $status = $subscription?->status;
+
+        // 免費月期間 status 是 trial，next_date 就是第一次扣款的日子。
         $trialEndsAt = ($status === Subscription::STATUS_TRIAL)
             ? $subscription->next_date?->toIso8601String()
             : null;
 
         return response()->json([
-            'status'        => $status,
-            'trial_ends_at' => $trialEndsAt,
+            'status'           => $status,
+            'trial_ends_at'    => $trialEndsAt,
+            'first_month_free' => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
             ...(new PlanResource($plan))->toArray(),
         ]);
     }

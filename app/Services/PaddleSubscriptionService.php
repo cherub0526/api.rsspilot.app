@@ -16,24 +16,17 @@ use Paddle\SDK\Entities\Subscription\SubscriptionStatus;
 use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 use Paddle\SDK\Notifications\Entities\Payout\PayoutStatus;
 use Paddle\SDK\Entities\Subscription as PaddleSubscriptionEntity;
-use Paddle\SDK\Resources\Subscriptions\Operations\UpdateSubscription;
-use Paddle\SDK\Entities\Subscription\SubscriptionProrationBillingMode;
 
 class PaddleSubscriptionService
 {
-    /** 什麼都不用做——這筆 Paddle 訂閱本來就不是試用中。 */
-    public const TRIAL_ACTION_NONE = 'none';
+    /** 什麼都不用做——Paddle 沒把這筆訂閱開成試用。 */
+    public const FREE_MONTH_ACTION_NONE = 'none';
 
-    /** 把首次扣款推到我們的試用結束日。 */
-    public const TRIAL_ACTION_DEFER = 'defer';
+    /** 保留 Paddle 的免費月：首次扣款就是一個月後。 */
+    public const FREE_MONTH_ACTION_KEEP = 'keep';
 
-    /** 立刻啟用並計費——沒有剩餘試用可補。 */
-    public const TRIAL_ACTION_ACTIVATE = 'activate';
-    /**
-     * Paddle 對 `next_billed_at` 的硬性規定：**至少要是 30 分鐘之後**。
-     * 剩餘試用比這還短就沒得延，只能當場啟用計費。
-     */
-    private const MIN_NEXT_BILLED_MINUTES = 30;
+    /** 立刻啟用並計費——這個帳號的首月免費已經用掉了。 */
+    public const FREE_MONTH_ACTION_ACTIVATE = 'activate';
 
     public function createCheckout(User $user, Plan $plan, Price $price, Subscription $subscription): array
     {
@@ -73,19 +66,16 @@ class PaddleSubscriptionService
                 $billedAt = Carbon::parse($paddleTransaction->billedAt);
                 $items = $paddleTransaction->items;
 
-                // 帶著試用結帳時，這筆訂閱真正開始的日子是試用結束那天，不是刷卡
-                // 那天。先讓 Paddle 的試用結束日對齊我們的，再照它回報的日期寫入。
+                // 首次訂閱的結帳金額是 0（price 上帶著一個月的 trial_period），所以
+                // 日期不能從這筆交易推算——要問 Paddle 訂閱本身的 next_billed_at。
                 if ($paddleTransaction->subscriptionId) {
-                    $aligned = $this->alignTrialBilling(
+                    $this->syncFromPaddle(
                         $subscription,
-                        $paddle->subscriptions()->get($paddleTransaction->subscriptionId)
+                        $this->applyFreeMonth(
+                            $subscription,
+                            $paddle->subscriptions()->get($paddleTransaction->subscriptionId)
+                        )
                     );
-
-                    $subscription->fill([
-                        'status'     => Subscription::STATUS_ACTIVE,
-                        'start_date' => $this->startDateFor($aligned)->toDateTime(),
-                        'next_date'  => Carbon::parse($aligned->nextBilledAt)->toDateTime(),
-                    ])->save();
 
                     return true;
                 }
@@ -112,43 +102,39 @@ class PaddleSubscriptionService
     }
 
     /**
-     * 讓 Paddle 那邊的試用結束日對齊我們自己的試用結束日。
+     * 決定這筆 Paddle 訂閱能不能留著那個免費月，並回傳處理完後的訂閱。
      *
-     * **為什麼需要這一步**：Paddle 的試用期是設在 *price* 上的固定長度
-     * （`trial_period: {interval, frequency}`），沒有像 Stripe `trial_end` 那種
-     * 「這一次結帳算到哪一天」的參數。所以流程只能是：價格先帶一段試用讓結帳當下
-     * 不扣款，訂閱一建立就把 `next_billed_at` 改成我們真正的試用結束日。
+     * **為什麼需要這一步**：Paddle 的試用期是綁在 *price* 上的固定長度
+     * （`trial_period`，由 `paddle:sync` 設成一個月），每個結帳的人都一樣吃得到。
+     * 「首月免費只送第一次」這條規則 Paddle 不知道，只能由我們在訂閱建立之後補。
      *
-     * 三條路（判斷本身在 `trialAction()`，純函式、可測）：
+     * 三條路（判斷本身在 `freeMonthAction()`，純函式、可測）：
      *
-     * - 這筆訂閱不是 trialing（價格沒設試用期）→ 什麼都不做，行為與過去相同
-     * - 還有剩餘試用 → `PATCH /subscriptions/{id}`，`do_not_bill`
-     * - 沒有剩餘試用 → `POST /subscriptions/{id}/activate`，當場計費。**這條路不能
-     *   省**：價格帶著試用期，不處理的話沒有試用的人也會白拿一段免費期間。
-     *
-     * 回傳改完之後重新取得的 Paddle 訂閱，呼叫端據此寫入日期。
+     * - 訂閱不是 trialing（price 沒設 trial_period）→ 什麼都不做，維持既有行為
+     * - 還有資格 → 保留 Paddle 給的免費月，連 API 都不用呼叫。首次扣款日就是
+     *   Paddle 自己算好的一個月後
+     * - 沒有資格 → `POST /subscriptions/{id}/activate`，當場計費。**這條路不能
+     *   省**：price 帶著 trial_period，不處理的話「訂閱 → 取消 → 再訂閱」就能
+     *   無限續杯
      */
-    public function alignTrialBilling(Subscription $subscription, PaddleSubscriptionEntity $paddleSubscription): PaddleSubscriptionEntity
-    {
-        $action = $this->trialAction(
+    public function applyFreeMonth(
+        Subscription $subscription,
+        PaddleSubscriptionEntity $paddleSubscription
+    ): PaddleSubscriptionEntity {
+        $action = $this->freeMonthAction(
             (string) $paddleSubscription->status->getValue(),
-            $this->trialEndFor((string) $subscription->user_id)
+            (new SubscriptionService())->isEligibleForFreeMonth(
+                (string) $subscription->user_id,
+                (string) $subscription->getKey()
+            )
         );
 
-        if ($action === self::TRIAL_ACTION_NONE) {
+        if ($action !== self::FREE_MONTH_ACTION_ACTIVATE) {
             return $paddleSubscription;
         }
 
         $paddle = new PaddleClient();
-
-        if ($action === self::TRIAL_ACTION_DEFER) {
-            $paddle->subscriptions()->update($paddleSubscription->id, new UpdateSubscription(
-                nextBilledAt: $this->trialEndFor((string) $subscription->user_id),
-                prorationBillingMode: SubscriptionProrationBillingMode::DoNotBill(),
-            ));
-        } else {
-            $paddle->subscriptions()->activate($paddleSubscription->id);
-        }
+        $paddle->subscriptions()->activate($paddleSubscription->id);
 
         return $paddle->subscriptions()->get($paddleSubscription->id);
     }
@@ -158,49 +144,48 @@ class PaddleSubscriptionService
      * 在各處直接 new 的，沒辦法換成測試替身（見 PaddleControllerTest 的說明）。
      *
      * @param string $paddleStatus Paddle 訂閱的狀態
-     * @param null|Carbon $trialEnd 我們自己的試用結束日，沒有試用時是 null
+     * @param bool $eligible 這個帳號還有沒有首月免費的資格
      */
-    public function trialAction(string $paddleStatus, ?Carbon $trialEnd): string
+    public function freeMonthAction(string $paddleStatus, bool $eligible): string
     {
         if ($paddleStatus !== SubscriptionStatus::Trialing()->getValue()) {
-            return self::TRIAL_ACTION_NONE;
+            return self::FREE_MONTH_ACTION_NONE;
         }
 
-        return $trialEnd !== null && $trialEnd->isAfter(now()->addMinutes(self::MIN_NEXT_BILLED_MINUTES))
-            ? self::TRIAL_ACTION_DEFER
-            : self::TRIAL_ACTION_ACTIVATE;
+        return $eligible ? self::FREE_MONTH_ACTION_KEEP : self::FREE_MONTH_ACTION_ACTIVATE;
     }
 
     /**
-     * 這位使用者的試用結束日，沒有可用的試用時回 null。
-     */
-    public function trialEndFor(string $userId): ?Carbon
-    {
-        /** @var null|Subscription $trial */
-        $trial = Subscription::query()
-            ->where('user_id', $userId)
-            ->where('status', Subscription::STATUS_TRIAL)
-            ->whereNotNull('next_date')
-            ->where('next_date', '>', now())
-            ->orderByDesc('next_date')
-            ->first();
-
-        return $trial?->next_date;
-    }
-
-    /**
-     * 這筆訂閱真正開始的日子。
+     * 照 Paddle 回報的狀態與日期寫回我們自己的訂閱。
      *
-     * 還在試用中的話是「首次扣款那天」而不是建立那天——使用者在試用中途結帳時，
-     * 訂閱起始日應該是試用結束日，跟帳單同一天。
+     * 三個欄位的語意：
+     *
+     * - `status`：免費月期間是 `trial`，首次扣款成功後才轉 `active`。前端靠這個
+     *   顯示 Trial 徽章，`GET /v1/subscriptions` 也只在 `trial` 時回
+     *   `trial_ends_at`——而那個日子就是第一次扣款的日子
+     * - `start_date`：訂閱開始的那天，也就是結帳當天。免費月是這筆訂閱的一部分，
+     *   不是它的前傳，所以不再像過去那樣記成「試用結束日」
+     * - `next_date`：`next_billed_at`。免費月期間就是首次扣款日；`scopeActive()`
+     *   對 `trial` 狀態會比對這個欄位，所以首次扣款沒過（Paddle 轉 past_due、
+     *   日期停在過去）的訂閱會自然落回免費方案
      */
-    public function startDateFor(PaddleSubscriptionEntity $paddleSubscription): Carbon
+    public function syncFromPaddle(Subscription $subscription, PaddleSubscriptionEntity $paddleSubscription): void
     {
-        $isTrialing = (string) $paddleSubscription->status->getValue() === SubscriptionStatus::Trialing()->getValue();
+        $isTrialing = (string) $paddleSubscription->status->getValue()
+            === SubscriptionStatus::Trialing()->getValue();
 
-        return $isTrialing && $paddleSubscription->nextBilledAt
-            ? Carbon::parse($paddleSubscription->nextBilledAt)
-            : Carbon::parse($paddleSubscription->createdAt);
+        $attributes = [
+            'status'     => $isTrialing ? Subscription::STATUS_TRIAL : Subscription::STATUS_ACTIVE,
+            'start_date' => Carbon::parse($paddleSubscription->createdAt)->toDateTime(),
+        ];
+
+        // 取消或暫停後 next_billed_at 會是 null，這時保留原本的日期——把它寫成
+        // null 會讓 scopeActive() 把一筆早就該結束的訂閱當成永遠有效。
+        if ($paddleSubscription->nextBilledAt) {
+            $attributes['next_date'] = Carbon::parse($paddleSubscription->nextBilledAt)->toDateTime();
+        }
+
+        $subscription->fill($attributes)->save();
     }
 
     public function cancel(Subscription $subscription): void
@@ -220,16 +205,12 @@ class PaddleSubscriptionService
                 return;
             }
 
-            $paddleSubscription = $this->alignTrialBilling(
+            $paddleSubscription = $this->applyFreeMonth(
                 $subscription,
                 $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
             );
 
-            $subscription->fill([
-                'start_date' => $this->startDateFor($paddleSubscription)->toDateTime(),
-                'next_date'  => Carbon::parse($paddleSubscription->nextBilledAt)->toDateTime(),
-                'status'     => Subscription::STATUS_ACTIVE,
-            ])->save();
+            $this->syncFromPaddle($subscription, $paddleSubscription);
 
             if (!$subscription->paddle()->where(['paddle_id' => $paddleTransaction->subscriptionId])->first()) {
                 $subscription->paddle()->create([

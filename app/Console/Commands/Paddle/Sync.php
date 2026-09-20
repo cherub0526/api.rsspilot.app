@@ -7,6 +7,7 @@ namespace App\Console\Commands\Paddle;
 use Exception;
 use App\Models\Plan;
 use App\Models\Price;
+use App\Models\Subscription;
 use Hypervel\Console\Command;
 use App\Services\PaddleClient;
 use Paddle\SDK\Exceptions\ApiError;
@@ -92,15 +93,21 @@ class Sync extends Command
                     $paddlePriceId = $price->paddle->paddle_id;
 
                     try {
-                        // 已存在的 price 也要把 tax_mode 拉回 external，理由同下方建立時的註解。
+                        // 已存在的 price 也要把 tax_mode 與 trial_period 拉回正確值，
+                        // 理由同下方建立時的註解。Paddle 的 price 可以 PATCH（不像
+                        // Stripe 要建新的再改映射），所以早建好的那批修得到。
                         $response = $paddle->prices()->update(
                             $paddlePriceId,
-                            new UpdatePrice(taxMode: TaxMode::External())
+                            new UpdatePrice(
+                                taxMode: TaxMode::External(),
+                                trialPeriod: $this->trialPeriodFor($price)
+                            )
                         );
 
                         $price->paddle->fill(['paddle_detail' => $response])->save();
 
-                        $this->line("    ✓ Price [{$label}] 已存在：{$paddlePriceId}（tax_mode=external）");
+                        $trialLabel = $this->trialPeriodFor($price) ? '、首月免費' : '';
+                        $this->line("    ✓ Price [{$label}] 已存在：{$paddlePriceId}（tax_mode=external{$trialLabel}）");
                     } catch (Exception $e) {
                         $this->error("    ✗ 更新 Price [{$label}] 失敗：{$e->getMessage()}");
                     }
@@ -131,6 +138,12 @@ class Sync extends Command
                             // 而 Paddle 不指定時會落在 location 模式——那會讓歐盟等含稅慣例地區把
                             // 這個數字當成含稅價，VAT 變成從我們的收入裡扣。
                             taxMode: TaxMode::External(),
+                            // 首月免費就是靠這段 trial_period：帶著它結帳時 Paddle
+                            // 當下不扣款，next_billed_at 直接落在一個月後。它是綁在
+                            // price 上的固定值，對每個結帳的人都一樣——「只送第一次」
+                            // 由 PaddleSubscriptionService::applyFreeMonth() 把沒有
+                            // 資格的人當場 activate 來守住。
+                            trialPeriod: $this->trialPeriodFor($price),
                             quantity: new PriceQuantity(1, 1)
                         )
                     );
@@ -149,5 +162,27 @@ class Sync extends Command
         }
 
         $this->info('同步完成。');
+    }
+
+    /**
+     * 這個 price 要帶多長的試用期——付費方案是首月免費，免費方案不帶。
+     *
+     * 年繳也一樣送一個月（`trial_period` 與 `billing_cycle` 在 Paddle 是分開的
+     * 兩件事），所以年繳使用者是先免費用一個月，再扣一整年。
+     *
+     * 免費方案回 `null` 不是「不要動它」而是「明確清成沒有試用」——`UpdatePrice`
+     * 的預設值是 `Undefined`（不送這個欄位），`null` 才會真的清掉。$0 的 price
+     * 掛試用期沒有意義，留著只會讓 Paddle 的訂閱狀態多一種 trialing 要處理。
+     */
+    private function trialPeriodFor(Price $price): ?TimePeriod
+    {
+        if ((float) $price->price <= 0) {
+            return null;
+        }
+
+        return new TimePeriod(
+            interval: new Interval(Interval::Month()),
+            frequency: Subscription::FREE_MONTHS
+        );
     }
 }

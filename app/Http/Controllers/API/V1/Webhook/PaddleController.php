@@ -110,20 +110,17 @@ class PaddleController extends AbstractController
                 );
             }
 
-            // 帶著試用結帳時，Paddle 的試用長度是設在 price 上的固定值，跟使用者
-            // 剩下多少試用無關。這一步把它改成我們真正的試用結束日（沒有剩餘試用
-            // 的人則立刻啟用計費），再照 Paddle 回報的日期寫入。
+            // price 上帶著一個月的 trial_period，對每個結帳的人都一樣。首月免費
+            // 只送第一次這條規則 Paddle 不知道，沒有資格的人要在這裡當場啟用計費
+            // （見 PaddleSubscriptionService::applyFreeMonth()），再照 Paddle 回報
+            // 的狀態與日期寫入。
             $service = new PaddleSubscriptionService();
-            $paddleSubscription = $service->alignTrialBilling(
+            $paddleSubscription = $service->applyFreeMonth(
                 $subscription,
                 $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
             );
 
-            $subscription->fill([
-                'start_date' => $service->startDateFor($paddleSubscription)->toDateTime(),
-                'next_date'  => Carbon::parse($paddleSubscription->nextBilledAt)->toDateTime(),
-                'status'     => Subscription::STATUS_ACTIVE,
-            ])->save();
+            $service->syncFromPaddle($subscription, $paddleSubscription);
 
             if (!$subscription->paddle()->where(['paddle_id' => $paddleTransaction->subscriptionId])->first()) {
                 $subscription->paddle()->create([
