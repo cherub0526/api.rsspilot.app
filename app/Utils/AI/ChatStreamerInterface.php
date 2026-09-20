@@ -10,8 +10,9 @@ use App\Models\User;
 /**
  * 串流式對話推論。
  *
- * 這層刻意不外露底層 SDK 的型別：呼叫端只給角色／內容的純陣列，拿回一串文字片段。
- * 換掉背後的 SDK 時，只有實作類別要動；測試也能直接綁一個假的實作，不必攔 HTTP。
+ * 這層刻意不外露底層 SDK 的型別：呼叫端只給角色／內容的純陣列，拿回一串
+ * ChatChunk。換掉背後的 SDK 時，只有實作類別要動；測試也能直接綁一個假的實作，
+ * 不必攔 HTTP。
  */
 interface ChatStreamerInterface
 {
@@ -26,12 +27,17 @@ interface ChatStreamerInterface
      * @param null|string $sessionId 把同一段對話的每一輪綁在一起的識別碼。只有
      *                               多輪的路徑才有意義——單次產生的產物沒有「下
      *                               一輪」可以共用快取，傳 null 即可。
-     * @return Generator<int, string> 逐段產生的回應文字
+     * @param bool $withReasoning 要不要連思考過程一起串出來。**預設 false 是成本
+     *                            考量**：推理 token 按 output 計價，只有真的會把
+     *                            它顯示給使用者看的路徑（對話）才值得付這筆錢，
+     *                            產物型的路徑（心智圖、摘要）開了也沒人看得到。
+     * @return Generator<int, ChatChunk> 逐段產生的回應片段，可能是回答也可能是推理
      */
     public function stream(
         string $instructions,
         array $messages,
         ?User $user = null,
-        ?string $sessionId = null
+        ?string $sessionId = null,
+        bool $withReasoning = false
     ): Generator;
 }

@@ -21,6 +21,7 @@ use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use App\Services\DailyQuotaSnapshot;
+use App\Events\Chat\ChatReasoningEvent;
 use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
@@ -72,7 +73,8 @@ class ChatController
      * POST /v1/media/{mediaId}/chat.
      *
      * 接收使用者訊息，向 OpenRouter 發送串流請求。
-     * 每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。
+     * 每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線；會思考的模型在回答
+     * 之前先送出的推理內容走 ChatReasoningEvent，兩者在前端是不同的片段。
      * 回傳時機：完整回應產生後（或發生錯誤時）。
      *
      * @throws InvalidRequestException
@@ -262,6 +264,7 @@ class ChatController
             $currentImages
         );
         $buffer = '';
+        $reasoning = '';
         $saved = false;
 
         // 參考資料與 /summaries 端點取同一份摘要（使用者自己的 > 同語系共用的 >
@@ -278,34 +281,56 @@ class ChatController
             // 帶使用者進去：對話是 per-user 的產物，吃這個人方案的路由設定。
             // 帶 session 進去：讓同一段對話的每一輪黏在同一家 provider，重送的
             // 摘要與歷史才有機會命中對方的 prompt cache。
+            // 對話是唯一會把思考過程顯示出來的路徑，所以只有這裡開 withReasoning。
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
                 $this->buildMessages($history, $userMessage, $currentImages, $imageUrls),
                 $request->user(),
-                (string) $session->getKey()
+                (string) $session->getKey(),
+                true
             );
 
-            foreach ($stream as $token) {
+            foreach ($stream as $chunk) {
                 // NeuronAI 在串流尾端會送出內容為空的 chunk。串接結果不受影響，
-                // 但每一則都會變成一次 ChatTokenEvent，讓 SSE 前端做無意義的重繪。
-                if ($token === '') {
+                // 但每一則都會變成一次事件，讓 SSE 前端做無意義的重繪。
+                if ($chunk->isEmpty()) {
                     continue;
                 }
 
-                $buffer .= $token;
-                Event::dispatch(new ChatTokenEvent($token, $userId, $mediaId));
+                if ($chunk->isReasoning()) {
+                    $reasoning .= $chunk->text;
+                    Event::dispatch(new ChatReasoningEvent($chunk->text, $userId, $mediaId));
+                    continue;
+                }
+
+                $buffer .= $chunk->text;
+                Event::dispatch(new ChatTokenEvent($chunk->text, $userId, $mediaId));
             }
 
-            $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+            $this->saveMessage(
+                (string) $session->getKey(),
+                ChatMessage::ROLE_AI,
+                $buffer,
+                reasoning: $reasoning
+            );
             $saved = true;
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
             if (!$saved) {
-                $this->saveMessage((string) $session->getKey(), ChatMessage::ROLE_AI, $buffer);
+                $this->saveMessage(
+                    (string) $session->getKey(),
+                    ChatMessage::ROLE_AI,
+                    $buffer,
+                    reasoning: $reasoning
+                );
             }
 
             // 一個 token 都沒拿到才退還額度。已經串出部分內容的話使用者實際看過
             // 回應、上游 token 也已經花掉了，那次算用掉。
+            //
+            // 判準看的是**回答**，不是推理：只吐了思考過程就斷掉的話，使用者拿到
+            // 的是一段沒有結論的獨白，那一次該退。上游確實已經收了推理的錢，但
+            // 那是我們選擇開 reasoning 的代價，不該轉嫁到他的每日額度上。
             if ($buffer === '') {
                 $this->quota->release($request->user(), $quota);
             }
@@ -722,7 +747,8 @@ class ChatController
         string $sessionId,
         string $role,
         string $content,
-        array $images = []
+        array $images = [],
+        string $reasoning = ''
     ): void {
         if ($content === '') {
             return;
@@ -740,8 +766,17 @@ class ChatController
             array_values($images)
         );
 
-        // AI 的回覆目前只有純文字，所以片段就是單一 text。thinking 與 tool_call
-        // 要等 agent 能力接上來才會出現在這個陣列裡，屆時 content 仍是文字投影。
+        // 思考過程排在回答前面，與串流送達的順序一致——重新載入歷史時，摺疊起來
+        // 的思考區塊要出現在答案上方，跟當下看到的畫面一樣。
+        if ($reasoning !== '') {
+            $parts[] = [
+                'type' => ChatMessage::PART_THINKING,
+                'text' => $reasoning,
+            ];
+        }
+
+        // content 一律只是 text 片段的純文字投影：思考過程不進去，否則送回模型的
+        // 歷史會把上一輪的推理當成它自己說過的話。
         $parts[] = [
             'type' => ChatMessage::PART_TEXT,
             'text' => $content,

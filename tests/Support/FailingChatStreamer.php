@@ -7,6 +7,7 @@ namespace Tests\Support;
 use Generator;
 use App\Models\User;
 use RuntimeException;
+use App\Utils\AI\ChatChunk;
 use App\Utils\AI\ChatStreamerInterface;
 
 /**
@@ -22,7 +23,10 @@ class FailingChatStreamer implements ChatStreamerInterface
     /** @var array<int, array{role: string, content: string}> */
     public array $messages = [];
 
-    /** @param string[] $tokens 炸掉之前先送出的片段，空陣列代表一個都沒送出 */
+    /**
+     * @param array<int, ChatChunk|string> $tokens 炸掉之前先送出的片段，空陣列
+     *                                             代表一個都沒送出
+     */
     public function __construct(private array $tokens = [])
     {
     }
@@ -31,12 +35,15 @@ class FailingChatStreamer implements ChatStreamerInterface
         string $instructions,
         array $messages,
         ?User $user = null,
-        ?string $sessionId = null
+        ?string $sessionId = null,
+        bool $withReasoning = false
     ): Generator {
         $this->instructions = $instructions;
         $this->messages = $messages;
 
-        yield from $this->tokens;
+        foreach ($this->tokens as $token) {
+            yield $token instanceof ChatChunk ? $token : ChatChunk::text($token);
+        }
 
         throw new RuntimeException('upstream exploded');
     }

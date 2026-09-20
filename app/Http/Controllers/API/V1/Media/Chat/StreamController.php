@@ -14,6 +14,7 @@ use App\OpenApi\Responses\Http404;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
+use App\Events\Chat\ChatReasoningEvent;
 use Psr\Http\Message\ResponseInterface;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
@@ -32,7 +33,7 @@ class StreamController
      * 流程：
      *  1. 開啟長連線，送出 connected 事件
      *  2. 為此連線建立專屬 Swoole Channel
-     *  3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent
+     *  3. 動態監聽 ChatTokenEvent / ChatReasoningEvent / ChatDoneEvent / ChatErrorEvent
      *     （依 userId + mediaId 過濾，只接收屬於自己的事件）
      *  4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈
      *
@@ -54,7 +55,7 @@ class StreamController
                     mediaType: 'text/event-stream',
                     schema: new OAT\Schema(
                         type: 'string',
-                        example: "data: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
+                        example: "data: {\"type\":\"reasoning\",\"token\":\"Let me\"}\n\ndata: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
                     )
                 )
             ),
@@ -84,6 +85,17 @@ class StreamController
                 }
             };
 
+            // 思考過程自成一種 payload：前端要把它收進 thinking 片段、摺疊起來，
+            // 跟回答走同一個 type 的話會被直接印進對話氣泡。
+            $reasoningListener = function (
+                ChatReasoningEvent $event
+            ) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
+                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
+                    $channel->push(['type' => 'reasoning', 'token' => $event->token]);
+                }
+            };
+
             $doneListener = function (ChatDoneEvent $event) use ($channel, $userId, $mediaId, &$active): void {
                 // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
                 if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
@@ -99,6 +111,7 @@ class StreamController
             };
 
             Event::listen(ChatTokenEvent::class, $tokenListener);
+            Event::listen(ChatReasoningEvent::class, $reasoningListener);
             Event::listen(ChatDoneEvent::class, $doneListener);
             Event::listen(ChatErrorEvent::class, $errorListener);
 

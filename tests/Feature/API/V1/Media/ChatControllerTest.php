@@ -13,10 +13,12 @@ use App\Models\Setting;
 use App\Models\Summary;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Utils\AI\ChatChunk;
 use App\Events\Chat\ChatDoneEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use Tests\Support\FakeChatStreamer;
+use App\Events\Chat\ChatReasoningEvent;
 use App\Utils\AI\ChatStreamerInterface;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -42,6 +44,19 @@ class ChatControllerTest extends TestCase
     private function fakeStreamer(string ...$tokens): FakeChatStreamer
     {
         $this->streamer = new FakeChatStreamer($tokens === [] ? ['Hello'] : $tokens);
+        $this->app->instance(ChatStreamerInterface::class, $this->streamer);
+
+        return $this->streamer;
+    }
+
+    /**
+     * 會思考的模型：片段裡混著推理與回答。
+     *
+     * @param ChatChunk|string ...$chunks 純字串視為回答
+     */
+    private function fakeThinkingStreamer(ChatChunk|string ...$chunks): FakeChatStreamer
+    {
+        $this->streamer = new FakeChatStreamer($chunks);
         $this->app->instance(ChatStreamerInterface::class, $this->streamer);
 
         return $this->streamer;
@@ -511,6 +526,124 @@ class ChatControllerTest extends TestCase
                     && $event->mediaId === $media->id;
             }
         );
+    }
+
+    /**
+     * 8-0. 會思考的模型：推理走 ChatReasoningEvent，回答走 ChatTokenEvent。
+     *
+     * 兩者混成同一種事件的話，思考過程會被前端直接印進對話氣泡。
+     */
+    public function testStoreDispatchesReasoningAndAnswerAsDifferentEvents(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        Event::fake([ChatTokenEvent::class, ChatReasoningEvent::class, ChatDoneEvent::class]);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::reasoning('先看逐字稿'),
+            ChatChunk::reasoning('再整理重點'),
+            '這部影片在講快取'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
+        ])->assertStatus(200);
+
+        Event::assertDispatchedTimes(ChatReasoningEvent::class, 2);
+        Event::assertDispatchedTimes(ChatTokenEvent::class, 1);
+
+        Event::assertDispatched(
+            ChatReasoningEvent::class,
+            fn (ChatReasoningEvent $event): bool => $event->userId === (string) $user->getKey()
+                && $event->mediaId === $media->id
+                && $event->token === '先看逐字稿'
+        );
+
+        Event::assertNotDispatched(
+            ChatTokenEvent::class,
+            fn (ChatTokenEvent $event): bool => str_contains($event->token, '逐字稿')
+        );
+    }
+
+    /**
+     * 8-0-1. 思考過程存成自己的片段，排在回答前面；content 只留回答。
+     *
+     * content 是送回模型的歷史所讀的欄位——推理進去的話，下一輪模型會把上一輪的
+     * 自言自語當成它自己說過的話。
+     */
+    public function testStoreStoresTheThinkingAsItsOwnPart(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        $this->fakeThinkingStreamer(ChatChunk::reasoning('嗯……'), '答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $message = ChatMessage::query()->where('role', ChatMessage::ROLE_AI)->firstOrFail();
+
+        $this->assertSame('答案', $message->getAttribute('content'));
+        $this->assertSame(
+            [
+                ['type' => ChatMessage::PART_THINKING, 'text' => '嗯……'],
+                ['type' => ChatMessage::PART_TEXT, 'text' => '答案'],
+            ],
+            $message->contentParts()
+        );
+    }
+
+    /** 8-0-2. 沒有思考過程時不要留一個空的 thinking 片段。 */
+    public function testStoreLeavesNoThinkingPartWhenTheModelDoesNotThink(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $parts = ChatMessage::query()
+            ->where('role', ChatMessage::ROLE_AI)
+            ->firstOrFail()
+            ->contentParts();
+
+        $this->assertSame([['type' => ChatMessage::PART_TEXT, 'text' => '答案']], $parts);
+    }
+
+    /**
+     * 8-0-3. 對話這條路要開 withReasoning——關著的話上游根本不會回推理內容。
+     */
+    public function testStoreAsksTheStreamerForReasoning(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertTrue($streamer->withReasoning);
     }
 
     /**

@@ -5,6 +5,44 @@ kind: business-rules
 
 # prompts — Business rules
 
+## 思考過程是分開的一條流，而且只有對話那條路要它
+
+`code:` `app/Utils/AI/OpenRouterProvider.php` → `processContentDelta()`、`app/Utils/AI/ChatChunk.php` · `updated:` `2026-09-21` · `status:` `active`
+
+會思考的模型在回答之前會先產生一段推理內容。**它跟回答是上游分開送的兩個欄位**
+（OpenRouter 串流時是 `delta.reasoning` 與 `delta.content`），從頭到尾都不能合流：
+
+| 合流的後果 | 發生在哪 |
+|---|---|
+| 思考過程被印進對話氣泡 | 前端只認一種 SSE payload 時 |
+| 下一輪模型把自己的自言自語當成說過的話 | `chat_messages.content` 混入推理時 |
+| 心智圖的 markdown 夾雜推理 | MindmapController 不濾 chunk 時 |
+
+所以串流的元素是 `ChatChunk`（帶 type 的值物件）而不是字串，`chat_messages.parts`
+裡推理是獨立的 `thinking` 片段，`content` 永遠只是 **text 片段**的投影。
+
+要讓推理內容真的流出來，四個環節缺一不可——少任何一個，畫面上就是什麼都沒有，
+而且**不會報錯**：
+
+1. 請求要帶 `reasoning: {effort, exclude: false}`（`NeuronChatStreamer::parametersFor()`）。
+   不帶的話多數模型根本不回推理內容
+2. `OpenRouterProvider::processContentDelta()` 要覆寫。NeuronAI 的 OpenAI 版只讀
+   `delta.content`，推理在這一層就會被丟掉
+3. `NeuronChatStreamer` 要把 `ReasoningChunk` 轉成 `ChatChunk::reasoning()`，而不是
+   只挑 `TextChunk`
+4. `ChatController` 要發 `ChatReasoningEvent`，`StreamController` 要把它當成另一種
+   SSE payload 送出去
+
+`withReasoning` 預設 false，只有 chat 打開。**這是成本決定**：推理 token 按 output
+計價，而每日提問額度承保的月上限是 `chat_limit × 30`（見
+[subscription/business-rules.md](../subscription/business-rules.md)〈方案定價的成本曝險〉）。
+心智圖與摘要沒有地方顯示思考過程，開了就是純粹多付錢。同理 `ai.chat.reasoning_effort`
+預設 `low`——把它調到 `high` 等於直接乘在那個成本天花板上，要調就得回去重算方案定價。
+
+額度的退還判準看的是**回答**而不是推理：只吐了思考過程就斷掉的話，使用者拿到的是
+一段沒有結論的獨白，那一次要退。上游確實已經收了推理的錢，但那是我們選擇開
+reasoning 的代價，不該轉嫁到使用者的每日額度上。
+
 ## AI 回應語言取自使用者設定，缺漏時退回 en
 
 `code:` `app/Models/User.php` → `aiLanguageName` · `code:` `app/Http/Controllers/API/V1/SettingsController.php` → `update` · `updated:` `2026-08-14` · `status:` `active`

@@ -13,6 +13,7 @@ use App\Models\Price;
 use App\Models\Source;
 use DateTimeInterface;
 use App\Models\ChatUsage;
+use App\Utils\AI\ChatChunk;
 use Tests\Support\FakeChatStreamer;
 use Hypervel\Support\Facades\Storage;
 use Tests\Support\FailingChatStreamer;
@@ -137,7 +138,8 @@ class ChatQuotaTest extends TestCase
         ]);
     }
 
-    private function failingStreamer(string ...$tokens): FailingChatStreamer
+    /** @param ChatChunk|string ...$tokens 純字串視為回答 */
+    private function failingStreamer(ChatChunk|string ...$tokens): FailingChatStreamer
     {
         $streamer = new FailingChatStreamer($tokens);
         $this->app->instance(ChatStreamerInterface::class, $streamer);
@@ -279,6 +281,25 @@ class ChatQuotaTest extends TestCase
         $this->ask($media);
 
         $this->assertDatabaseHas('chat_usages', ['user_id' => $user->id, 'count' => 1]);
+    }
+
+    /**
+     * 只吐了思考過程就失敗 → 退還額度。
+     *
+     * 使用者拿到的是一段沒有結論的獨白，不算他問過一次。上游確實已經收了推理的
+     * 錢，但那是我們選擇開 reasoning 的代價，不該轉嫁到他的每日額度上。
+     */
+    public function testFailedStreamWithOnlyReasoningReleasesQuota(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+        $media = $this->createAccessibleMedia();
+        $this->failingStreamer(ChatChunk::reasoning('先看一下逐字稿'));
+
+        $this->ask($media);
+
+        $this->assertDatabaseHas('chat_usages', ['user_id' => $user->id, 'count' => 0]);
     }
 
     /**

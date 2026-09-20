@@ -13,6 +13,7 @@ use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\Stream\Chunks\ReasoningChunk;
 
 /**
  * 以 NeuronAI 對 OpenRouter 做串流推論。
@@ -36,7 +37,8 @@ class NeuronChatStreamer implements ChatStreamerInterface
         string $instructions,
         array $messages,
         ?User $user = null,
-        ?string $sessionId = null
+        ?string $sessionId = null,
+        bool $withReasoning = false
     ): Generator {
         yield from RoutedInference::stream(
             self::class,
@@ -45,35 +47,39 @@ class NeuronChatStreamer implements ChatStreamerInterface
                 $profile,
                 $instructions,
                 $messages,
-                $sessionId
+                $sessionId,
+                $withReasoning
             )
         );
     }
 
     /**
      * @param array<int, array{role: string, content: string, images?: array<int, string>}> $messages
-     * @return Generator<int, string>
+     * @return Generator<int, ChatChunk>
      */
     private function streamWith(
         RoutingProfile $profile,
         string $instructions,
         array $messages,
-        ?string $sessionId = null
+        ?string $sessionId = null,
+        bool $withReasoning = false
     ): Generator {
         $agent = Agent::make()
             ->setAiProvider(new OpenRouterProvider(
                 baseUri: (string) config('ai.openrouter.base_uri'),
                 key: (string) config('ai.openrouter.api_key'),
                 model: $profile->model,
-                parameters: $this->parametersFor($profile, $sessionId),
+                parameters: $this->parametersFor($profile, $sessionId, $withReasoning),
             ))
             ->setInstructions($instructions);
 
         // stream() 回傳 AgentHandler，events() 才是實際逐段產生的 generator。
-        // 事件流裡除了文字還有推理、工具呼叫等 chunk，這裡只取文字。
+        // 事件流裡除了文字與推理還有工具呼叫等 chunk，其餘一律忽略。
         foreach ($agent->stream($this->toMessages($messages))->events() as $event) {
             if ($event instanceof TextChunk) {
-                yield $event->content;
+                yield ChatChunk::text($event->content);
+            } elseif ($event instanceof ReasoningChunk) {
+                yield ChatChunk::reasoning($event->content);
             }
         }
     }
@@ -92,15 +98,42 @@ class NeuronChatStreamer implements ChatStreamerInterface
      * 退回用途層重試時沿用同一個 id——重試仍屬於同一段對話，換 id 只會讓那一輪
      * 落到另一家 provider。
      *
+     * 開放給測試呼叫：真正送出去的 body 攔不到（NeuronAI 自己建 Guzzle client），
+     * 把參數的組法留在一個可以直接斷言的方法上，是這裡唯一測得到的層級。
+     *
      * @return array<string, mixed>
      */
-    private function parametersFor(RoutingProfile $profile, ?string $sessionId): array
-    {
-        if ($sessionId === null || $sessionId === '') {
-            return $profile->parameters;
+    public function parametersFor(
+        RoutingProfile $profile,
+        ?string $sessionId,
+        bool $withReasoning = false
+    ): array {
+        $parameters = $profile->parameters;
+
+        if ($sessionId !== null && $sessionId !== '') {
+            $parameters['session_id'] = $sessionId;
         }
 
-        return array_merge($profile->parameters, ['session_id' => $sessionId]);
+        if ($withReasoning && ($effort = $this->reasoningEffort()) !== null) {
+            // exclude 明寫 false：要的就是「把推理內容一起串出來」，而不是只讓
+            // 模型多想一輪。不支援思考的模型 OpenRouter 會直接忽略這個參數。
+            $parameters['reasoning'] = ['effort' => $effort, 'exclude' => false];
+        }
+
+        return $parameters;
+    }
+
+    /**
+     * 這次要請模型想多用力，關閉時回 null。
+     *
+     * 只認 OpenRouter 收的三個值——設定寫錯就等同關閉，不要把一個會被上游拒絕
+     * 的字串送出去換一個 400。
+     */
+    private function reasoningEffort(): ?string
+    {
+        $effort = strtolower(trim((string) config('ai.chat.reasoning_effort')));
+
+        return in_array($effort, ['low', 'medium', 'high'], true) ? $effort : null;
     }
 
     /**
