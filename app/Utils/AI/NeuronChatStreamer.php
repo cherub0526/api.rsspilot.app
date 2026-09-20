@@ -11,9 +11,12 @@ use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
+use NeuronAI\Tools\Toolkits\Tavily\TavilySearchTool;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
+use NeuronAI\Chat\Messages\Stream\Chunks\ToolCallChunk;
 use NeuronAI\Chat\Messages\Stream\Chunks\ReasoningChunk;
+use NeuronAI\Chat\Messages\Stream\Chunks\ToolResultChunk;
 
 /**
  * 以 NeuronAI 對 OpenRouter 做串流推論。
@@ -38,7 +41,8 @@ class NeuronChatStreamer implements ChatStreamerInterface
         array $messages,
         ?User $user = null,
         ?string $sessionId = null,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator {
         yield from RoutedInference::stream(
             self::class,
@@ -48,7 +52,8 @@ class NeuronChatStreamer implements ChatStreamerInterface
                 $instructions,
                 $messages,
                 $sessionId,
-                $withReasoning
+                $withReasoning,
+                $withWebSearch
             )
         );
     }
@@ -62,7 +67,8 @@ class NeuronChatStreamer implements ChatStreamerInterface
         string $instructions,
         array $messages,
         ?string $sessionId = null,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator {
         $agent = Agent::make()
             ->setAiProvider(new OpenRouterProvider(
@@ -73,15 +79,63 @@ class NeuronChatStreamer implements ChatStreamerInterface
             ))
             ->setInstructions($instructions);
 
+        if ($withWebSearch && ($searchTool = $this->webSearchTool()) !== null) {
+            $agent->addTool($searchTool);
+        }
+
         // stream() 回傳 AgentHandler，events() 才是實際逐段產生的 generator。
-        // 事件流裡除了文字與推理還有工具呼叫等 chunk，其餘一律忽略。
+        // 事件流裡還有 inference-start 一類的生命週期事件，不是這四種就忽略。
         foreach ($agent->stream($this->toMessages($messages))->events() as $event) {
             if ($event instanceof TextChunk) {
                 yield ChatChunk::text($event->content);
             } elseif ($event instanceof ReasoningChunk) {
                 yield ChatChunk::reasoning($event->content);
+            } elseif ($event instanceof ToolCallChunk) {
+                yield ChatChunk::toolCall(
+                    (string) $event->tool->getCallId(),
+                    $event->tool->getName(),
+                    $event->tool->getInputs()
+                );
+            } elseif ($event instanceof ToolResultChunk) {
+                yield ChatChunk::toolResult(
+                    (string) $event->tool->getCallId(),
+                    $event->tool->getResult()
+                );
             }
         }
+    }
+
+    /**
+     * 上網查資料的工具，沒有設定 key 時回 null。
+     *
+     * 開放給測試呼叫，理由同 parametersFor()：工具實際有沒有被掛上去，只有在這
+     * 個層級斷言得到。
+     *
+     * `withOptions()` 是**整組覆蓋**而不是合併，所以預設值要自己寫齊。其中
+     * `include_answer` 不能省：TavilySearchTool 的 `__invoke()` 直接讀
+     * `$result['answer']`，Tavily 沒被要求產生摘要時不會有這個鍵，每次搜尋都會
+     * 炸在那一行。
+     */
+    public function webSearchTool(): ?TavilySearchTool
+    {
+        $key = trim((string) config('ai.chat.web_search.tavily_key'));
+
+        if ($key === '') {
+            return null;
+        }
+
+        // 不把 setMaxRuns() 串在後面：它宣告在父類別 Tool 上、回傳型別是 Tool，
+        // 接著再呼叫 withOptions() 靜態分析就過不了。
+        $tool = TavilySearchTool::make($key)->withOptions([
+            'search_depth'      => 'basic',
+            'chunks_per_source' => 3,
+            'max_results'       => (int) config('ai.chat.web_search.max_results'),
+            'include_answer'    => true,
+        ]);
+
+        $tool->setMaxRuns((int) config('ai.chat.web_search.max_runs'));
+
+        return $tool;
     }
 
     /**

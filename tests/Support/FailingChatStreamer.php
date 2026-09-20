@@ -36,7 +36,8 @@ class FailingChatStreamer implements ChatStreamerInterface
         array $messages,
         ?User $user = null,
         ?string $sessionId = null,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator {
         $this->instructions = $instructions;
         $this->messages = $messages;

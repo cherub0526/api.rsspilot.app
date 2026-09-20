@@ -8,6 +8,7 @@ use Throwable;
 use Hypervel\Http\Request;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Utils\AI\ChatChunk;
 use OpenApi\Attributes as OAT;
 use App\Validators\ChatValidator;
 use App\Events\Chat\ChatDoneEvent;
@@ -21,9 +22,11 @@ use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use App\Services\DailyQuotaSnapshot;
+use App\Events\Chat\ChatToolCallEvent;
 use App\Events\Chat\ChatReasoningEvent;
 use App\Utils\AI\ChatStreamerInterface;
 use Psr\Http\Message\ResponseInterface;
+use App\Events\Chat\ChatToolResultEvent;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Services\Prompts\TemplateFactory;
@@ -264,7 +267,10 @@ class ChatController
             $currentImages
         );
         $buffer = '';
-        $reasoning = '';
+
+        // AI 回覆的片段，依抵達順序累積：推理、工具呼叫、工具結果、回答都可能
+        // 交錯出現，落庫時要保持當下畫面上的順序，重播歷史才對得起來。
+        $parts = [];
         $saved = false;
 
         // 參考資料與 /summaries 端點取同一份摘要（使用者自己的 > 同語系共用的 >
@@ -282,12 +288,14 @@ class ChatController
             // 帶 session 進去：讓同一段對話的每一輪黏在同一家 provider，重送的
             // 摘要與歷史才有機會命中對方的 prompt cache。
             // 對話是唯一會把思考過程顯示出來的路徑，所以只有這裡開 withReasoning。
+            // 上網查資料另外看方案：plans.agent_enabled（目前只有 Advance）。
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
                 $this->buildMessages($history, $userMessage, $currentImages, $imageUrls),
                 $request->user(),
                 (string) $session->getKey(),
-                true
+                true,
+                $this->webSearchEnabled($request)
             );
 
             foreach ($stream as $chunk) {
@@ -297,40 +305,30 @@ class ChatController
                     continue;
                 }
 
-                if ($chunk->isReasoning()) {
-                    $reasoning .= $chunk->text;
-                    Event::dispatch(new ChatReasoningEvent($chunk->text, $userId, $mediaId));
-                    continue;
+                $parts[] = $chunk->toPart();
+
+                if ($chunk->isText()) {
+                    $buffer .= $chunk->text;
                 }
 
-                $buffer .= $chunk->text;
-                Event::dispatch(new ChatTokenEvent($chunk->text, $userId, $mediaId));
+                Event::dispatch($this->chunkEvent($chunk, $userId, $mediaId));
             }
 
-            $this->saveMessage(
-                (string) $session->getKey(),
-                ChatMessage::ROLE_AI,
-                $buffer,
-                reasoning: $reasoning
-            );
+            $this->saveAiMessage((string) $session->getKey(), $parts, $buffer);
             $saved = true;
             Event::dispatch(new ChatDoneEvent($userId, $mediaId));
         } catch (Throwable $e) {
             if (!$saved) {
-                $this->saveMessage(
-                    (string) $session->getKey(),
-                    ChatMessage::ROLE_AI,
-                    $buffer,
-                    reasoning: $reasoning
-                );
+                $this->saveAiMessage((string) $session->getKey(), $parts, $buffer);
             }
 
             // 一個 token 都沒拿到才退還額度。已經串出部分內容的話使用者實際看過
             // 回應、上游 token 也已經花掉了，那次算用掉。
             //
-            // 判準看的是**回答**，不是推理：只吐了思考過程就斷掉的話，使用者拿到
-            // 的是一段沒有結論的獨白，那一次該退。上游確實已經收了推理的錢，但
-            // 那是我們選擇開 reasoning 的代價，不該轉嫁到他的每日額度上。
+            // 判準看的是**回答**，不是推理也不是搜尋：只吐了思考過程、或只搜了一輪
+            // 就斷掉的話，使用者拿到的是一段沒有結論的獨白，那一次該退。上游確實
+            // 已經收了推理與搜尋的錢，但那是我們選擇開這些能力的代價，不該轉嫁到
+            // 他的每日額度上。
             if ($buffer === '') {
                 $this->quota->release($request->user(), $quota);
             }
@@ -747,8 +745,7 @@ class ChatController
         string $sessionId,
         string $role,
         string $content,
-        array $images = [],
-        string $reasoning = ''
+        array $images = []
     ): void {
         if ($content === '') {
             return;
@@ -766,17 +763,6 @@ class ChatController
             array_values($images)
         );
 
-        // 思考過程排在回答前面，與串流送達的順序一致——重新載入歷史時，摺疊起來
-        // 的思考區塊要出現在答案上方，跟當下看到的畫面一樣。
-        if ($reasoning !== '') {
-            $parts[] = [
-                'type' => ChatMessage::PART_THINKING,
-                'text' => $reasoning,
-            ];
-        }
-
-        // content 一律只是 text 片段的純文字投影：思考過程不進去，否則送回模型的
-        // 歷史會把上一輪的推理當成它自己說過的話。
         $parts[] = [
             'type' => ChatMessage::PART_TEXT,
             'text' => $content,
@@ -789,5 +775,77 @@ class ChatController
             'parts'      => $parts,
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * 落庫 AI 的回覆。
+     *
+     * `$parts` 是串流抵達的原始順序（推理 / 工具呼叫 / 工具結果 / 回答交錯），
+     * 直接存下去——重播歷史時畫面才跟當下看到的一樣。
+     *
+     * `content` 只放 **text 片段**的串接結果：它是送回模型的歷史所讀的欄位，
+     * 推理或搜尋結果混進去，下一輪模型就會把那些東西當成它自己說過的話。
+     *
+     * 沒有回答就整則不存，與使用者訊息的規則一致——只有一段思考或一次搜尋、
+     * 沒有結論的回合，留在歷史裡對誰都沒有用。
+     *
+     * @param array<int, array<string, mixed>> $parts
+     */
+    private function saveAiMessage(string $sessionId, array $parts, string $content): void
+    {
+        if ($content === '') {
+            return;
+        }
+
+        ChatMessage::create([
+            'session_id' => $sessionId,
+            'role'       => ChatMessage::ROLE_AI,
+            'content'    => $content,
+            'parts'      => $parts,
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * 這個片段要廣播成哪一種事件。
+     *
+     * 四種片段在前端是四種畫面（回答氣泡、思考區塊、搜尋中的標題、來源清單），
+     * 所以事件也分四種——共用一種再帶個 kind 欄位的話，SSE 那端與 store 那端都
+     * 要各自再拆一次。
+     */
+    private function chunkEvent(ChatChunk $chunk, string $userId, string $mediaId): object
+    {
+        return match ($chunk->type) {
+            ChatChunk::TYPE_REASONING => new ChatReasoningEvent($chunk->text, $userId, $mediaId),
+            ChatChunk::TYPE_TOOL_CALL => new ChatToolCallEvent(
+                (string) $chunk->data['id'],
+                (string) $chunk->data['name'],
+                (array) $chunk->data['input'],
+                $userId,
+                $mediaId
+            ),
+            ChatChunk::TYPE_TOOL_RESULT => new ChatToolResultEvent(
+                (string) $chunk->data['tool_call_id'],
+                (string) $chunk->data['output'],
+                (bool) $chunk->data['is_error'],
+                $userId,
+                $mediaId
+            ),
+            default => new ChatTokenEvent($chunk->text, $userId, $mediaId),
+        };
+    }
+
+    /**
+     * 這位使用者能不能讓模型上網查資料。
+     *
+     * 判準是 plans.agent_enabled，與其他付費功能同一個做法：權益寫在資料上，
+     * 不寫死方案名稱。沒有方案時一併關掉——無從判斷權益的預設是不給。
+     *
+     * 不拋例外而是靜默關閉：這是一個能力，不是一道閘門。沒開通的人照常對話，
+     * 只是模型答不出摘要以外的東西時只能說不知道。
+     */
+    private function webSearchEnabled(Request $request): bool
+    {
+        return (bool) $this->userPlan($request)?->getAttribute('agent_enabled');
     }
 }

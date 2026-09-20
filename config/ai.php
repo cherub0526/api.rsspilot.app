@@ -39,6 +39,24 @@ return [
          * 是直接乘在那個天花板上的，要調就得回去重算方案定價。
          */
         'reasoning_effort' => env('AI_CHAT_REASONING_EFFORT', 'low'),
+
+        /*
+         * 讓模型自己上網查資料（Tavily）。
+         *
+         * 沒有 key 就整個功能關閉——不是報錯，是當作這個能力不存在。開通的方案
+         * 仍然照常對話，只是模型答不出摘要以外的東西時只能說不知道。
+         *
+         * **誰能用是方案決定的，不是這裡**：判準是 plans.agent_enabled（目前只有
+         * Advance 開），執行點在 ChatController。這裡只管「技術上有沒有這個工具」。
+         *
+         * max_runs 是每一輪對話最多搜幾次的硬上限。每次工具呼叫都要把摘要與歷史
+         * 重送一遍給模型，所以它擋的不只是 Tavily 的錢，還有 input token 與延遲。
+         */
+        'web_search' => [
+            'tavily_key'  => env('TAVILY_API_KEY'),
+            'max_results' => (int) env('AI_CHAT_WEB_SEARCH_MAX_RESULTS', 3),
+            'max_runs'    => (int) env('AI_CHAT_WEB_SEARCH_MAX_RUNS', 3),
+        ],
     ],
 
     'openrouter' => [

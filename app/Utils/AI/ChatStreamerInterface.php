@@ -31,13 +31,18 @@ interface ChatStreamerInterface
      *                            考量**：推理 token 按 output 計價，只有真的會把
      *                            它顯示給使用者看的路徑（對話）才值得付這筆錢，
      *                            產物型的路徑（心智圖、摘要）開了也沒人看得到。
-     * @return Generator<int, ChatChunk> 逐段產生的回應片段，可能是回答也可能是推理
+     * @param bool $withWebSearch 要不要讓模型自己上網查資料。**同樣預設 false**：
+     *                            每次工具呼叫都要把摘要與歷史重送一遍，付的是
+     *                            搜尋費加上再一輪的 input token。開給誰是方案
+     *                            決定的（plans.agent_enabled），不是這一層。
+     * @return Generator<int, ChatChunk> 逐段產生的片段：回答、推理、工具呼叫或工具結果
      */
     public function stream(
         string $instructions,
         array $messages,
         ?User $user = null,
         ?string $sessionId = null,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator;
 }

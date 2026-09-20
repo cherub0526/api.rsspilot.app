@@ -14,8 +14,10 @@ use App\OpenApi\Responses\Http404;
 use App\Events\Chat\ChatErrorEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
+use App\Events\Chat\ChatToolCallEvent;
 use App\Events\Chat\ChatReasoningEvent;
 use Psr\Http\Message\ResponseInterface;
+use App\Events\Chat\ChatToolResultEvent;
 use App\OpenApi\Parameters\Path\MediaId;
 use App\Exceptions\NotFoundHttpException;
 use App\Http\Controllers\Concerns\SendsSseHeaders;
@@ -33,7 +35,8 @@ class StreamController
      * 流程：
      *  1. 開啟長連線，送出 connected 事件
      *  2. 為此連線建立專屬 Swoole Channel
-     *  3. 動態監聽 ChatTokenEvent / ChatReasoningEvent / ChatDoneEvent / ChatErrorEvent
+     *  3. 動態監聽 ChatTokenEvent / ChatReasoningEvent / ChatToolCallEvent /
+     *     ChatToolResultEvent / ChatDoneEvent / ChatErrorEvent
      *     （依 userId + mediaId 過濾，只接收屬於自己的事件）
      *  4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈
      *
@@ -96,6 +99,36 @@ class StreamController
                 }
             };
 
+            // 工具呼叫與結果各自一種 payload：前端要把它們畫成「搜尋網路：<查詢>」
+            // 與底下的來源清單，跟推理、回答都不是同一種東西。
+            $toolCallListener = function (
+                ChatToolCallEvent $event
+            ) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
+                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
+                    $channel->push([
+                        'type'  => 'tool_call',
+                        'id'    => $event->id,
+                        'name'  => $event->name,
+                        'input' => $event->input,
+                    ]);
+                }
+            };
+
+            $toolResultListener = function (
+                ChatToolResultEvent $event
+            ) use ($channel, $userId, $mediaId, &$active): void {
+                // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
+                if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
+                    $channel->push([
+                        'type'         => 'tool_result',
+                        'tool_call_id' => $event->toolCallId,
+                        'output'       => $event->output,
+                        'is_error'     => $event->isError,
+                    ]);
+                }
+            };
+
             $doneListener = function (ChatDoneEvent $event) use ($channel, $userId, $mediaId, &$active): void {
                 // @phpstan-ignore-next-line $active is passed by reference and modified in finally block
                 if ($active && $event->userId === $userId && $event->mediaId === $mediaId) {
@@ -112,6 +145,8 @@ class StreamController
 
             Event::listen(ChatTokenEvent::class, $tokenListener);
             Event::listen(ChatReasoningEvent::class, $reasoningListener);
+            Event::listen(ChatToolCallEvent::class, $toolCallListener);
+            Event::listen(ChatToolResultEvent::class, $toolResultListener);
             Event::listen(ChatDoneEvent::class, $doneListener);
             Event::listen(ChatErrorEvent::class, $errorListener);
 

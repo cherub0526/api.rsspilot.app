@@ -28,6 +28,8 @@ class FakeChatStreamer implements ChatStreamerInterface
 
     public bool $withReasoning = false;
 
+    public bool $withWebSearch = false;
+
     /**
      * @param array<int, ChatChunk|string> $tokens 依序產生的回應片段。純字串
      *                                             視為回答；要模擬會思考的模型
@@ -42,13 +44,15 @@ class FakeChatStreamer implements ChatStreamerInterface
         array $messages,
         ?User $user = null,
         ?string $sessionId = null,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator {
         ++$this->calls;
         $this->instructions = $instructions;
         $this->messages = $messages;
         $this->sessionId = $sessionId;
         $this->withReasoning = $withReasoning;
+        $this->withWebSearch = $withWebSearch;
 
         foreach ($this->tokens as $token) {
             yield $token instanceof ChatChunk ? $token : ChatChunk::text($token);

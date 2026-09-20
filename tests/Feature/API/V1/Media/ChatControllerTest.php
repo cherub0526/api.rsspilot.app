@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1\Media;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Price;
 use App\Models\Source;
 use App\Models\Caption;
 use App\Models\Setting;
@@ -18,8 +20,10 @@ use App\Events\Chat\ChatDoneEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use Tests\Support\FakeChatStreamer;
+use App\Events\Chat\ChatToolCallEvent;
 use App\Events\Chat\ChatReasoningEvent;
 use App\Utils\AI\ChatStreamerInterface;
+use App\Events\Chat\ChatToolResultEvent;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -66,6 +70,31 @@ class ChatControllerTest extends TestCase
     private function fakeOpenRouter(string $token = 'Hello'): FakeChatStreamer
     {
         return $this->fakeStreamer($token);
+    }
+
+    /**
+     * 建一個使用者當下生效的方案。
+     *
+     * 沒有訂閱的人吃的是「月費 0 元」的方案，所以只要建這一個即可。包
+     * withoutEvents：Plan / Price 的 observer 會直接打 Stripe API。
+     */
+    private function createPlan(bool $agentEnabled): Plan
+    {
+        return Plan::withoutEvents(function () use ($agentEnabled) {
+            $plan = Plan::factory()->create([
+                'title'         => $agentEnabled ? 'Advance' : 'Free',
+                'agent_enabled' => $agentEnabled,
+                'status'        => Plan::STATUS_ACTIVE,
+            ]);
+
+            Price::create([
+                'plan_id' => $plan->id,
+                'unit'    => Price::UNIT_MONTHLY,
+                'price'   => 0,
+            ]);
+
+            return $plan;
+        });
     }
 
     /** Persist user AI-language setting (required by AssistantTemplate). */
@@ -644,6 +673,134 @@ class ChatControllerTest extends TestCase
         ])->assertStatus(200);
 
         $this->assertTrue($streamer->withReasoning);
+    }
+
+    /**
+     * 8-0-4. 上網查資料只開給 plans.agent_enabled 的方案。
+     *
+     * 判準用資料而不是方案名稱，與其他付費功能一致。成本不是小事：每次工具呼叫
+     * 都要把摘要與歷史重送一遍，付的是搜尋費加上再一輪的 input token。
+     */
+    public function testStoreEnablesWebSearchOnlyForPlansWithAgentEnabled(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false);
+
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withWebSearch, '沒開通的方案不該帶著搜尋工具去推論');
+    }
+
+    public function testStoreEnablesWebSearchForAgentPlans(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: true);
+
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertTrue($streamer->withWebSearch);
+    }
+
+    /**
+     * 8-0-5. 搜尋的呼叫與結果各自成一種事件，而且都不會混進回答。
+     */
+    public function testStoreDispatchesToolEventsForWebSearch(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        Event::fake([ChatToolCallEvent::class, ChatToolResultEvent::class, ChatTokenEvent::class]);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => 'CLSK 最新消息']),
+            ChatChunk::toolResult('call_1', '{"results":[{"title":"CLSK","url":"https://x.test"}]}'),
+            '根據搜尋結果…'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => 'CLSK 最近有什麼消息？']],
+        ])->assertStatus(200);
+
+        Event::assertDispatched(
+            ChatToolCallEvent::class,
+            fn (ChatToolCallEvent $event): bool => $event->name === 'web_search'
+                && $event->input['search_query'] === 'CLSK 最新消息'
+                && $event->userId === (string) $user->getKey()
+                && $event->mediaId === $media->id
+        );
+
+        Event::assertDispatched(
+            ChatToolResultEvent::class,
+            fn (ChatToolResultEvent $event): bool => $event->toolCallId === 'call_1'
+                && !$event->isError
+        );
+
+        Event::assertDispatchedTimes(ChatTokenEvent::class, 1);
+    }
+
+    /**
+     * 8-0-6. 片段照抵達順序落庫，content 仍然只有回答。
+     *
+     * 順序錯掉的話，重播歷史時搜尋會出現在答案下面，跟當下看到的畫面對不起來。
+     */
+    public function testStoreStoresToolPartsInArrivalOrder(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::reasoning('要先查一下'),
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => 'CLSK']),
+            ChatChunk::toolResult('call_1', '搜尋結果'),
+            '答案'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $message = ChatMessage::query()->where('role', ChatMessage::ROLE_AI)->firstOrFail();
+
+        $this->assertSame('答案', $message->getAttribute('content'));
+        $this->assertSame(
+            [
+                ChatMessage::PART_THINKING,
+                ChatMessage::PART_TOOL_CALL,
+                ChatMessage::PART_TOOL_RESULT,
+                ChatMessage::PART_TEXT,
+            ],
+            array_column($message->contentParts(), 'type')
+        );
+        $this->assertSame(
+            ['search_query' => 'CLSK'],
+            $message->contentParts()[1]['input']
+        );
     }
 
     /**

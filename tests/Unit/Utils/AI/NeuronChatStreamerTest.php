@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Utils\AI;
 
 use Tests\TestCase;
+use ReflectionProperty;
 use App\Utils\AI\RoutingProfile;
 use App\Utils\AI\NeuronChatStreamer;
 
@@ -56,6 +57,38 @@ class NeuronChatStreamerTest extends TestCase
                 "effort={$value} 應該等同關閉"
             );
         }
+    }
+
+    /** 沒設 Tavily key 就當作沒有這個工具——不報錯，功能就是不存在。 */
+    public function testNoWebSearchToolWithoutAKey(): void
+    {
+        config(['ai.chat.web_search.tavily_key' => '']);
+
+        $this->assertNull((new NeuronChatStreamer())->webSearchTool());
+    }
+
+    /**
+     * 有 key 時掛上 Tavily，而且 include_answer 一定要在——TavilySearchTool 的
+     * __invoke() 直接讀 $result['answer']，沒要求 Tavily 產生摘要的話每次搜尋都
+     * 會炸在那一行。
+     */
+    public function testWebSearchToolCarriesTheOptionsTavilyNeeds(): void
+    {
+        config([
+            'ai.chat.web_search.tavily_key'  => 'tvly-test',
+            'ai.chat.web_search.max_results' => 5,
+            'ai.chat.web_search.max_runs'    => 2,
+        ]);
+
+        $tool = (new NeuronChatStreamer())->webSearchTool();
+
+        $this->assertNotNull($tool);
+        $this->assertSame('web_search', $tool->getName());
+        $this->assertSame(2, $tool->getMaxRuns(), '每一輪最多搜幾次要擋住，成本與延遲都在這裡');
+
+        $options = (new ReflectionProperty($tool, 'options'))->getValue($tool);
+        $this->assertTrue($options['include_answer']);
+        $this->assertSame(5, $options['max_results']);
     }
 
     /** sticky routing 與推理是兩件事，同時開時兩個都要在，也不能蓋掉路由參數。 */
