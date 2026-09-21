@@ -163,6 +163,55 @@ class ServerControllerTest extends TestCase
         $this->assertSame(['重點一'], $payload['summary']['key_points']);
     }
 
+    /**
+     * 影片網址要能真的打得開。
+     *
+     * RSS 收進來的 resource_id 是 `yt:video:XXXX`，直接串進 watch?v= 會組出一個
+     * 打不開的網址——實測資料庫裡 196 筆全是這個格式。
+     */
+    public function testVideoUrlUsesTheRealYoutubeId(): void
+    {
+        $user = User::factory()->create();
+        $source = Source::factory()->create();
+        $media = Media::factory()->create([
+            'source_id'    => $source->id,
+            'resource_id'  => 'yt:video:cZN2SPShBgI',
+            'video_detail' => ['yt:videoId' => 'cZN2SPShBgI'],
+        ]);
+        $user->media()->attach($media->id);
+
+        $response = $this->rpc($user, 'tools/call', [
+            'name'      => 'list_videos',
+            'arguments' => [],
+        ])->assertStatus(200);
+
+        $videos = json_decode($response->json('result.content.0.text'), true)['videos'];
+
+        $this->assertSame('https://www.youtube.com/watch?v=cZN2SPShBgI', $videos[0]['url']);
+    }
+
+    /** 沒有 video_detail 的舊資料，退而求其次剝掉前綴。 */
+    public function testVideoUrlFallsBackToStrippingThePrefix(): void
+    {
+        $user = User::factory()->create();
+        $source = Source::factory()->create();
+        $media = Media::factory()->create([
+            'source_id'    => $source->id,
+            'resource_id'  => 'yt:video:abc123',
+            'video_detail' => null,
+        ]);
+        $user->media()->attach($media->id);
+
+        $response = $this->rpc($user, 'tools/call', [
+            'name'      => 'list_videos',
+            'arguments' => [],
+        ])->assertStatus(200);
+
+        $videos = json_decode($response->json('result.content.0.text'), true)['videos'];
+
+        $this->assertSame('https://www.youtube.com/watch?v=abc123', $videos[0]['url']);
+    }
+
     /** 大綱只給標題與預覽，讓模型先挑再讀。 */
     public function testSummaryOutlineListsTheSections(): void
     {

@@ -501,11 +501,28 @@ class McpService
             // 直接呼叫 toIso8601String() 會當場炸掉。
             'published_at' => $this->iso($media->getAttribute('published_at')),
             'duration'     => $media->getAttribute('duration'),
-            'url'          => $media->getAttribute('resource_id')
-                ? 'https://www.youtube.com/watch?v=' . $media->getAttribute('resource_id')
-                : null,
-            'source' => $media->getAttribute('source')?->getAttribute('title'),
+            'url'          => $this->youtubeUrl($media),
+            'source'       => $media->getAttribute('source')?->getAttribute('title'),
         ];
+    }
+
+    /**
+     * 影片的 YouTube 網址。
+     *
+     * **不能直接用 `resource_id`**：RSS 收進來的影片那一欄是 `yt:video:XXXX`
+     * （見 `MediaController` 的註解），直接串進 watch?v= 會組出一個打不開的網址。
+     * 慣例是從 `video_detail['yt:videoId']` 取，取不到才退而求其次剝掉前綴。
+     */
+    private function youtubeUrl(Media $media): ?string
+    {
+        $detail = $media->getAttribute('video_detail');
+        $videoId = is_array($detail) ? (string) ($detail['yt:videoId'] ?? '') : '';
+
+        if ($videoId === '') {
+            $videoId = preg_replace('/^yt:video:/', '', (string) $media->getAttribute('resource_id')) ?? '';
+        }
+
+        return $videoId !== '' ? 'https://www.youtube.com/watch?v=' . $videoId : null;
     }
 
     /** 日期字串轉 ISO 8601，空值或格式壞掉時回 null。 */
