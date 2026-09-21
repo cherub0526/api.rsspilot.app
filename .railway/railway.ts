@@ -200,6 +200,39 @@ const awsFrom = (store: BucketNode): Record<string, VariableValue> =>
         Object.entries(AWS_FROM_BUCKET).map(([key, output]) => [key, ref(store, output)]),
     );
 
+/**
+ * Redis 連線參數同樣改為參照 redis service，不再各存一份（2026-09-22）。
+ *
+ * 左邊是 `config/database.php` 讀的名字，右邊是 Railway 的 redis 對外輸出的
+ * 名字。**密碼那一列特別容易寫錯**：應用讀的是 `REDIS_AUTH`，redis 那邊叫
+ * `REDISPASSWORD`，而 redis 自己另外還有一個 `REDIS_PASSWORD`——設成後者是
+ * no-op，連線會以「密碼錯誤」失敗，但訊息跟「沒設密碼」長得一樣。
+ *
+ * **`REDIS_DB` 不在這裡**：那是要用第幾號資料庫，屬於應用自己的選擇，redis
+ * 沒有對應的輸出，仍由 `preserved()` 保住現值（目前是 0）。
+ *
+ * 為什麼是字面值而不是 `ref()`：`ref()` 會在 graph 裡產生一條指向該資源的
+ * edge，而 validateGraph 對「指向未宣告資源的 edge」直接報錯，所以用 ref 就
+ * 必須把 redis 一起宣告進來。但 IaC 的 `redis()` helper 預設是
+ * `railwayapp/redis:8.2` + 掛載 `/bitnami`，Railway 上這顆實際是 `redis:8.2`
+ * + 掛載 `/data`，還帶一段自訂的 `--requirepass` startCommand；宣告下去 plan
+ * 會提議把 image 與掛載點一起改掉，等於把資料清空。字面值是面板上填參照時
+ * 存下來的同一種東西，Railway 在部署時才解析，不需要宣告那顆資源。
+ */
+const REDIS_FROM_SERVICE: Record<string, string> = {
+    REDIS_HOST: "REDISHOST",
+    REDIS_PORT: "REDISPORT",
+    REDIS_AUTH: "REDISPASSWORD",
+};
+
+/** 同樣展開在 `preserved()` 之後。 */
+const redisFrom = (): Record<string, VariableValue> =>
+    Object.fromEntries(
+        Object.entries(REDIS_FROM_SERVICE).map(
+            ([key, output]) => [key, {type: "literal", value: `\${{redis.${output}}}`}],
+        ),
+    );
+
 export default defineRailway((ctx) => {
     // 同一份檔案會被套用到每個 environment，plan 是對「當下 link 的那個」
     // 做 diff。凡是兩邊該不一樣的東西都必須在這裡分岔，寫死等於把 staging
@@ -232,7 +265,7 @@ export default defineRailway((ctx) => {
 
     const api = service("api", {
         source,
-        env: {...preserved(), ...awsFrom(store)},
+        env: {...preserved(), ...awsFrom(store), ...redisFrom()},
         build,
         deploy: {
             startCommand: `${ARTISAN} start`,

@@ -568,6 +568,18 @@ Plan: 2 to add, 6 to change, 102 to destroy
   金鑰時在 bucket 上 reset 即可，不必動這個檔案也不必動面板。
   `AWS_USE_PATH_STYLE_ENDPOINT` 沒有對應的輸出，仍由 `preserve()` 保住；`AWS_URL`
   與 `CDN_URL` 從來就不在 `ENV_KEYS` 裡，IaC 不管。
+- **Redis 連線參數同樣是例外**（2026-09-22）：`REDIS_HOST`、`REDIS_PORT`、
+  `REDIS_AUTH` 由 `redisFrom()` 指向 redis service 的 `REDISHOST` / `REDISPORT` /
+  `REDISPASSWORD`。應用讀的是 `REDIS_AUTH`，對面叫 `REDISPASSWORD`，而 redis 自己
+  另有一個 `REDIS_PASSWORD`——接錯那個是 no-op，症狀跟「沒設密碼」一模一樣。
+  `REDIS_DB` 是應用自己選第幾號資料庫，沒有對應輸出，維持 `preserve()`。
+
+  這三個用的是**字面值** `${{redis.REDISHOST}}` 而不是 `ref()`。`ref()` 會產生
+  一條指向該資源的 edge，validateGraph 對指向未宣告資源的 edge 直接報錯，等於
+  逼你把 redis 也宣告進來；而 IaC 的 `redis()` helper 預設是 `railwayapp/redis:8.2`
+  + 掛載 `/bitnami`，Railway 上這顆實際是 `redis:8.2` + 掛載 `/data`，還帶自訂的
+  `--requirepass` startCommand，宣告下去 plan 會提議改掉 image 與掛載點，等於清空
+  資料。字面值跟面板上填參照存下來的是同一種東西，不必宣告那顆資源。
 
 這也是為什麼把共用變數搬到專案層 Shared Variables 值得做——名單只要維護
 一份，而且 `ctx.shared.NAME` 可以直接參照。目前是 service 層各存一份。
