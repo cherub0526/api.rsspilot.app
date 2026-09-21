@@ -5,6 +5,101 @@ kind: business-rules
 
 # prompts — Business rules
 
+## 思考過程是分開的一條流，而且只有對話那條路要它
+
+`code:` `app/Utils/AI/OpenRouterProvider.php` → `processContentDelta()`、`app/Utils/AI/ChatChunk.php` · `updated:` `2026-09-21` · `status:` `active`
+
+會思考的模型在回答之前會先產生一段推理內容。**它跟回答是上游分開送的兩個欄位**
+（OpenRouter 串流時是 `delta.reasoning` 與 `delta.content`），從頭到尾都不能合流：
+
+| 合流的後果 | 發生在哪 |
+|---|---|
+| 思考過程被印進對話氣泡 | 前端只認一種 SSE payload 時 |
+| 下一輪模型把自己的自言自語當成說過的話 | `chat_messages.content` 混入推理時 |
+| 心智圖的 markdown 夾雜推理 | MindmapController 不濾 chunk 時 |
+
+所以串流的元素是 `ChatChunk`（帶 type 的值物件）而不是字串，`chat_messages.parts`
+裡推理是獨立的 `thinking` 片段，`content` 永遠只是 **text 片段**的投影。
+
+要讓推理內容真的流出來，四個環節缺一不可——少任何一個，畫面上就是什麼都沒有，
+而且**不會報錯**：
+
+1. 請求要帶 `reasoning: {effort, exclude: false}`（`NeuronChatStreamer::parametersFor()`）。
+   不帶的話多數模型根本不回推理內容
+2. `OpenRouterProvider::processContentDelta()` 要覆寫。NeuronAI 的 OpenAI 版只讀
+   `delta.content`，推理在這一層就會被丟掉
+3. `NeuronChatStreamer` 要把 `ReasoningChunk` 轉成 `ChatChunk::reasoning()`，而不是
+   只挑 `TextChunk`
+4. `ChatController` 要發 `ChatReasoningEvent`，`StreamController` 要把它當成另一種
+   SSE payload 送出去
+
+思考力度是**每個方案各自的成本設定**，旋鈕在 `plans.ai_routing`（跟 cost_tier、
+max_price 同一處，改資料不必部署），沒指定時才吃 `ai.chat.reasoning_effort` 的預設
+值。目前只有 Advance 設成 `medium`，其餘吃預設的 `low`。
+
+**刻意不用 `ai_quality` 當判準**——那一欄（pro / advanced / deep）是定價頁的行銷
+文案，與實際成本刻意不綁定，理由見 `Plan::aiRouting()` 的註解：調成本不該被迫改文案，
+改文案也不該動成本。
+
+`withReasoning` 預設 false，而且分兩道判斷：
+
+- **哪條路**：只有 chat 會開。心智圖與摘要沒有地方顯示思考過程，開了就是純粹多付錢
+- **哪個方案**：`plans.thinking_enabled`（目前只有 Advance）。其餘方案與沒有方案的
+  人一律關掉——推理 token 按 output 計價，而每日提問額度承保的月上限是
+  `chat_limit × 30`（見
+  [subscription/business-rules.md](../subscription/business-rules.md)〈方案定價的成本曝險〉），
+  免費方案的成本天花板本來就只有約 $0.6/月
+
+**三個欄位各司其職，不要互相取代**：
+
+| 問題 | 欄位 | 性質 |
+|---|---|---|
+| 能不能思考 | `plans.thinking_enabled` | 權益（定價頁讀它） |
+| 能不能上網查 | `plans.agent_enabled` | 權益（定價頁讀它） |
+| 想多久 | `plans.ai_routing.reasoning.effort` | 成本設定 |
+
+兩個權益目前的值剛好一樣（只有 Advance 開），但**刻意分成兩欄**：它們是兩個能賣的
+東西，哪天想讓 Pro 只有思考、沒有搜尋，改資料就好，不必回來動程式。
+
+`ai_quality`（pro / advanced / deep）不在這張表裡——它是定價頁的行銷文案，與成本和
+權益都刻意不綁定（見 `Plan::aiRouting()` 的註解）。
+
+額度的退還判準看的是**回答**而不是推理：只吐了思考過程就斷掉的話，使用者拿到的是
+一段沒有結論的獨白，那一次要退。上游確實已經收了推理的錢，但那是我們選擇開
+reasoning 的代價，不該轉嫁到使用者的每日額度上。
+
+## 上網查資料是方案權益，而且成本結構跟提問次數不一樣
+
+`code:` `app/Utils/AI/NeuronChatStreamer.php` → `webSearchTool()`、`app/Http/Controllers/API/V1/Media/ChatController.php` → `webSearchEnabled()` · `updated:` `2026-09-21` · `status:` `active`
+
+對話可以讓模型自己上網查（Tavily，NeuronAI 內建的 `TavilySearchTool`），但**只開給
+`plans.agent_enabled` 的方案**（目前只有 Advance）。判準用資料不用方案名稱，與
+`custom_summary_enabled` / `download_enabled` / `screenshot_enabled` 同一套做法。
+
+沒開通的人**不會被擋下請求**——這是一個能力，不是一道閘門。他照常對話，只是模型
+答不出摘要以外的東西時只能說不知道。所以 `webSearchEnabled()` 回 false 而不是拋例外。
+
+為什麼要卡方案，用數字講比較清楚（Tavily 一次搜尋約 $0.007）：
+
+| 方案 | chat_limit | 每題都搜的月上限 | 該價位的 AI 預算 |
+|---|---|---|---|
+| Free | 3 | ~$0.63 | ~$0（免費） |
+| Pro | 20 | ~$4.2 | $2.23（$9.99 價位） |
+| Advance | 50 | ~$10.5 | $6.03（$24.99 價位） |
+
+**光搜尋就能吃掉 Pro 整個 AI 預算的兩倍**，而且這還沒算搜尋真正貴的地方：每次工具
+呼叫都要把摘要與完整歷史**重送一遍**給模型，input token 是雙倍起跳，延遲也跟著漲。
+`ai.chat.web_search.max_runs` 擋的就是這個，不是 Tavily 那幾毫分。
+
+兩個踩過的地雷：
+
+- **`withOptions()` 是整組覆蓋不是合併**，而且 `include_answer` 不能省——
+  `TavilySearchTool::__invoke()` 直接讀 `$result['answer']`，Tavily 沒被要求產生摘要
+  時不會有這個鍵，每次搜尋都會炸在那一行。
+- **`ChatChunk` 的型別名稱與 `chat_messages.parts` 不完全相同**：串流那側沿用上游
+  詞彙（`reasoning`），儲存與前端那側是 `thinking`。`ChatChunk::toPart()` 負責換這一
+  次；照抄不換的話會寫進一個前端不認得的片段型別，畫面上就是整段內容消失。
+
 ## AI 回應語言取自使用者設定，缺漏時退回 en
 
 `code:` `app/Models/User.php` → `aiLanguageName` · `code:` `app/Http/Controllers/API/V1/SettingsController.php` → `update` · `updated:` `2026-08-14` · `status:` `active`

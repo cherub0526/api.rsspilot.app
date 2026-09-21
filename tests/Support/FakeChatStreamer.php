@@ -6,6 +6,7 @@ namespace Tests\Support;
 
 use Generator;
 use App\Models\User;
+use App\Utils\AI\ChatChunk;
 use App\Utils\AI\ChatStreamerInterface;
 
 /**
@@ -25,7 +26,15 @@ class FakeChatStreamer implements ChatStreamerInterface
 
     public ?string $sessionId = null;
 
-    /** @param string[] $tokens 依序產生的回應片段 */
+    public bool $withReasoning = false;
+
+    public bool $withWebSearch = false;
+
+    /**
+     * @param array<int, ChatChunk|string> $tokens 依序產生的回應片段。純字串
+     *                                             視為回答；要模擬會思考的模型
+     *                                             就混入 ChatChunk::reasoning()
+     */
     public function __construct(private array $tokens = ['Hello'])
     {
     }
@@ -34,14 +43,20 @@ class FakeChatStreamer implements ChatStreamerInterface
         string $instructions,
         array $messages,
         ?User $user = null,
-        ?string $sessionId = null
+        ?string $sessionId = null,
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): Generator {
         ++$this->calls;
         $this->instructions = $instructions;
         $this->messages = $messages;
         $this->sessionId = $sessionId;
+        $this->withReasoning = $withReasoning;
+        $this->withWebSearch = $withWebSearch;
 
-        yield from $this->tokens;
+        foreach ($this->tokens as $token) {
+            yield $token instanceof ChatChunk ? $token : ChatChunk::text($token);
+        }
     }
 
     /** 送出的訊息內容，依序排列。 */

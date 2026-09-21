@@ -5,19 +5,25 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1\Media;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Price;
 use App\Models\Source;
 use App\Models\Caption;
 use App\Models\Setting;
 use App\Models\Summary;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Utils\AI\ChatChunk;
 use App\Events\Chat\ChatDoneEvent;
 use App\Events\Chat\ChatTokenEvent;
 use Hypervel\Support\Facades\Event;
 use Tests\Support\FakeChatStreamer;
+use App\Events\Chat\ChatToolCallEvent;
+use App\Events\Chat\ChatReasoningEvent;
 use App\Utils\AI\ChatStreamerInterface;
+use App\Events\Chat\ChatToolResultEvent;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -47,10 +53,49 @@ class ChatControllerTest extends TestCase
         return $this->streamer;
     }
 
+    /**
+     * 會思考的模型：片段裡混著推理與回答。
+     *
+     * @param ChatChunk|string ...$chunks 純字串視為回答
+     */
+    private function fakeThinkingStreamer(ChatChunk|string ...$chunks): FakeChatStreamer
+    {
+        $this->streamer = new FakeChatStreamer($chunks);
+        $this->app->instance(ChatStreamerInterface::class, $this->streamer);
+
+        return $this->streamer;
+    }
+
     /** 舊名保留，讓既有測試維持可讀性：語意就是「備妥一個會回應的 AI」。 */
     private function fakeOpenRouter(string $token = 'Hello'): FakeChatStreamer
     {
         return $this->fakeStreamer($token);
+    }
+
+    /**
+     * 建一個使用者當下生效的方案。
+     *
+     * 沒有訂閱的人吃的是「月費 0 元」的方案，所以只要建這一個即可。包
+     * withoutEvents：Plan / Price 的 observer 會直接打 Stripe API。
+     */
+    private function createPlan(bool $agentEnabled, bool $thinkingEnabled = true): Plan
+    {
+        return Plan::withoutEvents(function () use ($agentEnabled, $thinkingEnabled) {
+            $plan = Plan::factory()->create([
+                'title'            => $agentEnabled ? 'Advance' : 'Free',
+                'agent_enabled'    => $agentEnabled,
+                'thinking_enabled' => $thinkingEnabled,
+                'status'           => Plan::STATUS_ACTIVE,
+            ]);
+
+            Price::create([
+                'plan_id' => $plan->id,
+                'unit'    => Price::UNIT_MONTHLY,
+                'price'   => 0,
+            ]);
+
+            return $plan;
+        });
     }
 
     /** Persist user AI-language setting (required by AssistantTemplate). */
@@ -510,6 +555,299 @@ class ChatControllerTest extends TestCase
                 return $event->userId === (string) $user->getKey()
                     && $event->mediaId === $media->id;
             }
+        );
+    }
+
+    /**
+     * 8-0. 會思考的模型：推理走 ChatReasoningEvent，回答走 ChatTokenEvent。
+     *
+     * 兩者混成同一種事件的話，思考過程會被前端直接印進對話氣泡。
+     */
+    public function testStoreDispatchesReasoningAndAnswerAsDifferentEvents(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
+
+        Event::fake([ChatTokenEvent::class, ChatReasoningEvent::class, ChatDoneEvent::class]);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::reasoning('先看逐字稿'),
+            ChatChunk::reasoning('再整理重點'),
+            '這部影片在講快取'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '這部影片在講什麼？']],
+        ])->assertStatus(200);
+
+        Event::assertDispatchedTimes(ChatReasoningEvent::class, 2);
+        Event::assertDispatchedTimes(ChatTokenEvent::class, 1);
+
+        Event::assertDispatched(
+            ChatReasoningEvent::class,
+            fn (ChatReasoningEvent $event): bool => $event->userId === (string) $user->getKey()
+                && $event->mediaId === $media->id
+                && $event->token === '先看逐字稿'
+        );
+
+        Event::assertNotDispatched(
+            ChatTokenEvent::class,
+            fn (ChatTokenEvent $event): bool => str_contains($event->token, '逐字稿')
+        );
+    }
+
+    /**
+     * 8-0-1. 思考過程存成自己的片段，排在回答前面；content 只留回答。
+     *
+     * content 是送回模型的歷史所讀的欄位——推理進去的話，下一輪模型會把上一輪的
+     * 自言自語當成它自己說過的話。
+     */
+    public function testStoreStoresTheThinkingAsItsOwnPart(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
+        $this->fakeThinkingStreamer(ChatChunk::reasoning('嗯……'), '答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $message = ChatMessage::query()->where('role', ChatMessage::ROLE_AI)->firstOrFail();
+
+        $this->assertSame('答案', $message->getAttribute('content'));
+        $this->assertSame(
+            [
+                ['type' => ChatMessage::PART_THINKING, 'text' => '嗯……'],
+                ['type' => ChatMessage::PART_TEXT, 'text' => '答案'],
+            ],
+            $message->contentParts()
+        );
+    }
+
+    /** 8-0-2. 沒有思考過程時不要留一個空的 thinking 片段。 */
+    public function testStoreLeavesNoThinkingPartWhenTheModelDoesNotThink(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $parts = ChatMessage::query()
+            ->where('role', ChatMessage::ROLE_AI)
+            ->firstOrFail()
+            ->contentParts();
+
+        $this->assertSame([['type' => ChatMessage::PART_TEXT, 'text' => '答案']], $parts);
+    }
+
+    /**
+     * 8-0-3. 對話這條路要開 withReasoning——關著的話上游根本不會回推理內容。
+     */
+    public function testStoreAsksTheStreamerForReasoning(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertTrue($streamer->withReasoning);
+    }
+
+    /**
+     * 8-0-3-1. 思考是 Pro 以上的權益，免費方案不該向上游要推理內容。
+     *
+     * 推理 token 按 output 計價，而免費方案的成本天花板本來就很薄。
+     */
+    public function testStoreDoesNotAskForReasoningOnPlansWithoutIt(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false, thinkingEnabled: false);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withReasoning);
+    }
+
+    /** 沒有方案時一併關掉——無從判斷權益的預設是不給。 */
+    public function testStoreDoesNotAskForReasoningWithoutAPlan(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withReasoning);
+        $this->assertFalse($streamer->withWebSearch);
+    }
+
+    /**
+     * 8-0-4. 上網查資料只開給 plans.agent_enabled 的方案。
+     *
+     * 判準用資料而不是方案名稱，與其他付費功能一致。成本不是小事：每次工具呼叫
+     * 都要把摘要與歷史重送一遍，付的是搜尋費加上再一輪的 input token。
+     */
+    public function testStoreEnablesWebSearchOnlyForPlansWithAgentEnabled(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false);
+
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withWebSearch, '沒開通的方案不該帶著搜尋工具去推論');
+    }
+
+    public function testStoreEnablesWebSearchForAgentPlans(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: true);
+
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertTrue($streamer->withWebSearch);
+    }
+
+    /**
+     * 8-0-5. 搜尋的呼叫與結果各自成一種事件，而且都不會混進回答。
+     */
+    public function testStoreDispatchesToolEventsForWebSearch(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        Event::fake([ChatToolCallEvent::class, ChatToolResultEvent::class, ChatTokenEvent::class]);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => 'CLSK 最新消息']),
+            ChatChunk::toolResult('call_1', '{"results":[{"title":"CLSK","url":"https://x.test"}]}'),
+            '根據搜尋結果…'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => 'CLSK 最近有什麼消息？']],
+        ])->assertStatus(200);
+
+        Event::assertDispatched(
+            ChatToolCallEvent::class,
+            fn (ChatToolCallEvent $event): bool => $event->name === 'web_search'
+                && $event->input['search_query'] === 'CLSK 最新消息'
+                && $event->userId === (string) $user->getKey()
+                && $event->mediaId === $media->id
+        );
+
+        Event::assertDispatched(
+            ChatToolResultEvent::class,
+            fn (ChatToolResultEvent $event): bool => $event->toolCallId === 'call_1'
+                && !$event->isError
+        );
+
+        Event::assertDispatchedTimes(ChatTokenEvent::class, 1);
+    }
+
+    /**
+     * 8-0-6. 片段照抵達順序落庫，content 仍然只有回答。
+     *
+     * 順序錯掉的話，重播歷史時搜尋會出現在答案下面，跟當下看到的畫面對不起來。
+     */
+    public function testStoreStoresToolPartsInArrivalOrder(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+
+        $this->createPlan(agentEnabled: true, thinkingEnabled: true);
+        $this->fakeThinkingStreamer(
+            ChatChunk::reasoning('要先查一下'),
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => 'CLSK']),
+            ChatChunk::toolResult('call_1', '搜尋結果'),
+            '答案'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $message = ChatMessage::query()->where('role', ChatMessage::ROLE_AI)->firstOrFail();
+
+        $this->assertSame('答案', $message->getAttribute('content'));
+        $this->assertSame(
+            [
+                ChatMessage::PART_THINKING,
+                ChatMessage::PART_TOOL_CALL,
+                ChatMessage::PART_TOOL_RESULT,
+                ChatMessage::PART_TEXT,
+            ],
+            array_column($message->contentParts(), 'type')
+        );
+        $this->assertSame(
+            ['search_query' => 'CLSK'],
+            $message->contentParts()[1]['input']
         );
     }
 

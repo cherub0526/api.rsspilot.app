@@ -28,6 +28,7 @@ use OpenApi\Attributes as OAT;
         ),
         new OAT\Property(property: 'download_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'agent_enabled', type: 'boolean', example: false),
+        new OAT\Property(property: 'thinking_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'advanced_model_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'custom_summary_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'screenshot_enabled', type: 'boolean', example: true),

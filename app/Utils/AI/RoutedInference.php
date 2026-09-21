@@ -62,8 +62,8 @@ final class RoutedInference
      * 串流。
      *
      * @param class-string|string $class 用途
-     * @param callable(RoutingProfile): Generator<int, string> $run
-     * @return Generator<int, string>
+     * @param callable(RoutingProfile): Generator<int, ChatChunk> $run
+     * @return Generator<int, ChatChunk>
      */
     public static function stream(string $class, ?User $user, callable $run): Generator
     {

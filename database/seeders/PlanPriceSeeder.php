@@ -24,6 +24,7 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 3,
                 'download_enabled'       => false,
                 'agent_enabled'          => false,
+                'thinking_enabled'       => false,
                 'advanced_model_enabled' => false,
                 'custom_summary_enabled' => false,
                 'screenshot_enabled'     => false,
@@ -46,6 +47,7 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 20,
                 'download_enabled'       => true,
                 'agent_enabled'          => false,
+                'thinking_enabled'       => false,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
                 // 截圖只開放給 Advance
@@ -69,14 +71,19 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 50,
                 'download_enabled'       => true,
                 'agent_enabled'          => true,
+                'thinking_enabled'       => true,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
                 'screenshot_enabled'     => true,
                 'ai_quality'             => Plan::AI_QUALITY_DEEP,
                 'ai_routing'             => [
-                    'model'    => 'openrouter/auto',
-                    'plugins'  => [['id' => 'auto-router', 'cost_tier' => 'medium']],
-                    'provider' => ['max_price' => ['prompt' => 1.5, 'completion' => 5]],
+                    'model'   => 'openrouter/auto',
+                    'plugins' => [['id' => 'auto-router', 'cost_tier' => 'medium']],
+                    // 只有 Advance 想得比較久。其餘方案不指定，吃 config 的預設值
+                    // （ai.chat.reasoning_effort，目前是 low）——推理 token 按 output
+                    // 計價，調高等於直接墊高每日提問額度的成本天花板。
+                    'reasoning' => ['effort' => 'medium', 'exclude' => false],
+                    'provider'  => ['max_price' => ['prompt' => 1.5, 'completion' => 5]],
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],

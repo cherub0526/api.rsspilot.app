@@ -201,14 +201,20 @@ class MindmapController
                 ['role' => 'user', 'content' => $userContent],
             ]);
 
-            foreach ($stream as $token) {
+            foreach ($stream as $chunk) {
                 // NeuronAI 在串流尾端會送出內容為空的 chunk，濾掉以免前端做無意義的重繪。
-                if ($token === '') {
+                // 推理片段一併濾掉：心智圖沒有開 withReasoning，正常不會有，但這條
+                // 路的輸出會直接存成 markdown，混進去就是壞掉的心智圖。
+                if ($chunk->isEmpty() || !$chunk->isText()) {
                     continue;
                 }
 
-                $buffer .= $token;
-                $connected = $this->emit($output, $connected, ['type' => 'token', 'token' => $token]);
+                $buffer .= $chunk->text;
+                $connected = $this->emit(
+                    $output,
+                    $connected,
+                    ['type' => 'token', 'token' => $chunk->text]
+                );
             }
 
             $mindmap->update([
