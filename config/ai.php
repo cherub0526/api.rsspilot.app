@@ -41,6 +41,23 @@ return [
         'reasoning_effort' => env('AI_CHAT_REASONING_EFFORT', 'low'),
 
         /*
+         * 送進推論的對話歷史最多保留幾則訊息（一輪問答是 2 則）。0 = 不設限。
+         *
+         * **這是成本旋鈕，不是體驗旋鈕。** 每一輪都要把摘要與歷史整個重送一遍
+         * （OpenRouter 沒有替我們保存對話），所以同一段 session 裡第 i 題的
+         * input 是 i 的線性函數，累積下來是平方成長。不設限時，一位每天用滿
+         * Advance 額度又只開一段對話的使用者，光對話的月成本就會從 $37 變成
+         * $94——見 rsspilot.app repo 的 docs/pricing-cost-model.md。
+         *
+         * 20 則約等於 10 輪問答。截斷是從舊的那端砍，所以歷史有可能以一則
+         * assistant 訊息開頭——OpenAI 相容的 API 接受這種開頭，不必為了湊成對
+         * 再多砍一則。
+         *
+         * 調高之前先算一次：這個值是直接乘在每日提問額度承保的月上限上的。
+         */
+        'history_window' => (int) env('AI_CHAT_HISTORY_WINDOW', 20),
+
+        /*
          * 讓模型自己上網查資料。
          *
          * 走 OpenRouter 的 `openrouter:web_search` **server tool**——搜尋在

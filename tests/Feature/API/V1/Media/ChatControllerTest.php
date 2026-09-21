@@ -1078,6 +1078,87 @@ class ChatControllerTest extends TestCase
         );
     }
 
+    /**
+     * 歷史只送最近的一段，舊的那端會被砍掉。
+     *
+     * 這是成本控制不是功能限制：每一輪都要把歷史整個重送，所以同一段 session 的
+     * 成本是隨輪數平方成長的。視窗失效不會報錯，只會在帳單上出現——所以要在這裡
+     * 釘住。數字見 rsspilot.app repo 的 docs/pricing-cost-model.md。
+     */
+    public function testStoreOnlySendsTheMostRecentHistoryWindow(): void
+    {
+        config(['ai.chat.history_window' => 4]);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'long',
+        ]);
+        $this->appendMessages($session, [
+            [ChatMessage::ROLE_USER, '第一問'],
+            [ChatMessage::ROLE_AI, '第一答'],
+            [ChatMessage::ROLE_USER, '第二問'],
+            [ChatMessage::ROLE_AI, '第二答'],
+            [ChatMessage::ROLE_USER, '第三問'],
+            [ChatMessage::ROLE_AI, '第三答'],
+        ]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => '這次的提問']],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            ['第二問', '第二答', '第三問', '第三答', '這次的提問'],
+            $streamer->contents(),
+            '視窗是 4 則，最舊的那一輪要被砍掉，而且順序不能亂'
+        );
+    }
+
+    /** 視窗設 0 代表不設限——既有行為要留一條路回去。 */
+    public function testStoreSendsTheWholeHistoryWhenTheWindowIsOff(): void
+    {
+        config(['ai.chat.history_window' => 0]);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('好的');
+
+        $session = ChatSession::create([
+            'user_id'  => $user->id,
+            'media_id' => $media->id,
+            'title'    => 'unlimited',
+        ]);
+        $this->appendMessages($session, [
+            [ChatMessage::ROLE_USER, '第一問'],
+            [ChatMessage::ROLE_AI, '第一答'],
+            [ChatMessage::ROLE_USER, '第二問'],
+            [ChatMessage::ROLE_AI, '第二答'],
+        ]);
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'session_id' => $session->id,
+            'messages'   => [['role' => 'user', 'content' => '這次的提問']],
+        ])->assertStatus(200);
+
+        $this->assertSame(
+            ['第一問', '第一答', '第二問', '第二答', '這次的提問'],
+            $streamer->contents()
+        );
+    }
+
     /** 沒帶 session_id 就是新對話，歷史是空的——客戶端塞什麼都一樣。 */
     public function testStoreStartsANewSessionWithoutAnyHistory(): void
     {

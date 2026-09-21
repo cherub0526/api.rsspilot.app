@@ -690,25 +690,39 @@ class ChatController
     }
 
     /**
-     * 這段對話至今的訊息，由 server 自己的紀錄重建。
+     * 這段對話至今的訊息，由 server 自己的紀錄重建，並且只取最近的一段。
      *
      * **不採用客戶端送來的 `messages`**，那是這支端點唯一一處把「要送給模型什麼」
      * 的決定權交出去的地方：陣列沒有長度上限，對方送多少就有多少 input token 被
      * 計費，內容也未必真的發生過。改讀 `chat_messages` 之後，歷史的長度與內容都
-     * 由 server 決定，之後要加視窗上限或摘要壓縮也才有地方可加。
+     * 由 server 決定。
+     *
+     * **視窗上限是成本控制，不是功能限制**（`ai.chat.history_window`，0 = 不設限）。
+     * 每一輪都要把整段歷史重送一遍，所以同一段 session 的成本是隨輪數平方成長的；
+     * 不設限時 Advance 的對話月成本會從 $37 變成 $94。理由與數字見 rsspilot.app
+     * repo 的 docs/pricing-cost-model.md〈Advance 的成本結構與旋鈕〉。
+     *
+     * 取最近 N 則的做法是**倒著查再翻回來**，不是查出全部再切：session 可以有上千
+     * 則訊息，`limit` 讓資料庫只回我們要的那幾列。
      *
      * 排序用 created_at 再用 id：同一輪的提問與回應常落在同一秒，ULID 是單調遞增
-     * 的，拿它當 tiebreaker 才能保證 user / assistant 的先後不會顛倒。
+     * 的，拿它當 tiebreaker 才能保證 user / assistant 的先後不會顛倒。倒查時兩個
+     * 排序都要一起反向，否則同秒內的先後會亂掉。
      *
      * @return array<int, array{role: string, content: string, images: array<int, array{second: int, checksum: string}>}>
      */
     private function historyOf(string $sessionId): array
     {
-        return ChatMessage::query()
-            ->where('session_id', $sessionId)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get()
+        $window = (int) config('ai.chat.history_window');
+
+        $query = ChatMessage::query()->where('session_id', $sessionId);
+
+        $messages = $window > 0
+            ? $query->orderByDesc('created_at')->orderByDesc('id')
+                ->limit($window)->get()->reverse()->values()
+            : $query->orderBy('created_at')->orderBy('id')->get();
+
+        return $messages
             ->map(fn (ChatMessage $message): array => [
                 // content 是 text 片段的投影（見 ChatMessage::partsToText()），
                 // 送進推論的歷史只要文字，所以直接讀它。
