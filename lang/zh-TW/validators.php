@@ -17,6 +17,10 @@ return [
             'provider_not_configured' => '該登入方式尚未設定。',
             'exchange_failed'         => '授權驗證失敗，請重新登入。',
         ],
+        'api_keys' => [
+            'name'  => 'API key 名稱必填，且不可超過 60 個字。',
+            'limit' => '最多只能建立 :max 把 API key，請先刪除不用的。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自訂 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
@@ -40,10 +44,10 @@ return [
             'summary_required'      => '摘要完成後才能產生心智圖。',
         ],
         'thumbnails' => [
-            'plan_required' => '播放器截圖是 Advance 方案的功能。',
+            'plan_required'     => '播放器截圖是 Advance 方案的功能。',
             'checksum_mismatch' => '截圖的 checksum 與檔案內容不符。',
-            'not_found'    => '找不到指定秒數的截圖，請重新截圖後再送出。',
-            'out_of_range' => '截圖的秒數超出影片長度。',
+            'not_found'         => '找不到指定秒數的截圖，請重新截圖後再送出。',
+            'out_of_range'      => '截圖的秒數超出影片長度。',
         ],
         'sources' => [
             'invalid_url'           => '無效的 YouTube 網址。',
@@ -117,8 +121,8 @@ return [
                 'string'   => '內容必須是字串。',
             ],
             'images' => [
-                'array' => '截圖必須是陣列。',
-                'max'   => '一則訊息最多只能附上 4 張截圖。',
+                'array'  => '截圖必須是陣列。',
+                'max'    => '一則訊息最多只能附上 4 張截圖。',
                 'second' => [
                     'required' => '截圖的秒數為必填。',
                     'integer'  => '截圖的秒數必須是整數。',

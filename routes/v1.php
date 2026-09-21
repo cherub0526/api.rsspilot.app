@@ -23,6 +23,7 @@ use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
+use App\Http\Controllers\API\V1\Users\ApiKeysController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
@@ -170,6 +171,26 @@ Route::group('/users', function () {
     Route::delete('/sessions', [
         'as'         => 'sessions.destroy',
         'uses'       => UserSessionsController::class . '@destroy',
+        'middleware' => ['auth'],
+    ]);
+
+    // API key 的產生與撤銷。走 jwt 而不是 sanctum：不該用一把 key 去生下一把，
+    // 那會讓外洩的 key 自我續命，撤銷也就失去意義。
+    Route::get('/api-keys', [
+        'as'         => 'api-keys.index',
+        'uses'       => ApiKeysController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::post('/api-keys', [
+        'as'         => 'api-keys.store',
+        'uses'       => ApiKeysController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::delete('/api-keys/{id}', [
+        'as'         => 'api-keys.destroy',
+        'uses'       => ApiKeysController::class . '@destroy',
         'middleware' => ['auth'],
     ]);
 }, ['as' => 'users']);

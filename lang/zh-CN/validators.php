@@ -17,6 +17,10 @@ return [
             'provider_not_configured' => '该登录方式尚未设置。',
             'exchange_failed'         => '授权验证失败，请重新登录。',
         ],
+        'api_keys' => [
+            'name'  => 'API key 名称必填，且不可超过 60 个字。',
+            'limit' => '最多只能创建 :max 把 API key，请先删除不用的。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
@@ -40,10 +44,10 @@ return [
             'summary_required'      => '摘要完成后才能生成思维导图。',
         ],
         'thumbnails' => [
-            'plan_required' => '播放器截图是 Advance 方案的功能。',
+            'plan_required'     => '播放器截图是 Advance 方案的功能。',
             'checksum_mismatch' => '截图的 checksum 与文件内容不符。',
-            'not_found'    => '找不到指定秒数的截图，请重新截图后再发送。',
-            'out_of_range' => '截图的秒数超出视频长度。',
+            'not_found'         => '找不到指定秒数的截图，请重新截图后再发送。',
+            'out_of_range'      => '截图的秒数超出视频长度。',
         ],
         'sources' => [
             'invalid_url'           => '无效的 YouTube 网址。',
@@ -117,8 +121,8 @@ return [
                 'string'   => '内容必须是字符串。',
             ],
             'images' => [
-                'array' => '截图必须是数组。',
-                'max'   => '一条消息最多只能附上 4 张截图。',
+                'array'  => '截图必须是数组。',
+                'max'    => '一条消息最多只能附上 4 张截图。',
                 'second' => [
                     'required' => '截图的秒数为必填。',
                     'integer'  => '截图的秒数必须是整数。',

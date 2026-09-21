@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Utils\Const\ISO6391;
 use Hyperf\Database\Model\Builder;
+use Hypervel\Sanctum\HasApiTokens;
 use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
@@ -19,17 +21,24 @@ use Hypervel\Foundation\Auth\User as Authenticatable;
  * @property null|string $account
  * @property string $name
  * @property null|string $email
- * @property null|\Carbon\Carbon $email_verified_at
+ * @property null|Carbon $email_verified_at
  * @property string $password
  * @property null|string $social_type
  * @property null|string $provider_id
  * @property null|string $avatar
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 class User extends Authenticatable
 {
     use HasUlids;
+
+    /**
+     * 使用者自己產生的 API key（personal access token）。
+     *
+     * 只給 /mcp 那條路用；自家前端走的是 jwt guard，兩者刻意分開。
+     */
+    use HasApiTokens;
 
     use HasFactory;
 

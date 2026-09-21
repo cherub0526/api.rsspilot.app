@@ -17,6 +17,10 @@ return [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
             'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
+        'api_keys' => [
+            'name'  => 'A name is required and must not exceed 60 characters.',
+            'limit' => 'You can keep at most :max API keys. Delete one you no longer use.',
+        ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
@@ -40,10 +44,10 @@ return [
             'summary_required'      => 'The mind map can only be generated once the summary is ready.',
         ],
         'thumbnails' => [
-            'plan_required' => 'Player screenshots are available on the Advance plan.',
+            'plan_required'     => 'Player screenshots are available on the Advance plan.',
             'checksum_mismatch' => 'The checksum does not match the uploaded file.',
-            'not_found'    => 'No screenshot exists at that second; capture it again before sending.',
-            'out_of_range' => 'The requested second is beyond the length of the video.',
+            'not_found'         => 'No screenshot exists at that second; capture it again before sending.',
+            'out_of_range'      => 'The requested second is beyond the length of the video.',
         ],
         'sources' => [
             'invalid_url'           => 'Invalid YouTube URL.',
@@ -117,8 +121,8 @@ return [
                 'string'   => 'The content must be a string.',
             ],
             'images' => [
-                'array' => 'The screenshots must be an array.',
-                'max'   => 'A message may carry at most 4 screenshots.',
+                'array'  => 'The screenshots must be an array.',
+                'max'    => 'A message may carry at most 4 screenshots.',
                 'second' => [
                     'required' => 'The screenshot second is required.',
                     'integer'  => 'The screenshot second must be an integer.',

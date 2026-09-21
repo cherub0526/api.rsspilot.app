@@ -15,6 +15,33 @@ Each rule is a `## heading` + a one-line meta + the body. Capture the "why" code
 The rule, the reasoning, and edge cases.
 -->
 
+## API key 與登入憑證是兩套東西，不共用 guard
+
+`code:` `config/auth.php`、`app/Http/Controllers/API/V1/Users/ApiKeysController.php` · `updated:` `2026-09-21` · `status:` `active`
+
+自家前端（web 與 Electron）走 **jwt** guard：短效、可 refresh。使用者自己產生的
+API key 走 **sanctum** guard：長期有效、貼在第三方工具的設定檔裡（見 `/mcp`）。
+兩者刻意不互通：
+
+| | 誰在用 | 有效期 | 能做什麼 |
+|---|---|---|---|
+| jwt | 自家前端 | 短，可 refresh | 全部 API |
+| sanctum | 使用者的 AI 工具 | 不過期，只能手動刪 | 只有 `/mcp`，唯讀 |
+
+**產生與刪除 key 的端點自己走 jwt**（`/v1/users/api-keys`）。用一把 key 去產生下一把
+的話，一把外洩的 key 就能自我續命，撤銷也就失去意義。
+
+`/mcp` 只認 sanctum（`auth:sanctum`，不是 `auth`）。讓 jwt 也能進去等於鼓勵使用者
+把前端的 token 從瀏覽器挖出來貼到第三方工具，那是一把能改帳號設定、能結帳的憑證。
+
+明文只在建立當下回一次，資料庫存的是 sha256——**連我們自己都讀不回來**。這是這類
+憑證值得信任的原因，所以前端也不做「再看一次」的功能，只能刪掉重產。
+
+token 帶 `rsp_` 前綴（`config/sanctum.php`）：GitHub 一類的 secret scanning 靠前綴
+認出這是一把憑證，使用者不小心 commit 進公開 repo 時會收到通知。注意實際格式是
+`<id>|rsp_<random>`，前綴在 `|` 之後而不是整串的開頭。
+
+
 ## Session 沒有絕對上限，只要持續使用就不會過期
 
 `code:` `app/Http/Controllers/API/V1/Auth/RefreshController.php` → `store` · `updated:` `2026-09-16` · `status:` `active`

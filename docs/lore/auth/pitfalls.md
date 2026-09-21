@@ -15,6 +15,21 @@ Each pitfall is a `## heading` + a one-line meta + the body:
 What breaks, why, and what to do instead.
 -->
 
+## sanctum 附的 migration 會把 tokenable_id 建成整數
+
+`code:` `database/migrations/*_create_personal_access_tokens_table.php` · `updated:` `2026-09-21` · `status:` `active`
+
+`hypervel/sanctum` 的 migration 用 `$table->morphs('tokenable')`，`tokenable_id` 因此
+是 unsigned big integer。但這個專案的 `users.id` 是 **26 字元的 ULID**。
+
+發作方式很難抓：**sqlite 的動態型別讓本機一切正常**，到了 MySQL／MariaDB 則是把
+ULID 靜默截斷成 `0`——每一把 token 都指向同一個不存在的使用者，而且沒有任何錯誤
+訊息，看起來就只是「認證莫名其妙失敗」或更糟的「認證成了別人」。
+
+所以不能直接 publish 它的 migration，要自己寫一支把 `tokenable_id` 宣告成 `ulid()`，
+索引照原本的形狀補回去。日後換套件、升版時要再檢查一次這件事。
+
+
 ## `guard()->refresh()` 發出來的 token 沒有 `exp`，永不過期
 
 `code:` `app/Http/Controllers/API/V1/Auth/RefreshController.php` → `store` · `updated:` `2026-09-16` · `status:` `active`
