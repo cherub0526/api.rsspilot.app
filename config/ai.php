@@ -41,21 +41,36 @@ return [
         'reasoning_effort' => env('AI_CHAT_REASONING_EFFORT', 'low'),
 
         /*
-         * 讓模型自己上網查資料（Tavily）。
+         * 讓模型自己上網查資料。
          *
-         * 沒有 key 就整個功能關閉——不是報錯，是當作這個能力不存在。開通的方案
-         * 仍然照常對話，只是模型答不出摘要以外的東西時只能說不知道。
+         * 走 OpenRouter 的 `openrouter:web_search` **server tool**——搜尋在
+         * OpenRouter 那一側執行完才把結果交回模型，我們不掛工具、不接搜尋供應
+         * 商，也沒有 client 端要回應的工具呼叫。2026-09 之前這裡是 Tavily 的
+         * client-side 工具，換掉的理由見 docs/lore/prompts/business-rules.md
+         * 〈上網查資料是方案權益，而且成本結構跟提問次數不一樣〉。
          *
          * **誰能用是方案決定的，不是這裡**：判準是 plans.agent_enabled（目前只有
-         * Advance 開），執行點在 ChatController。這裡只管「技術上有沒有這個工具」。
+         * Advance 開），執行點在 ChatController。這裡只管「怎麼搜」。
          *
-         * max_runs 是每一輪對話最多搜幾次的硬上限。每次工具呼叫都要把摘要與歷史
-         * 重送一遍給模型，所以它擋的不只是 Tavily 的錢，還有 input token 與延遲。
+         * **不要改用 `plugins: [{id: "web"}]`。** 那個 plugin 每次請求都搜，而
+         * server tool 是模型自己決定要不要搜。實際會觸發搜尋的題目大約三成，
+         * 換成每題都搜等於把這一項的成本乘上三倍。
+         *
+         * 四個值都是成本決定：
+         *
+         * - `engine` / `mode`：parallel 的 turbo 是目前最便宜的一檔（約
+         *   $0.001/次；server tool 不指定時預設走 Exa，$0.007/次）。
+         * - `max_results`：每一筆結果都會整段變成 input token（約 2,000–4,000
+         *   字元），所以它同時是品質與成本的旋鈕。
+         * - `max_tool_calls`：**上游預設是 30，這裡一定要自己壓。** 每多一次工具
+         *   步驟，模型就要把摘要、歷史與已累積的搜尋結果整個重跑一遍——貴的是
+         *   這個，不是搜尋本身那幾毫分。
          */
         'web_search' => [
-            'tavily_key'  => env('TAVILY_API_KEY'),
-            'max_results' => (int) env('AI_CHAT_WEB_SEARCH_MAX_RESULTS', 3),
-            'max_runs'    => (int) env('AI_CHAT_WEB_SEARCH_MAX_RUNS', 3),
+            'engine'         => env('AI_CHAT_WEB_SEARCH_ENGINE', 'parallel'),
+            'mode'           => env('AI_CHAT_WEB_SEARCH_MODE', 'turbo'),
+            'max_results'    => (int) env('AI_CHAT_WEB_SEARCH_MAX_RESULTS', 3),
+            'max_tool_calls' => (int) env('AI_CHAT_WEB_SEARCH_MAX_TOOL_CALLS', 2),
         ],
     ],
 

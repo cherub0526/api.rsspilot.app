@@ -11,7 +11,6 @@ use NeuronAI\Chat\Enums\SourceType;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Messages\Stream\Chunks\TextChunk;
-use NeuronAI\Tools\Toolkits\Tavily\TavilySearchTool;
 use NeuronAI\Chat\Messages\ContentBlocks\TextContent;
 use NeuronAI\Chat\Messages\ContentBlocks\ImageContent;
 use NeuronAI\Chat\Messages\Stream\Chunks\ToolCallChunk;
@@ -75,13 +74,14 @@ class NeuronChatStreamer implements ChatStreamerInterface
                 baseUri: (string) config('ai.openrouter.base_uri'),
                 key: (string) config('ai.openrouter.api_key'),
                 model: $profile->model,
-                parameters: $this->parametersFor($profile, $sessionId, $withReasoning),
+                parameters: $this->parametersFor(
+                    $profile,
+                    $sessionId,
+                    $withReasoning,
+                    $withWebSearch
+                ),
             ))
             ->setInstructions($instructions);
-
-        if ($withWebSearch && ($searchTool = $this->webSearchTool()) !== null) {
-            $agent->addTool($searchTool);
-        }
 
         // stream() 回傳 AgentHandler，events() 才是實際逐段產生的 generator。
         // 事件流裡還有 inference-start 一類的生命週期事件，不是這四種就忽略。
@@ -106,36 +106,45 @@ class NeuronChatStreamer implements ChatStreamerInterface
     }
 
     /**
-     * 上網查資料的工具，沒有設定 key 時回 null。
+     * 上網查資料要附加在 request body 上的參數，關閉時回空陣列。
      *
-     * 開放給測試呼叫，理由同 parametersFor()：工具實際有沒有被掛上去，只有在這
-     * 個層級斷言得到。
+     * 回的是 `tools` 與 `max_tool_calls` 兩個**頂層欄位**，不是 NeuronAI 的工具
+     * 物件——`openrouter:web_search` 是 server tool，搜尋在 OpenRouter 那側跑完
+     * 才把結果交回模型，client 完全不參與。
      *
-     * `withOptions()` 是**整組覆蓋**而不是合併，所以預設值要自己寫齊。其中
-     * `include_answer` 不能省：TavilySearchTool 的 `__invoke()` 直接讀
-     * `$result['answer']`，Tavily 沒被要求產生摘要時不會有這個鍵，每次搜尋都會
-     * 炸在那一行。
+     * **不能走 `$agent->addTool()`。** 兩個原因，都會安靜地壞掉：
+     *
+     * 1. NeuronAI 的 `HandleStream` 是 `$body = [..., ...$this->parameters]`，
+     *    之後才在 `$this->tools` 非空時寫入 `$body['tools']`。只要掛了任何一個
+     *    NeuronAI 工具，這裡送的 tools 就會被整個覆蓋掉——不報錯，畫面上只是
+     *    沒有搜尋。
+     * 2. NeuronAI 自己的 ProviderTool 抽象在這條路上是死的：
+     *    `Providers/OpenAI/ToolMapper.php` 對 ProviderToolInterface 直接拋
+     *    「OpenAI completions API does not support built-in Tools」。
+     *
+     * 開放給測試呼叫，理由同 parametersFor()：真正送出去的 body 攔不到，參數的
+     * 組法只有在這個層級斷言得到。
+     *
+     * @return array<string, mixed>
      */
-    public function webSearchTool(): ?TavilySearchTool
+    public function webSearchParameters(): array
     {
-        $key = trim((string) config('ai.chat.web_search.tavily_key'));
+        $parameters = array_filter(
+            [
+                'engine'      => trim((string) config('ai.chat.web_search.engine')),
+                'mode'        => trim((string) config('ai.chat.web_search.mode')),
+                'max_results' => (int) config('ai.chat.web_search.max_results'),
+            ],
+            // engine / mode 留空代表「用上游預設」，送空字串會換來一個 400。
+            fn (mixed $value): bool => $value !== '' && $value !== 0
+        );
 
-        if ($key === '') {
-            return null;
-        }
-
-        // 不把 setMaxRuns() 串在後面：它宣告在父類別 Tool 上、回傳型別是 Tool，
-        // 接著再呼叫 withOptions() 靜態分析就過不了。
-        $tool = TavilySearchTool::make($key)->withOptions([
-            'search_depth'      => 'basic',
-            'chunks_per_source' => 3,
-            'max_results'       => (int) config('ai.chat.web_search.max_results'),
-            'include_answer'    => true,
-        ]);
-
-        $tool->setMaxRuns((int) config('ai.chat.web_search.max_runs'));
-
-        return $tool;
+        return [
+            'tools' => [['type' => 'openrouter:web_search', 'parameters' => $parameters]],
+            // 上游預設 30，不壓的話單次對話最多可以搜 30 輪，每一輪都要把脈絡
+            // 重跑一遍。見 config/ai.php 對這個值的註解。
+            'max_tool_calls' => max(1, (int) config('ai.chat.web_search.max_tool_calls')),
+        ];
     }
 
     /**
@@ -160,7 +169,8 @@ class NeuronChatStreamer implements ChatStreamerInterface
     public function parametersFor(
         RoutingProfile $profile,
         ?string $sessionId,
-        bool $withReasoning = false
+        bool $withReasoning = false,
+        bool $withWebSearch = false
     ): array {
         $parameters = $profile->parameters;
 
@@ -177,6 +187,13 @@ class NeuronChatStreamer implements ChatStreamerInterface
                 // 模型多想一輪。不支援思考的模型 OpenRouter 會直接忽略這個參數。
                 $parameters['reasoning'] = ['effort' => $effort, 'exclude' => false];
             }
+        }
+
+        // 擺在最後蓋過路由參數：方案的 ai_routing 是成本設定，不該是決定「這次
+        // 能不能上網查」的地方——那是 plans.agent_enabled 的職責，判斷在
+        // ChatController。兩者刻意分開，見 docs/lore/prompts/business-rules.md。
+        if ($withWebSearch) {
+            $parameters = [...$parameters, ...$this->webSearchParameters()];
         }
 
         return $parameters;
