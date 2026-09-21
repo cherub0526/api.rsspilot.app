@@ -69,7 +69,7 @@ class PlanPriceSeeder extends Seeder
                 'title'                  => 'Advance',
                 'channel_limit'          => 5,
                 'video_limit'            => 50,
-                'chat_limit'             => 30,
+                'chat_limit'             => 50,
                 'mindmap_limit'          => 50,
                 'download_enabled'       => true,
                 'agent_enabled'          => true,
