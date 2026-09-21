@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\API\Mcp;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\Media;
+use App\Models\Price;
 use App\Models\Source;
 use App\Models\Caption;
 use App\Models\Summary;
@@ -21,6 +23,24 @@ use Hypervel\Foundation\Testing\RefreshDatabase;
 class ServerControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * 建一個當下生效的方案。沒有訂閱的人吃的是「月費 0 元」的那個方案。
+     */
+    private function createPlan(bool $mcpEnabled = true): Plan
+    {
+        return Plan::withoutEvents(function () use ($mcpEnabled) {
+            $plan = Plan::factory()->create([
+                'title'       => $mcpEnabled ? 'Pro' : 'Free',
+                'mcp_enabled' => $mcpEnabled,
+                'status'      => Plan::STATUS_ACTIVE,
+            ]);
+
+            Price::create(['plan_id' => $plan->id, 'unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+
+            return $plan;
+        });
+    }
 
     /** 帶著某個使用者的 API key 發一個 JSON-RPC 請求。 */
     private function rpc(?User $user, string $method, array $params = [], mixed $id = 1)
@@ -84,6 +104,29 @@ class ServerControllerTest extends TestCase
 
     // ================================================================
 
+    /**
+     * MCP 是 Pro 以上的功能，免費方案帶著有效的金鑰也讀不到資料。
+     *
+     * **每一次請求都檢查**，不是只在產生金鑰時檢查：金鑰不會過期，但方案會。
+     */
+    public function testFreePlansAreTurnedAwayEvenWithAValidKey(): void
+    {
+        $this->createPlan(mcpEnabled: false);
+        $user = User::factory()->create();
+
+        $this->rpc($user, 'tools/list')
+            ->assertStatus(403)
+            ->assertJsonPath('error.code', -32001);
+    }
+
+    /** 沒有方案時一併擋下——無從判斷權益的預設是不給。 */
+    public function testUsersWithoutAPlanAreTurnedAway(): void
+    {
+        $user = User::factory()->create();
+
+        $this->rpc($user, 'tools/list')->assertStatus(403);
+    }
+
     /** 沒有 key 就進不來——這個端點上的每一筆資料都是某個人的。 */
     public function testRequiresAnApiKey(): void
     {
@@ -92,6 +135,7 @@ class ServerControllerTest extends TestCase
 
     public function testListsTheAvailableTools(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $response = $this->rpc($user, 'tools/list')->assertStatus(200);
@@ -116,6 +160,7 @@ class ServerControllerTest extends TestCase
      */
     public function testInitializeEchoesASupportedProtocolVersion(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $this->rpc($user, 'initialize', ['protocolVersion' => '2025-06-18'])
@@ -131,6 +176,7 @@ class ServerControllerTest extends TestCase
 
     public function testCallsAToolAndReturnsTextContent(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $this->videoFor($user, '關於快取的影片');
 
@@ -148,6 +194,7 @@ class ServerControllerTest extends TestCase
 
     public function testGetSummaryReturnsTheSummaryBody(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
 
@@ -171,6 +218,7 @@ class ServerControllerTest extends TestCase
      */
     public function testVideoUrlUsesTheRealYoutubeId(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $source = Source::factory()->create();
         $media = Media::factory()->create([
@@ -193,6 +241,7 @@ class ServerControllerTest extends TestCase
     /** 沒有 video_detail 的舊資料，退而求其次剝掉前綴。 */
     public function testVideoUrlFallsBackToStrippingThePrefix(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $source = Source::factory()->create();
         $media = Media::factory()->create([
@@ -215,6 +264,7 @@ class ServerControllerTest extends TestCase
     /** 大綱只給標題與預覽，讓模型先挑再讀。 */
     public function testSummaryOutlineListsTheSections(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
 
@@ -232,6 +282,7 @@ class ServerControllerTest extends TestCase
     /** 指定章節時只回那一節，長摘要不必整份塞進 context。 */
     public function testGetSummaryCanReturnASingleSection(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
 
@@ -249,6 +300,7 @@ class ServerControllerTest extends TestCase
 
     public function testGetSummaryRejectsAnOutOfRangeSection(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
 
@@ -269,6 +321,7 @@ class ServerControllerTest extends TestCase
      */
     public function testTranscriptReturnsTimestampedSegments(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
         $this->captionFor($media);
@@ -289,6 +342,7 @@ class ServerControllerTest extends TestCase
     /** 時間區間讓模型能只讀它要的那一段。 */
     public function testTranscriptCanBeNarrowedByTime(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
         $this->captionFor($media);
@@ -306,6 +360,7 @@ class ServerControllerTest extends TestCase
     /** 還有下一頁時要給續讀的起點，模型不必自己算。 */
     public function testTranscriptPagesWithANextStart(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
         $this->captionFor($media);
@@ -324,6 +379,7 @@ class ServerControllerTest extends TestCase
 
     public function testTranscriptCanReturnPlainText(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
         $this->captionFor($media);
@@ -342,6 +398,7 @@ class ServerControllerTest extends TestCase
     /** 沒有逐字稿時講清楚，不要回一個空陣列讓模型以為影片沒有內容。 */
     public function testTranscriptSaysSoWhenThereIsNone(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $media = $this->videoFor($user);
 
@@ -359,6 +416,8 @@ class ServerControllerTest extends TestCase
     /** 新工具一樣只讀得到自己的資料。 */
     public function testTranscriptIsScopedToTheOwner(): void
     {
+        $this->createPlan();
+        $this->createPlan();
         $owner = User::factory()->create();
         $stranger = User::factory()->create();
         $media = $this->videoFor($stranger);
@@ -382,6 +441,7 @@ class ServerControllerTest extends TestCase
      */
     public function testAKeyOnlySeesItsOwnersData(): void
     {
+        $this->createPlan();
         $owner = User::factory()->create();
         $stranger = User::factory()->create();
         $media = $this->videoFor($stranger, '別人的影片');
@@ -405,6 +465,7 @@ class ServerControllerTest extends TestCase
 
     public function testSearchMatchesTheTitle(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $this->videoFor($user, '關於快取的影片');
         $this->videoFor($user, '完全不相干');
@@ -423,6 +484,7 @@ class ServerControllerTest extends TestCase
     /** 不認得的方法回 JSON-RPC 的 -32601，HTTP 是 404（規格要求）。 */
     public function testUnknownMethodReturnsMethodNotFound(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $this->rpc($user, 'resources/list')
@@ -433,6 +495,7 @@ class ServerControllerTest extends TestCase
     /** notification（沒有 id）不回結果，只回 202。 */
     public function testNotificationsGetAcceptedWithoutAResult(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $response = $this->withHeaders([
@@ -448,6 +511,7 @@ class ServerControllerTest extends TestCase
      */
     public function testRejectsAHeaderThatDoesNotMatchTheBody(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $this->withHeaders([
@@ -466,6 +530,7 @@ class ServerControllerTest extends TestCase
     /** 沒實作的協定版本要明講支援哪些，客戶端才知道要降到哪一版。 */
     public function testRejectsAnUnsupportedProtocolVersion(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
 
         $this->withHeaders([
@@ -479,6 +544,7 @@ class ServerControllerTest extends TestCase
     /** 刪掉的 key 當場失效。 */
     public function testARevokedKeyStopsWorking(): void
     {
+        $this->createPlan();
         $user = User::factory()->create();
         $token = $user->createToken('test');
 

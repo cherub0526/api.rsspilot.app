@@ -26,6 +26,7 @@ class PlanResource extends JsonResource
             'download_enabled'       => boolval($this->resource->download_enabled),
             'agent_enabled'          => boolval($this->resource->agent_enabled),
             'thinking_enabled'       => boolval($this->resource->thinking_enabled),
+            'mcp_enabled'            => boolval($this->resource->mcp_enabled),
             'advanced_model_enabled' => boolval($this->resource->advanced_model_enabled),
             'custom_summary_enabled' => boolval($this->resource->custom_summary_enabled),
             'screenshot_enabled'     => boolval($this->resource->screenshot_enabled),

@@ -10,6 +10,7 @@ use App\OpenApi\Responses\Http401;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 
 /**
  * 使用者自己產生的 API key（sanctum personal access token）。
@@ -19,6 +20,8 @@ use App\Exceptions\InvalidRequestException;
  */
 class ApiKeysController
 {
+    use ResolvesUserPlan;
+
     /** 名稱長度上限。只是給使用者辨識用的標籤，不必長。 */
     private const int NAME_MAX = 60;
 
@@ -119,6 +122,9 @@ class ApiKeysController
     )]
     public function store(Request $request): ResponseInterface
     {
+        // 免費方案拿到金鑰也用不了（/mcp 會擋），不如在這裡就講清楚。
+        $this->assertMcpEnabled($request);
+
         $name = trim((string) $request->input('name', ''));
 
         if ($name === '' || mb_strlen($name) > self::NAME_MAX) {

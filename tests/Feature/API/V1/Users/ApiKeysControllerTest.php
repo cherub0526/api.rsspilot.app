@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\API\V1\Users;
 
 use Tests\TestCase;
+use App\Models\Plan;
 use App\Models\User;
+use App\Models\Price;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -17,6 +19,22 @@ use Hypervel\Foundation\Testing\RefreshDatabase;
 class ApiKeysControllerTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** 產生金鑰是 Pro 以上的功能，測試要先備一個有權限的方案。 */
+    private function createPlan(bool $mcpEnabled = true): Plan
+    {
+        return Plan::withoutEvents(function () use ($mcpEnabled) {
+            $plan = Plan::factory()->create([
+                'title'       => $mcpEnabled ? 'Pro' : 'Free',
+                'mcp_enabled' => $mcpEnabled,
+                'status'      => Plan::STATUS_ACTIVE,
+            ]);
+
+            Price::create(['plan_id' => $plan->id, 'unit' => Price::UNIT_MONTHLY, 'price' => 0]);
+
+            return $plan;
+        });
+    }
 
     public function testIndexRequiresAuth(): void
     {
@@ -30,6 +48,8 @@ class ApiKeysControllerTest extends TestCase
      */
     public function testStoreReturnsThePlaintextTokenOnlyOnce(): void
     {
+        $this->createPlan();
+
         /** @var User $user */
         $user = $this->fakeLogin();
 
@@ -61,6 +81,7 @@ class ApiKeysControllerTest extends TestCase
 
     public function testStoreRejectsAnEmptyName(): void
     {
+        $this->createPlan();
         $this->fakeLogin();
 
         $this->json('POST', route('api.v1.users.api-keys.store'), ['name' => '  '])
@@ -70,6 +91,8 @@ class ApiKeysControllerTest extends TestCase
     /** 上限擋的是無限產生，不是正常使用。 */
     public function testStoreStopsAtTheKeyLimit(): void
     {
+        $this->createPlan();
+
         /** @var User $user */
         $user = $this->fakeLogin();
 
@@ -79,6 +102,39 @@ class ApiKeysControllerTest extends TestCase
 
         $this->json('POST', route('api.v1.users.api-keys.store'), ['name' => '第 11 把'])
             ->assertStatus(422);
+    }
+
+    /**
+     * 產生金鑰是 Pro 以上的功能。
+     *
+     * 免費方案拿到金鑰也用不了（/mcp 會擋），在這裡就講清楚比讓他貼進第三方
+     * 工具之後收到一個看不懂的錯誤好。
+     */
+    public function testStoreRequiresAPlanWithMcp(): void
+    {
+        $this->createPlan(mcpEnabled: false);
+        $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.users.api-keys.store'), ['name' => 'Claude Desktop'])
+            ->assertStatus(422)
+            ->assertJsonStructure(['messages' => ['plan']]);
+    }
+
+    /** 已經有的金鑰仍然列得出來也刪得掉——降級之後要看得到自己有哪些東西。 */
+    public function testListingAndRevokingStayOpenAfterADowngrade(): void
+    {
+        $this->createPlan(mcpEnabled: false);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $token = $user->createToken('降級前產生的');
+
+        $this->json('GET', route('api.v1.users.api-keys.index'))
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data');
+
+        $this->json('DELETE', route('api.v1.users.api-keys.destroy', ['id' => $token->accessToken->getKey()]))
+            ->assertStatus(200);
     }
 
     public function testDestroyRevokesTheKey(): void

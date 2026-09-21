@@ -106,6 +106,31 @@ trait ResolvesUserPlan
     }
 
     /**
+     * 把資料接到自己的 AI 工具（MCP）是 Pro 以上的功能。
+     *
+     * 這道閘門擋的是**產生金鑰**；真正的資料存取在 `/mcp` 自己還會再檢查一次。
+     * 兩處都要做：金鑰不會過期而方案會，只擋產生的話，降級之後那把舊金鑰仍然
+     * 讀得到資料。
+     *
+     * 反過來只擋 `/mcp` 也不夠——那會讓免費方案的使用者順利拿到一把金鑰，貼進
+     * 第三方工具之後才收到一個看不懂的錯誤。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertMcpEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('mcp_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.api_keys.plan_required')]]
+        );
+    }
+
+    /**
      * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
      * 否則一律回 null 當成「不指定」。
      *

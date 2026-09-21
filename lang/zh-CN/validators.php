@@ -18,8 +18,9 @@ return [
             'exchange_failed'         => '授权验证失败，请重新登录。',
         ],
         'api_keys' => [
-            'name'  => 'API key 名称必填，且不可超过 60 个字。',
-            'limit' => '最多只能创建 :max 把 API key，请先删除不用的。',
+            'plan_required' => '串接 AI 工具需要 Pro 以上的方案。',
+            'name'          => 'API key 名称必填，且不可超过 60 个字。',
+            'limit'         => '最多只能创建 :max 把 API key，请先删除不用的。',
         ],
         'custom_prompts' => [
             'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',

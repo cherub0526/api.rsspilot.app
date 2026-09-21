@@ -18,8 +18,9 @@ return [
             'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
         'api_keys' => [
-            'name'  => 'A name is required and must not exceed 60 characters.',
-            'limit' => 'You can keep at most :max API keys. Delete one you no longer use.',
+            'plan_required' => 'Connecting AI tools requires a Pro plan or above.',
+            'name'          => 'A name is required and must not exceed 60 characters.',
+            'limit'         => 'You can keep at most :max API keys. Delete one you no longer use.',
         ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',

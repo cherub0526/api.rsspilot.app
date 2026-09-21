@@ -11,6 +11,7 @@ use App\Services\McpService;
 use InvalidArgumentException;
 use Hypervel\Support\Facades\Log;
 use Psr\Http\Message\ResponseInterface;
+use App\Http\Controllers\Concerns\ResolvesUserPlan;
 
 /**
  * MCP 伺服器（Streamable HTTP）。
@@ -31,6 +32,8 @@ use Psr\Http\Message\ResponseInterface;
  */
 class ServerController
 {
+    use ResolvesUserPlan;
+
     /**
      * 我們實作的協定版本，新到舊。
      *
@@ -52,6 +55,14 @@ class ServerController
 
     /** MCP 自訂：標頭與 body 對不起來。 */
     private const int ERR_HEADER_MISMATCH = -32020;
+
+    /**
+     * 方案沒有開通這個功能。
+     *
+     * -32001 落在 JSON-RPC 保留給實作自訂的區間（-32000 ~ -32099）——這不是協定
+     * 層級的錯誤，是我們的商業規則，不該借用規格定義好的那些碼。
+     */
+    private const int ERR_PLAN_REQUIRED = -32001;
 
     public function __construct(
         private McpService $mcp,
@@ -98,6 +109,21 @@ class ServerController
 
         /** @var User $user */
         $user = $request->user();
+
+        // **每一次請求都要檢查方案**，不是只在產生金鑰時檢查：金鑰不會過期，
+        // 但方案會。降級或到期之後那把金鑰就該停止讀得到資料。
+        //
+        // 訊息寫得完整一點：這串字會直接顯示在對方的 AI 工具裡，使用者看到時
+        // 通常不在 RSSPilot 的畫面上，沒有別的線索可循。
+        if (!$this->planAllowsMcp($request)) {
+            return $this->error(
+                $id,
+                self::ERR_PLAN_REQUIRED,
+                'This RSSPilot plan does not include MCP access. Upgrade to Pro or above at '
+                . 'https://rsspilot.app/upgrade to connect your data to AI tools.',
+                403
+            );
+        }
 
         try {
             return match ($method) {
@@ -228,6 +254,17 @@ class ServerController
     private function result(mixed $id, array|object $result): ResponseInterface
     {
         return response()->json(['jsonrpc' => '2.0', 'id' => $id, 'result' => $result]);
+    }
+
+    /**
+     * 這位使用者的方案有沒有開通 MCP。
+     *
+     * 判準是 `plans.mcp_enabled`（目前 Pro 以上），與其他付費功能同一套做法：
+     * 權益寫在資料上，不寫死方案名稱。沒有方案時一併關掉。
+     */
+    private function planAllowsMcp(Request $request): bool
+    {
+        return (bool) $this->userPlan($request)?->getAttribute('mcp_enabled');
     }
 
     /** @param array<string, mixed> $data */
