@@ -20,6 +20,7 @@
     "google/apiclient": "^2.19",
     "hypervel/framework": "^0.3",
     "hypervel/redis": "^0.3",
+    "hypervel/sanctum": "^0.3.26",
     "hypervel/socialite": "^0.3.8",
     "league/flysystem-aws-s3-v3": "^3.0",
     "neuron-core/neuron-ai": "^3.16",

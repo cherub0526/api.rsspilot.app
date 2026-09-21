@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "02b389a78701059a0a3adf8f99afb17e",
+    "content-hash": "94e31b7bef1ba3e3bc9074f283257b8d",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -6886,6 +6886,68 @@
                 "source": "https://github.com/hypervel/components"
             },
             "time": "2025-12-21T16:26:33+00:00"
+        },
+        {
+            "name": "hypervel/sanctum",
+            "version": "v0.3.26",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/hypervel/sanctum.git",
+                "reference": "4615942a84503cddebc0de6e861065d00f569d54"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/hypervel/sanctum/zipball/4615942a84503cddebc0de6e861065d00f569d54",
+                "reference": "4615942a84503cddebc0de6e861065d00f569d54",
+                "shasum": ""
+            },
+            "require": {
+                "hyperf/database": "~3.1.0",
+                "hyperf/http-server": "~3.1.0",
+                "hypervel/auth": "^0.3",
+                "hypervel/console": "^0.3",
+                "hypervel/support": "^0.3",
+                "nesbot/carbon": "^2.72.6",
+                "php": "^8.2"
+            },
+            "type": "library",
+            "extra": {
+                "hypervel": {
+                    "providers": [
+                        "Hypervel\\Sanctum\\SanctumServiceProvider"
+                    ]
+                },
+                "branch-alias": {
+                    "dev-main": "0.3-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Hypervel\\Sanctum\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Albert Chen",
+                    "email": "albert@hypervel.org"
+                }
+            ],
+            "description": "The Sanctum package for Hypervel.",
+            "keywords": [
+                "hypervel",
+                "php",
+                "sanctum",
+                "swoole"
+            ],
+            "support": {
+                "issues": "https://github.com/hypervel/components/issues",
+                "source": "https://github.com/hypervel/components"
+            },
+            "time": "2026-01-05T05:55:54+00:00"
         },
         {
             "name": "hypervel/session",
