@@ -59,6 +59,42 @@ class NeuronChatStreamerTest extends TestCase
         }
     }
 
+    /**
+     * 方案自己指定的思考力度要蓋過預設值。
+     *
+     * 這是 Advance 想得比較久的實作方式——旋鈕在 `plans.ai_routing`，跟 cost_tier
+     * 與 max_price 放同一處，改資料不必部署。
+     */
+    public function testThePlanRoutingOverridesTheDefaultEffort(): void
+    {
+        config(['ai.chat.reasoning_effort' => 'low']);
+
+        $parameters = (new NeuronChatStreamer())->parametersFor(
+            new RoutingProfile('openrouter/auto', [
+                'reasoning' => ['effort' => 'medium', 'exclude' => false],
+            ]),
+            null,
+            true
+        );
+
+        $this->assertSame(['effort' => 'medium', 'exclude' => false], $parameters['reasoning']);
+    }
+
+    /** 沒開推理的路徑，方案指定了也不該硬塞進去。 */
+    public function testThePlanRoutingIsStillRespectedWhenReasoningIsOff(): void
+    {
+        $parameters = (new NeuronChatStreamer())->parametersFor(
+            new RoutingProfile('openrouter/auto', [
+                'reasoning' => ['effort' => 'medium', 'exclude' => false],
+            ]),
+            null,
+            false
+        );
+
+        // 方案自己寫的參數照送（這一層不做產品判斷），但不會再疊上 config 的預設值。
+        $this->assertSame(['effort' => 'medium', 'exclude' => false], $parameters['reasoning']);
+    }
+
     /** 沒設 Tavily key 就當作沒有這個工具——不報錯，功能就是不存在。 */
     public function testNoWebSearchToolWithoutAKey(): void
     {

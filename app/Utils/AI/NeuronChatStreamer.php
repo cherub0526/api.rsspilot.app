@@ -168,10 +168,15 @@ class NeuronChatStreamer implements ChatStreamerInterface
             $parameters['session_id'] = $sessionId;
         }
 
-        if ($withReasoning && ($effort = $this->reasoningEffort()) !== null) {
-            // exclude 明寫 false：要的就是「把推理內容一起串出來」，而不是只讓
-            // 模型多想一輪。不支援思考的模型 OpenRouter 會直接忽略這個參數。
-            $parameters['reasoning'] = ['effort' => $effort, 'exclude' => false];
+        // 方案自己指定了 reasoning 就用它的（`plans.ai_routing`，見 Plan::aiRouting()）。
+        // 思考力度跟 cost_tier、max_price 一樣是**每個方案的成本設定**，所以旋鈕放在
+        // 同一個地方、同樣改資料不必部署；這裡的 config 只是沒指定時的預設值。
+        if ($withReasoning && !isset($parameters['reasoning'])) {
+            if (($effort = $this->reasoningEffort()) !== null) {
+                // exclude 明寫 false：要的就是「把推理內容一起串出來」，而不是只讓
+                // 模型多想一輪。不支援思考的模型 OpenRouter 會直接忽略這個參數。
+                $parameters['reasoning'] = ['effort' => $effort, 'exclude' => false];
+            }
         }
 
         return $parameters;

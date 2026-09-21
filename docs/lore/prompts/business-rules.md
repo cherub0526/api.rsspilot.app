@@ -33,6 +33,14 @@ kind: business-rules
 4. `ChatController` 要發 `ChatReasoningEvent`，`StreamController` 要把它當成另一種
    SSE payload 送出去
 
+思考力度是**每個方案各自的成本設定**，旋鈕在 `plans.ai_routing`（跟 cost_tier、
+max_price 同一處，改資料不必部署），沒指定時才吃 `ai.chat.reasoning_effort` 的預設
+值。目前只有 Advance 設成 `medium`，其餘吃預設的 `low`。
+
+**刻意不用 `ai_quality` 當判準**——那一欄（pro / advanced / deep）是定價頁的行銷
+文案，與實際成本刻意不綁定，理由見 `Plan::aiRouting()` 的註解：調成本不該被迫改文案，
+改文案也不該動成本。
+
 `withReasoning` 預設 false，只有 chat 打開。**這是成本決定**：推理 token 按 output
 計價，而每日提問額度承保的月上限是 `chat_limit × 30`（見
 [subscription/business-rules.md](../subscription/business-rules.md)〈方案定價的成本曝險〉）。
