@@ -723,6 +723,90 @@ class ChatControllerTest extends TestCase
     }
 
     /**
+     * 8-0-3-2. 串流是一個 token 一個 chunk，落庫時同型別的連續文字要合併成一段。
+     *
+     * 不合併的話一則回覆會存成好幾百個片段，重播歷史時同一段話會被拆成好幾百個
+     * 氣泡與思考區塊（串流當下看不出來——store 那端本來就有合併）。
+     */
+    public function testStoreMergesConsecutiveTextAndThinkingChunks(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: true, thinkingEnabled: true);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::reasoning('We'),
+            ChatChunk::reasoning(' need'),
+            ChatChunk::reasoning(' answer'),
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => '國巨']),
+            ChatChunk::toolResult('call_1', '搜尋結果'),
+            '根據',
+            '目前提供的',
+            '參考資料'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $parts = ChatMessage::query()
+            ->where('role', ChatMessage::ROLE_AI)
+            ->firstOrFail()
+            ->contentParts();
+
+        $this->assertSame(
+            [
+                ChatMessage::PART_THINKING,
+                ChatMessage::PART_TOOL_CALL,
+                ChatMessage::PART_TOOL_RESULT,
+                ChatMessage::PART_TEXT,
+            ],
+            array_column($parts, 'type'),
+            '八個 chunk 只該落成四個片段'
+        );
+        $this->assertSame('We need answer', $parts[0]['text']);
+        $this->assertSame('根據目前提供的參考資料', $parts[3]['text']);
+    }
+
+    /**
+     * 工具片段不合併——兩次搜尋是兩次動作，合起來就看不出它查了幾次。
+     */
+    public function testStoreKeepsSeparateToolCallsApart(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: true, thinkingEnabled: true);
+
+        $this->fakeThinkingStreamer(
+            ChatChunk::toolCall('call_1', 'web_search', ['search_query' => '第一次']),
+            ChatChunk::toolCall('call_2', 'web_search', ['search_query' => '第二次']),
+            '答案'
+        );
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $parts = ChatMessage::query()
+            ->where('role', ChatMessage::ROLE_AI)
+            ->firstOrFail()
+            ->contentParts();
+
+        $this->assertSame(
+            [ChatMessage::PART_TOOL_CALL, ChatMessage::PART_TOOL_CALL, ChatMessage::PART_TEXT],
+            array_column($parts, 'type')
+        );
+    }
+
+    /**
      * 8-0-4. 上網查資料只開給 plans.agent_enabled 的方案。
      *
      * 判準用資料而不是方案名稱，與其他付費功能一致。成本不是小事：每次工具呼叫

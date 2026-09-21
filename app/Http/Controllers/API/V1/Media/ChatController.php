@@ -275,6 +275,7 @@ class ChatController
 
         // AI 回覆的片段，依抵達順序累積：推理、工具呼叫、工具結果、回答都可能
         // 交錯出現，落庫時要保持當下畫面上的順序，重播歷史才對得起來。
+        // 連續的同型別文字會被合併（見 appendPart）。
         $parts = [];
         $saved = false;
 
@@ -313,7 +314,7 @@ class ChatController
                     continue;
                 }
 
-                $parts[] = $chunk->toPart();
+                $this->appendPart($parts, $chunk->toPart());
 
                 if ($chunk->isText()) {
                     $buffer .= $chunk->text;
@@ -812,6 +813,37 @@ class ChatController
             'parts'      => $parts,
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * 把一個片段接進序列，連續的同型別文字合併成一段。
+     *
+     * **串流是一個 token 一個 chunk 進來的**，照單全收的話一則回覆會落庫成好幾百
+     * 個片段——資料列臃腫，而且重播歷史時前端會把同一段話拆成好幾百個氣泡與思考
+     * 區塊（串流當下不會發生，因為 store 那端本來就有合併）。
+     *
+     * 只合併 text 與 thinking：工具呼叫與結果各自是獨立的一次動作，合併會讓兩次
+     * 搜尋變成一次。
+     *
+     * @param array<int, array<string, mixed>> $parts
+     * @param array<string, mixed> $part
+     */
+    private function appendPart(array &$parts, array $part): void
+    {
+        $mergeable = [ChatMessage::PART_TEXT, ChatMessage::PART_THINKING];
+        $lastIndex = array_key_last($parts);
+
+        if (
+            $lastIndex !== null
+            && in_array($part['type'], $mergeable, true)
+            && $parts[$lastIndex]['type'] === $part['type']
+        ) {
+            $parts[$lastIndex]['text'] .= $part['text'];
+
+            return;
+        }
+
+        $parts[] = $part;
     }
 
     /**
