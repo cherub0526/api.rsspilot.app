@@ -36,6 +36,10 @@ class MediaControllerStoreTest extends TestCase
 
     private const URL = 'https://www.youtube.com/watch?v=uXHNRFHWDnM';
 
+    private const CHANNEL_ID = 'UCPblPw-MSsRVMQyz4BiBXpA';
+
+    private const CHANNEL_THUMBNAIL = 'https://yt3.ggpht.com/channel-avatar.jpg';
+
     /**
      * getUrlInfo 的成功回應，形狀取自 VideoTranscriberClientTest 的 fixture。
      */
@@ -55,7 +59,7 @@ class MediaControllerStoreTest extends TestCase
                         'name'       => '8 Functions you might not know',
                         'duration'   => 139,
                         'author'     => 'MB212',
-                        'channel_id' => 'UCPblPw-MSsRVMQyz4BiBXpA',
+                        'channel_id' => self::CHANNEL_ID,
                     ],
                 ],
                 'youtube_has_subtitles' => false,
@@ -70,6 +74,7 @@ class MediaControllerStoreTest extends TestCase
     {
         $this->mock(YoutubeService::class, function (MockInterface $mock) use ($withVideoDetails) {
             $mock->shouldReceive('getVideoIdFromUrl')->andReturn(self::VIDEO_ID);
+            $mock->shouldReceive('getChannelThumbnail')->andReturn(self::CHANNEL_THUMBNAIL);
 
             if (!$withVideoDetails) {
                 $mock->shouldReceive('getVideoDetails')->andReturn(null);
@@ -80,6 +85,8 @@ class MediaControllerStoreTest extends TestCase
             $snippet = new VideoSnippet();
             $snippet->setDescription('影片描述');
             $snippet->setPublishedAt('2026-03-01T10:00:00Z');
+            $snippet->setChannelId(self::CHANNEL_ID);
+            $snippet->setChannelTitle('MB212');
 
             $video = new Video();
             $video->setSnippet($snippet);
@@ -179,7 +186,6 @@ class MediaControllerStoreTest extends TestCase
             'resource_id' => self::RESOURCE_ID,
             'type'        => Media::TYPE_YOUTUBE,
             'status'      => Media::STATUS_CREATED,
-            'source_id'   => null,
             'duration'    => 139,
         ]);
 
@@ -192,13 +198,124 @@ class MediaControllerStoreTest extends TestCase
 
         // 下游一律從 video_detail['yt:videoId'] 取影片 ID
         $this->assertSame(self::VIDEO_ID, $media->video_detail['yt:videoId']);
-        $this->assertSame('UCPblPw-MSsRVMQyz4BiBXpA', $media->video_detail['yt:channelId']);
+        $this->assertSame(self::CHANNEL_ID, $media->video_detail['yt:channelId']);
 
         // getVideoDetails 補上的欄位
         $this->assertSame('影片描述', $media->description);
         $this->assertNotNull($media->published_at);
 
         Queue::assertPushed(VideoTranscriberStartJob::class);
+    }
+
+    /**
+     * 手動加入的影片也要建出所屬頻道的 source 並掛上去，但使用者不會因此被訂閱該頻道。
+     */
+    public function testStoreCreatesChannelSourceWithoutSubscribingUser(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $mediaId = $this->addVideo()->assertStatus(201)->json('id');
+
+        $source = Source::query()->where('external_id', self::CHANNEL_ID)->first();
+
+        $this->assertNotNull($source);
+        $this->assertSame(Source::TYPE_YOUTUBE_CHANNEL, $source->type);
+        $this->assertSame('MB212', $source->title);
+        $this->assertSame(
+            'https://www.youtube.com/feeds/videos.xml?channel_id=' . self::CHANNEL_ID,
+            $source->url
+        );
+        $this->assertSame(self::CHANNEL_THUMBNAIL, $source->thumbnail);
+        // 新建立的來源預設非免費，所以不會被 sources:sync 抓去同步整個頻道。
+        $this->assertFalse($source->free);
+
+        $this->assertDatabaseHas('media', ['id' => $mediaId, 'source_id' => $source->id]);
+
+        // 訂閱是 user_sources 的事，會吃掉方案的頻道額度——加一支影片不該順便訂閱。
+        $this->assertDatabaseCount('user_sources', 0);
+        $this->assertSame(0, $user->sources()->count());
+    }
+
+    /**
+     * 頻道已經有 source（別人訂閱過）→ 重用該列，不重複建立、也不再打 YouTube API 取縮圖。
+     */
+    public function testStoreReusesExistingChannelSource(): void
+    {
+        Queue::fake();
+        $this->fakeLogin();
+
+        $source = Source::factory()->create([
+            'type'        => Source::TYPE_YOUTUBE_CHANNEL,
+            'external_id' => self::CHANNEL_ID,
+            'title'       => '既有頻道',
+        ]);
+
+        $this->mock(YoutubeService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('getVideoIdFromUrl')->andReturn(self::VIDEO_ID);
+            $mock->shouldReceive('getVideoDetails')->andReturn(null);
+            $mock->shouldNotReceive('getChannelThumbnail');
+        });
+        $this->mock(VideoTranscriberClient::class, function (MockInterface $mock) {
+            $mock->shouldReceive('getUrlInfo')->andReturn($this->urlInfoResponse());
+        });
+
+        $mediaId = $this->addVideo()->assertStatus(201)->json('id');
+
+        $this->assertDatabaseCount('sources', 1);
+        $this->assertDatabaseHas('media', ['id' => $mediaId, 'source_id' => $source->id]);
+        $this->assertSame('既有頻道', $source->fresh()->title);
+    }
+
+    /**
+     * getUrlInfo 沒給 channel_id → 退回 YouTube Data API 的 snippet 補頻道。
+     * 那一次呼叫本來就為了 description 與發布時間而發，不會多耗配額。
+     */
+    public function testStoreFallsBackToDataApiForChannelId(): void
+    {
+        Queue::fake();
+        $this->fakeLogin();
+
+        $urlInfo = $this->urlInfoResponse();
+        unset(
+            $urlInfo['data']['youtube_video_data']['videoInfo']['channel_id'],
+            $urlInfo['data']['youtube_video_data']['videoInfo']['author']
+        );
+
+        $this->fakeExternals($urlInfo);
+
+        $mediaId = $this->addVideo()->assertStatus(201)->json('id');
+
+        $source = Source::query()->where('external_id', self::CHANNEL_ID)->first();
+
+        $this->assertNotNull($source);
+        $this->assertSame('MB212', $source->title);
+        $this->assertDatabaseHas('media', ['id' => $mediaId, 'source_id' => $source->id]);
+
+        // 下游 job 也吃得到補回來的頻道 ID
+        $this->assertSame(self::CHANNEL_ID, Media::find($mediaId)->video_detail['yt:channelId']);
+    }
+
+    /**
+     * getUrlInfo 與 YouTube Data API 都拿不到頻道 → source_id 留 null，影片照樣建得起來。
+     */
+    public function testStoreLeavesSourceNullWhenChannelIdIsUnavailableEverywhere(): void
+    {
+        Queue::fake();
+        $this->fakeLogin();
+
+        $urlInfo = $this->urlInfoResponse();
+        unset($urlInfo['data']['youtube_video_data']['videoInfo']['channel_id']);
+
+        $this->fakeExternals($urlInfo, withVideoDetails: false);
+
+        $mediaId = $this->addVideo()->assertStatus(201)->json('id');
+
+        $this->assertDatabaseCount('sources', 0);
+        $this->assertDatabaseHas('media', ['id' => $mediaId, 'source_id' => null]);
     }
 
     /**

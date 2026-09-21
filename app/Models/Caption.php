@@ -17,12 +17,23 @@ class Caption extends Model
 
     use HasFactory;
 
-    public const LOCAL_ZH_TW = 'zh_tw';
+    /**
+     * 語系一律是 `config('app.available_locales')` 那套 BCP-47 寫法。
+     *
+     * 原本這裡是 `zh_tw`，跟 `settings.data.locale` 的 `zh-TW` 字面不相等，
+     * 凡是要拿字幕語系去比對的地方都得先過 `ISO6391::normalize()`，漏掉一處
+     * 就靜靜地選不到東西。既有資料由 `normalize_captions_locale` 遷移洗過，
+     * 摘要那一欄更早之前也做過同一次搬遷。
+     */
+    public const LOCAL_ZH_TW = 'zh-TW';
+
+    public const LOCAL_ZH_CN = 'zh-CN';
 
     public const LOCAL_EN = 'en';
 
     public static array $localeMaps = [
         self::LOCAL_ZH_TW => '繁體中文',
+        self::LOCAL_ZH_CN => '簡體中文',
         self::LOCAL_EN    => '英文',
     ];
 

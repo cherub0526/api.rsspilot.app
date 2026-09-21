@@ -6,6 +6,7 @@ namespace App\Jobs\Media;
 
 use App\Models\Media;
 use App\Models\Caption;
+use App\Utils\Const\ISO6391;
 use Hypervel\Queue\Queueable;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Queue\Contracts\ShouldQueue;
@@ -156,12 +157,15 @@ class YoutubeCaptionJob implements ShouldQueue
         return [trim($text), $segments];
     }
 
+    /**
+     * YouTube 的軌道代碼（`zh-Hant`、`en-US`）收斂成專案的語系寫法。
+     *
+     * 交給 ISO6391 而不是自己 match：字幕、摘要與使用者設定必須是同一套寫法，
+     * 多一份手寫對照就多一個會漂走的地方。查不到的代碼原樣保留，新語言的軌道
+     * 照樣存得下來。
+     */
     private function mapLocale(string $langCode): string
     {
-        return match (true) {
-            str_starts_with($langCode, 'zh') => Caption::LOCAL_ZH_TW,
-            str_starts_with($langCode, 'en') => Caption::LOCAL_EN,
-            default                          => $langCode,
-        };
+        return ISO6391::normalize($langCode);
     }
 }

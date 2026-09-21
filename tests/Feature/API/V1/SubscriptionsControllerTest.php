@@ -9,7 +9,10 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Price;
 use App\Models\Paddle;
+use App\Models\Stripe;
+use Stripe\ApiRequestor;
 use App\Models\Subscription;
+use Tests\Support\FakeStripeHttpClient;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -106,6 +109,22 @@ class SubscriptionsControllerTest extends TestCase
             'foreign_id'   => $this->basicAnnuallyPrice->id,
             'paddle_id'    => 'pri_basic_annually',
         ]);
+
+        // Stripe 分支讀的是 $price->stripe->stripe_id，跟 paddle 的映射並存。
+        Stripe::create([
+            'foreign_type'  => Price::class,
+            'foreign_id'    => $this->basicMonthlyPrice->id,
+            'stripe_id'     => 'price_basic_monthly',
+            'stripe_detail' => [],
+        ]);
+    }
+
+    protected function tearDown(): void
+    {
+        // ApiRequestor 的 http client 是 static，不還原會外洩到後面的測試。
+        ApiRequestor::setHttpClient(null);
+
+        parent::tearDown();
     }
 
     public function testIndex()
@@ -124,7 +143,8 @@ class SubscriptionsControllerTest extends TestCase
             ->assertJsonPath('id', $this->freePlan->id)
             ->assertJsonPath('prices.0.id', $this->freeMonthlyPrice->id)
             ->assertJsonPath('status', null)
-            ->assertJsonPath('trial_ends_at', null);
+            ->assertJsonPath('trial_ends_at', null)
+            ->assertJsonPath('first_month_free', true);
 
         // User with an active paid subscription: status = 'active'
         $subscription = Subscription::factory()->create([
@@ -134,14 +154,16 @@ class SubscriptionsControllerTest extends TestCase
             'status'   => Subscription::STATUS_ACTIVE,
         ]);
 
+        // 訂閱成立的那一刻首月免費就用掉了，first_month_free 轉 false。
         $this->json('GET', $uri)
             ->assertStatus(200)
             ->assertJsonPath('id', $this->basicPlan->id)
             ->assertJsonPath('prices.0.id', $this->basicMonthlyPrice->id)
             ->assertJsonPath('status', Subscription::STATUS_ACTIVE)
-            ->assertJsonPath('trial_ends_at', null);
+            ->assertJsonPath('trial_ends_at', null)
+            ->assertJsonPath('first_month_free', false);
 
-        // Expire the active subscription and create a trial: status = 'trial' + trial_ends_at set
+        // 免費月期間：status = 'trial'，trial_ends_at 就是第一次扣款的日子。
         $subscription->update(['status' => Subscription::STATUS_CANCELED]);
 
         $trialEndsAt = now()->addDays(14);
@@ -223,6 +245,237 @@ class SubscriptionsControllerTest extends TestCase
             'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
             'status'         => Subscription::STATUS_PAYING,
         ]);
+    }
+
+    /**
+     * 沒帶 paymentMethod 時要落在 Paddle——這是 store() 的預設值，
+     * 改回 Stripe 的話前端拿到的 payload 形狀會整個換掉。
+     */
+    public function testStoreDefaultsToPaddle()
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'  => $this->basicPlan->id,
+            'priceId' => $this->basicMonthlyPrice->id,
+        ])
+            ->assertStatus(200)
+            ->assertJsonStructure(['paddle' => ['client_token', 'environment'], 'items'])
+            ->assertJsonPath('items.0', 'pri_basic_monthly');
+
+        $this->assertDatabaseHas('subscriptions', [
+            'user_id'        => $user->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'status'         => Subscription::STATUS_PAYING,
+        ]);
+    }
+
+    /**
+     * paymentMethod=stripe 要走完 StripeSubscriptionService::createCheckout()：
+     * 建 Stripe customer、開 Checkout Session、把 session id 記進 stripes，
+     * 回傳前端 initEmbeddedCheckout() 需要的 publishable_key + client_secret。
+     */
+    public function testStoreCreatesStripeCheckout()
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])
+            ->assertStatus(200)
+            ->assertJsonStructure(['stripe' => ['publishable_key', 'client_secret']])
+            ->assertJsonPath('stripe.publishable_key', 'pk_test_fake_for_tests_only')
+            ->assertJsonPath('stripe.client_secret', 'cs_test_session_secret_abc');
+
+        $subscription = Subscription::query()->where('user_id', $user->id)->firstOrFail();
+
+        $this->assertSame(Subscription::PAYMENT_METHOD_STRIPE, $subscription->payment_method);
+        $this->assertSame(Subscription::STATUS_PAYING, $subscription->status);
+
+        // 使用者第一次結帳：先建 customer 並存下映射，之後才開 session。
+        $customerRequests = $http->requestsFor('post', '/v1/customers');
+        $this->assertCount(1, $customerRequests);
+        $this->assertSame($user->email, $customerRequests[0]['params']['email']);
+
+        $this->assertDatabaseHas('stripes', [
+            'foreign_type' => User::class,
+            'foreign_id'   => $user->id,
+            'stripe_id'    => 'cus_test_123',
+        ]);
+
+        // Checkout Session 的參數決定結帳頁長什麼樣，逐項驗。
+        $sessionRequests = $http->requestsFor('post', '/v1/checkout/sessions');
+        $this->assertCount(1, $sessionRequests);
+
+        $params = $sessionRequests[0]['params'];
+        $this->assertSame('cus_test_123', $params['customer']);
+        $this->assertSame('embedded_page', $params['ui_mode']);
+        $this->assertSame('subscription', $params['mode']);
+        $this->assertSame('price_basic_monthly', $params['line_items'][0]['price']);
+        $this->assertSame(1, $params['line_items'][0]['quantity']);
+        $this->assertSame(
+            'https://tests.invalid/billing/return?session_id={CHECKOUT_SESSION_ID}',
+            $params['return_url']
+        );
+        // webhook 靠這個 metadata 把 Stripe session 對回我們的訂閱。
+        $this->assertSame($subscription->id, $params['metadata']['subscriptionId']);
+
+        // session id 要落進 stripes，checkout.session.completed 才找得到訂閱。
+        $this->assertDatabaseHas('stripes', [
+            'foreign_type' => Subscription::class,
+            'foreign_id'   => $subscription->id,
+            'stripe_id'    => 'cs_test_session',
+        ]);
+    }
+
+    /**
+     * 第一次訂閱：首次扣款推到一個月後，付費週期也從那天起算。
+     */
+    public function testStoreGivesTheFirstMonthFree(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertSame(
+            now()->addMonth()->getTimestamp(),
+            $params['subscription_data']['trial_end'],
+            '首次扣款要落在一個月後'
+        );
+    }
+
+    /**
+     * 首月免費是終生一次。訂閱過（哪怕已經取消）的人再訂閱就當場計費——否則
+     * 「訂閱 → 取消 → 再訂閱」等於無限續杯。
+     */
+    public function testStoreSkipsTheFreeMonthWhenTheAccountAlreadyUsedIt(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->subscriptions()->create([
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_STRIPE,
+            'status'         => Subscription::STATUS_CANCELED,
+            'start_date'     => now()->subMonths(6),
+            'next_date'      => now()->subMonths(5),
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertArrayNotHasKey('subscription_data', $params);
+    }
+
+    /**
+     * 2026-09 之前註冊送的那批試用訂閱不吃掉首月免費——那是系統送的，不是
+     * 使用者買的。
+     */
+    public function testStoreStillGivesTheFreeMonthToLegacyTrialUsers(): void
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->subscriptions()->create([
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'start_date'     => now()->subDays(10),
+            'next_date'      => now()->addDays(20),
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
+
+        $this->assertSame(
+            now()->addMonth()->getTimestamp(),
+            $params['subscription_data']['trial_end']
+        );
+    }
+
+    /**
+     * 已經有 customer 映射的使用者不該再建一次 customer——重複建會讓
+     * 同一個人在 Stripe 上散成多個 customer，訂閱與發票就對不起來。
+     */
+    public function testStoreReusesExistingStripeCustomer()
+    {
+        $http = $this->fakeStripeHttp();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        Stripe::create([
+            'foreign_type'  => User::class,
+            'foreign_id'    => $user->id,
+            'stripe_id'     => 'cus_existing_456',
+            'stripe_detail' => [],
+        ]);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])->assertStatus(200);
+
+        $this->assertCount(0, $http->requestsFor('post', '/v1/customers'));
+
+        $sessionRequests = $http->requestsFor('post', '/v1/checkout/sessions');
+        $this->assertCount(1, $sessionRequests);
+        $this->assertSame('cus_existing_456', $sessionRequests[0]['params']['customer']);
+    }
+
+    /**
+     * 把 Stripe SDK 的 HTTP 層換成假的，回傳的 fake 可用來驗發出去的請求。
+     */
+    private function fakeStripeHttp(): FakeStripeHttpClient
+    {
+        $http = new FakeStripeHttpClient([
+            'post /v1/customers' => [
+                'id'     => 'cus_test_123',
+                'object' => 'customer',
+            ],
+            'post /v1/checkout/sessions' => [
+                'id'            => 'cs_test_session',
+                'object'        => 'checkout.session',
+                'client_secret' => 'cs_test_session_secret_abc',
+                'status'        => 'open',
+                'ui_mode'       => 'embedded_page',
+            ],
+        ]);
+
+        ApiRequestor::setHttpClient($http);
+
+        return $http;
     }
 
     /**

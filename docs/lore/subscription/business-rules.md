@@ -15,6 +15,47 @@ Each rule is a `## heading` + a one-line meta + the body. Capture the "why" code
 The rule, the reasoning, and edge cases.
 -->
 
+## 免費月給在第一次結帳，不是註冊——而且終生只給一次
+
+`code:` `app/Services/SubscriptionService.php` → `isEligibleForFreeMonth()`、`app/Services/PaddleSubscriptionService.php` → `applyFreeMonth()` · `updated:` `2026-09-21` · `status:` `active`
+
+2026-09 之前是「註冊就送一個月 Pro 試用」（`UserObserver::created()` 直接建一筆
+`status = trial` 的訂閱）。現在改成 **買什麼方案就送該方案一個月，時機在第一次訂閱**：
+
+| | 舊：註冊送試用 | 新：首次訂閱免首月 |
+|---|---|---|
+| 贈送時機 | 註冊當下 | 第一次結帳 |
+| 送什麼 | 固定 Pro 月繳 | 他自己選的那個方案與週期 |
+| 新會員的訂閱紀錄 | 一筆 trial | 沒有，直接落免費方案 |
+| 首次扣款日 | 試用結束日（訂閱另計） | 結帳日 + 1 個月 |
+
+實作上分成「給」與「擋」兩半，因為兩家金流商都只支援「綁在價格上的固定試用期」，
+**沒有任何一家知道「這個人是不是第一次」**：
+
+- **給**：Paddle 是 price 上的 `trial_period`（`paddle:sync` 對每筆付費 price 設成
+  1 個月，$0 的免費方案明確清成 `null`）；Stripe 是結帳時的 `subscription_data.trial_end`。
+- **擋**：`applyFreeMonth()` 對沒有資格的人呼叫 `POST /subscriptions/{id}/activate`
+  當場計費。**這一半不能省**——price 上的試用期對每個結帳的人都生效，少了它
+  「訂閱 → 取消 → 再訂閱」就是無限續杯。
+
+資格判定（`isEligibleForFreeMonth()`）刻意用「**曾經成立過訂閱**」而不是「目前有沒有
+在訂閱」：Paddle 取消訂閱時我們自己的 `subscriptions.status` 不會被改寫（只有 Stripe
+的 webhook 會寫 `canceled`），拿當下狀態判斷一定會漏。三個排除項各有原因：
+
+- `payment_method = trial`：舊制註冊送的那批試用訂閱是系統送的，不是使用者買的，
+  不吃掉他的首月免費（這批訂閱保留到期，不做資料遷移）。
+- 結帳當下那筆 `paying` 紀錄：`SubscriptionsController::store()` 在導去結帳前就先建好了，
+  不能讓它把自己的資格吃掉。同理，**放棄結帳留下的 `paying` 紀錄也不算用過**。
+- 軟刪除的紀錄要算（`withTrashed()`）——訂閱成立過不會因為資料列被刪掉而沒發生過。
+
+年繳也送一個月：`trial_period` 與 `billing_cycle` 在 Paddle 是分開的兩件事，所以年繳
+是「先免費一個月，再扣一整年」。
+
+免費月期間 `status` 是 `trial`、`next_date` 是首次扣款日，首次扣款成功後才轉 `active`
+（`syncFromPaddle()`）。`start_date` 則一律是結帳當天——免費月是這筆訂閱的第一期，
+不是它的前傳。這也表示首次扣款失敗時 `next_date` 會停在過去，`scopeActive()` 自然把
+這筆訂閱排除，使用者落回免費方案，不需要額外的排程去收。
+
 ## 方案的三種額度用的是三種不同週期
 
 `code:` `app/Services/ChatQuotaService.php`、`app/Services/SubscriptionService.php`、`app/Http/Controllers/API/V1/SourcesController.php` · `updated:` `2026-08-14` · `status:` `active`

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Throwable;
+use App\Models\User;
 use App\Utils\AI\Completion;
 use App\Services\Prompts\TemplateFactory;
 use App\Exceptions\InvalidRequestException;
@@ -21,11 +22,18 @@ class SummaryPreviewService
 {
     /**
      * @param string $providerModel 空字串代表依模板查系統預設（見 OpenRouterModels::for()）
+     * @param null|User $user 沒指定模型時用來套用這個人方案的價格帶；試跑是 per-user
+     *                        的路徑，不帶的話 Pro 使用者會跟 Free 用到同一個帶
      * @return array<string, mixed> 與 summaries.text 相同的結構
      * @throws InvalidRequestException
      */
-    public function preview(string $prompt, string $captions, string $language, string $providerModel = ''): array
-    {
+    public function preview(
+        string $prompt,
+        string $captions,
+        string $language,
+        string $providerModel = '',
+        ?User $user = null
+    ): array {
         $template = TemplateFactory::create('customPrompt', [
             'system_prompt'    => $prompt,
             'user_prompt'      => $captions,
@@ -34,7 +42,7 @@ class SummaryPreviewService
         ]);
 
         try {
-            $manager = new TemplateCompletionManager(Completion::make(), $template);
+            $manager = new TemplateCompletionManager(Completion::make(), $template, $user);
             $response = $manager->complete('', $providerModel);
             $content = (string) ($response['choices'][0]['message']['content'] ?? '');
         } catch (Throwable) {

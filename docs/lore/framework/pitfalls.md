@@ -5,6 +5,33 @@ kind: pitfalls
 
 # framework — Pitfalls
 
+## preg 的 `\R` 沒帶 `u` 會把中文從中間切開
+
+`code:` `app/Services/McpService.php` → `splitSections()` · `updated:` `2026-09-21` · `status:` `active`
+
+`preg_split('/\R/', $text)` 看起來只是「依換行切開」，但**沒有 `u` 修飾符時 PCRE 是
+位元組層級比對**，而 `\R` 的定義包含 Unicode 的 NEL（U+0085）——在非 UTF 模式下，
+那就是單一位元組 `0x85`。
+
+中文的 UTF-8 編碼裡到處都是這個位元組：
+
+| 字 | UTF-8 | 會被切開嗎 |
+|---|---|---|
+| 內 | `E5 85 A7` | 會 |
+| 節 | `E7 AF 80` | 不會 |
+| 學 | `E5 AD B8` | 不會 |
+
+切開之後字串變成無效的 UTF-8，後果是 **`json_encode()` 回 `false`**。如果呼叫端寫的是
+`(string) json_encode(...)`，那個 false 會變成空字串——沒有例外、沒有 log，API 就只是
+回了一個空的結果。實際發作時看起來像「這個端點壞了但不知道為什麼」。
+
+兩件事一起做才安全：
+
+1. 處理可能含非 ASCII 的文字時，`preg_*` 一律帶 `u`
+2. `json_encode()` 的失敗不要用 `(string)` 吞掉，至少 `JSON_THROW_ON_ERROR`
+
+**英文測資測不出來**。這個 bug 是用中文章節標題的測資才浮現的。
+
 ## 讀 null 的屬性不是 warning，是 500
 
 `code:` `vendor/hypervel/foundation/src/ConfigProvider.php` · `code:` `vendor/hyperf/exception-handler/src/Listener/ErrorExceptionHandler.php` · `updated:` `2026-08-14` · `status:` `active`
@@ -272,3 +299,106 @@ co-phpunit，`composer.lock` 提到它只是因為 `hyperf/testing` 宣告了這
 process 常駐、但**每個請求一個協程**，`Context` 隨協程銷毀——兩個請求永遠不共用協程 Context。
 所以「一個測試 ≙ 一個請求」的 `phpunit` 才是正確類比。正式環境真正會跨請求殘留的是
 singleton / static / 容器層的狀態，那一層兩個 runner 條件相同，換 runner 沒有任何幫助。
+
+## request body 的 stream 不能 seek，凡是 `rewind()` 的第三方程式碼都會炸
+
+`code:` `app/Http/Controllers/API/V1/Webhook/PaddleController.php` → `assertValidSignature` · `updated:` `2026-09-10` · `status:` `active`
+
+Swoole 的請求 body 是 `Hyperf\HttpMessage\Stream\SwooleStream`，**不可 seek**。任何對它呼叫 `rewind()` / `seek()` 的程式碼都會拿到：
+
+```
+RuntimeException: Cannot seek a SwooleStream
+```
+
+實際踩到的是 Paddle SDK 的官方驗簽器 `Paddle\SDK\Notifications\Verifier`——它在算雜湊之前會 `$request->getBody()->rewind()`，而 `Hypervel\Http\Request` 確實實作了 PSR-7 的 `RequestInterface`，型別上完全吃得下，所以問題不會在編譯期出現，而是**每一個 webhook 都變成 500**。
+
+**能用的寫法是直接讀，不要 rewind**：`(string) $request->getBody()` 沒有問題（`Webhook\StripeController` 一直都是這樣拿 raw payload 的）。Paddle 那邊改成用 SDK 的底層 `PaddleSignature::parse()` + `->verify($rawBody, $secret)`，雜湊與演算法協商仍由 SDK 負責，只有「怎麼拿 body」自己處理。
+
+判準：**引入任何吃 PSR-7 request 的第三方函式庫之前，先確認它有沒有 rewind body。** 型別相容不代表能跑。
+
+## `$this->json('POST', ...)` 送的不是 JSON，是 form-urlencoded
+
+`code:` `tests/Feature/API/V1/Webhook/PaddleControllerTest.php` → `send` · `updated:` `2026-09-10` · `status:` `active`
+
+`MakesHttpRequests::json($method, $uri, $data, $headers)` 會轉呼叫 `$client->{$method}(...)`，也就是 **`TestClient::post()`**，而它送的是 `form_params`——body 最後是 `http_build_query($data)`：
+
+```
+event_id=evt_xxx&event_type=transaction.completed&occurred_at=2024-01-01T00%3A00%3A00Z
+```
+
+（順帶一提，巢狀的空陣列例如 `'data' => []` 在這種編碼下會**整個消失**。）
+
+`$request->all()` 兩種編碼都解析得出來，所以絕大多數測試察覺不到差別。**但只要測試會碰到 raw body 就會出事**：驗簽算的是 raw body，測試簽的是自己 `json_encode` 的字串，兩者永遠對不上，而且錯誤看起來像「簽章邏輯寫錯了」。
+
+要送真的 JSON body 得繞過那層 helper：
+
+```php
+$this->createTestResponse(
+    $this->getTestingClient()->json('POST', $uri, $payload, $headers)
+);
+```
+
+`TestClient::json()`（注意第一個參數是 method）才會把 `json_encode($data, JSON_UNESCAPED_UNICODE)` 當 body。**簽章要用同一組 flag 算**，否則中文或斜線的跳脫方式一不同就過不了。
+
+## `Http::fake()` 的 stub 先註冊先贏，擺進 setUp() 會蓋掉個別案例
+
+`code:` `tests/Unit/Console/Commands/VideoTranscriber/StartTest.php` · `updated:` `2026-09-18` · `status:` `active`
+
+同一個 URL 被註冊兩次時，**先註冊的那個回應會贏**，不是後蓋前。所以把共用的
+`Http::fake()` 收進 `setUp()` 看起來很整潔，實際上會讓每一個「想模擬失敗」的案例
+全部失效——它們自己註冊的 401 永遠輪不到。
+
+症狀很難讀：指令照著成功路徑跑完，於是斷言掛在一個看似無關的地方（實測是退出碼
+斷言先失敗，而真正該失敗的 `Queue::assertNotPushed` 根本沒被執行到，因為它排在後面）。
+花了三輪才定位到是 stub 順序。
+
+做法：**共用的 fake 寫成一個 helper，每個案例自己呼叫**，不要放 setUp()。
+
+### 附帶：沒有 fake 的測試會真的對外送請求
+
+同一支測試補 fake 之前，它每跑一次就對 videotranscriber.ai **真的登入七次**
+（測試用的 sqlite 資料庫裡沒有 token，於是每個案例都走 relogin）。時間是最明顯的
+訊號：7 個案例 18 秒，補上 fake 之後 0.5 秒。
+
+那組帳號是全站共用的，而且〈videotranscriber.ai 只允許單一裝置登入〉那一則說過
+換一次登入就會讓別處的 token 失效。這次事後確認 staging 的 token 仍然可用，但
+「跑一次單元測試可能踢掉正式環境的登入」這個風險是真的存在——**新增任何會打外部
+服務的程式碼時，要同時檢查既有測試有沒有把它蓋住**。
+
+## Railway IaC 要 Node 24 才跑得動，而且會被 nvm 的 lazy-load 與 `$_` 擋下
+
+`code:` `.railway/railway.ts` · `code:` `.railway/README.md` · `updated:` `2026-09-13` · `status:` `active`
+
+`railway config plan` / `apply` 不是純 Rust CLI 做完的：CLI 會用
+`node --experimental-strip-types` 直接執行 `.railway/railway.ts`。實務上請用
+**Node 24**（本機實測 v24.15.0 可跑）。低於 22.6 的 node 沒有 strip-types，
+會停在語法錯誤；而這台機器的預設 node 是 v20，等於預設狀態下一定跑不起來。
+
+在這之前還有兩個跟 railway 本身無關、但每次都會擋住的坑：
+
+**1. nvm 的 lazy-load 讓 `node` 變成會遞迴的 shell function。**非互動 shell
+（script、agent、CI step）裡 `_nvm_lazy_load` 不存在，於是 `node` 這個 function
+一路自己呼叫自己，畫面刷出幾百行 `command not found: _nvm_lazy_load`，最後以
+`maximum nested function level reached` 收場。看起來像 node 壞了，其實 node
+好好的。解法是先 `unset -f node`（`nvm`、`npm`、`npx` 通常也一起被包），再把
+要用的版本放進 PATH——改 PATH 本身沒有用，function 的優先序高於 PATH。
+
+**2. `railway/iac` 用 `process.env._` 去找 CLI 執行檔。**它會跑
+`execFileSync(process.env._ ?? "railway", ["--version"])` 來檢查 CLI 版本，
+所以只要你不是直接在互動 shell 裡打 `railway`——例如包了 `timeout`、`env`、
+或從 script 呼叫——`$_` 指到的就是別的東西，版本比對失敗，然後丟出一句
+**完全誤導**的錯誤：
+
+```
+Error: This version of railway/iac requires Railway CLI 5.42.1 or newer.
+```
+
+CLI 明明是 5.52.1。真正的解法不是升級 CLI，是把 `_` 明確指給它：
+
+```bash
+unset -f node
+export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
+RB="$(command -v railway)"
+env _="$RB" "$RB" config plan
+```
+

@@ -222,29 +222,4 @@ class AuthControllerTest extends TestCase
             ->assertStatus(200)
             ->assertContent('OK.');
     }
-
-    public function testRefreshWithoutToken()
-    {
-        $uri = route('api.v1.auth.refresh.store');
-        $this->json('POST', $uri)->assertStatus(401);
-    }
-
-    public function testRefreshWithToken()
-    {
-        $user = User::factory()->create();
-        $token = auth('jwt')->login($user);
-
-        $uri = route('api.v1.auth.refresh.store');
-        $response = $this->withToken($token)->json('POST', $uri);
-
-        $response->assertStatus(200)
-            ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
-            ])
-            ->assertJsonPath('token_type', 'bearer');
-
-        $this->assertNotEquals($token, $response->json('access_token'));
-    }
 }

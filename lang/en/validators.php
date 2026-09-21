@@ -17,6 +17,11 @@ return [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
             'exchange_failed'         => 'Authorization failed, please sign in again.',
         ],
+        'api_keys' => [
+            'plan_required' => 'Connecting AI tools requires a Pro plan or above.',
+            'name'          => 'A name is required and must not exceed 60 characters.',
+            'limit'         => 'You can keep at most :max API keys. Delete one you no longer use.',
+        ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
@@ -27,12 +32,23 @@ return [
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
         ],
+        'download' => [
+            'plan_required'  => 'Downloading summaries and transcripts requires a paid plan.',
+            'invalid_format' => 'Unsupported download format.',
+            'not_found'      => 'There is nothing available to download.',
+        ],
         'chat' => [
             'chat_limit_reached' => 'You have reached the daily AI chat limit for your plan.',
         ],
-        'rss' => [
-            'invalid_url' => 'Invalid RSS URL.',
-            'not_found'   => 'RSS not found.',
+        'mindmap' => [
+            'mindmap_limit_reached' => 'You have reached the daily mind map limit for your plan.',
+            'summary_required'      => 'The mind map can only be generated once the summary is ready.',
+        ],
+        'thumbnails' => [
+            'plan_required'     => 'Player screenshots are available on the Advance plan.',
+            'checksum_mismatch' => 'The checksum does not match the uploaded file.',
+            'not_found'         => 'No screenshot exists at that second; capture it again before sending.',
+            'out_of_range'      => 'The requested second is beyond the length of the video.',
         ],
         'sources' => [
             'invalid_url'           => 'Invalid YouTube URL.',
@@ -49,6 +65,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => 'Transaction status is not completed.',
+                'ip_not_allowed'            => 'Request IP is not in the allowlist.',
             ],
         ],
     ],
@@ -64,7 +81,7 @@ return [
             'required' => 'Email is required.',
             'email'    => 'Email format is invalid.',
             'max'      => 'Email must not exceed 255 characters.',
-                    'unique'   => 'This email is already registered.',
+            'unique'   => 'This email is already registered.',
         ],
         'code' => [
             'required' => 'Enter the verification code.',
@@ -103,6 +120,21 @@ return [
             'content' => [
                 'required' => 'The content field is required.',
                 'string'   => 'The content must be a string.',
+            ],
+            'images' => [
+                'array'  => 'The screenshots must be an array.',
+                'max'    => 'A message may carry at most 4 screenshots.',
+                'second' => [
+                    'required' => 'The screenshot second is required.',
+                    'integer'  => 'The screenshot second must be an integer.',
+                    'min'      => 'The screenshot second may not be less than 0.',
+                    'max'      => 'The screenshot second is beyond the addressable range.',
+                ],
+                'checksum' => [
+                    'required' => 'The screenshot checksum is required.',
+                    'string'   => 'The screenshot checksum must be a string.',
+                    'regex'    => 'The screenshot checksum must be a 64-character lowercase hex SHA-256.',
+                ],
             ],
         ],
     ],
@@ -158,16 +190,6 @@ return [
             'string'   => 'Redirect URL must be a string.',
             'url'      => 'Redirect URL is invalid.',
             'max'      => 'Redirect URL may not be greater than :max characters.',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => 'Type is required.',
-            'string'   => 'Type must be a string.',
-            'in'       => 'Type is invalid.',
-        ],
-        'url' => [
-            'required' => 'URL is required.',
         ],
     ],
     'source' => [
@@ -315,6 +337,25 @@ return [
                     'array'    => 'The text.long_summary.keywords must be an array.',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => 'The screenshot file is required.',
+            'file'      => 'The screenshot must be a file.',
+            'mimetypes' => 'The screenshot must be a JPEG image.',
+            'max'       => 'The screenshot may not be larger than 2 MB.',
+        ],
+        'second' => [
+            'required' => 'The second is required.',
+            'integer'  => 'The second must be an integer.',
+            'min'      => 'The second may not be less than 0.',
+            'max'      => 'The second is beyond the addressable range.',
+        ],
+        'checksum' => [
+            'required' => 'The screenshot checksum is required.',
+            'string'   => 'The checksum must be a string.',
+            'regex'    => 'The checksum must be a 64-character lowercase hex SHA-256.',
         ],
     ],
 ];

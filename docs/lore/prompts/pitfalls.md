@@ -98,3 +98,159 @@ Invalid message sequence at position 1: expected role assistant, got user
 也因為這條規則，**參考資料不能當成獨立的 user 訊息插在提問前** —— 那會造成連續兩個
 user。所以摘要改由 `AssistantTemplate::getSystemPrompt()` 併進系統提示詞。要在提問前
 額外塞任何內容時，先想清楚它會落在序列的哪個位置。
+
+## Auto Router 的 `cost_tier` 是價格帶，不是成本上限
+
+`code:` `app/Utils/AI/OpenRouterRouting.php` · `code:` `app/Services/FollowUpQuestions/NeuronFollowUpQuestions.php` → `defaultProvider` · `updated:` `2026-09-07` · `status:` `active`
+
+走 `openrouter/auto` 時，路由設定不在 `model` 欄位，而是請求 body 裡另外兩處：
+
+| 想控制的事 | 欄位 |
+|---|---|
+| 品質／價格檔次 | `plugins: [{"id": "auto-router", "cost_tier": "low"}]` |
+| **真正的成本上限** | `provider.max_price`（每百萬 token 的美元價） |
+
+`cost_tier` 的五個值由便宜到強是 `low` / `medium` / `high` / `xhigh` / `max`，**沒設定時大約以 `low` 帶路由**。
+
+**反直覺的地方：`cost_tier` 是一個「帶」，不是天花板——比該帶便宜的模型也會被排除。** 所以把它從 `low` 調到 `medium`，有可能比原本釘死 `openai/gpt-4.1-mini` 還貴。它是「我要這個檔次」的旋鈕，不是「我最多花這麼多」的旋鈕。
+
+要讓 [subscription/business-rules.md](../subscription/business-rules.md) 的〈方案定價的成本曝險在 chat_limit，不在轉錄〉那套成本天花板算術成立，靠的**只有** `provider.max_price`。單看 `cost_tier` 排方案會算錯。
+
+計價本身沒有加成：路由到哪個模型就付那個模型的標準價，Auto Router 不另外收費。
+
+這兩組參數存在 `configs` 的 `openrouter_routing`，per 用途一組，與模型（`openrouter_models`）分開兩個 key——換模型是天天在試的事，改路由政策牽涉成本結構，動的頻率不同。值原封不動送給 OpenRouter，刻意沒有型別化 schema。
+
+## NeuronAI 會丟掉回應的 `model` 欄位
+
+`code:` `app/Utils/AI/OpenRouterProvider.php` · `code:` `vendor/neuron-core/neuron-ai/src/Providers/OpenAI/HandleChat.php` → `processChatResult` · `updated:` `2026-09-07` · `status:` `active`
+
+`HandleChat::processChatResult()` 只從回應取 `usage` 與 citations，**`model` 直接丟掉**。
+
+指定單一模型時無所謂——要求的就是拿到的。但走 `openrouter/auto` 時「要求的模型」永遠是字串 `openrouter/auto`，實際跑的是哪一個只有回應的 `model` 知道，丟掉就再也回答不了「auto 幫我選了什麼、花了多少」。而 `summaries.ai_model` / `mindmaps.ai_model` 寫進去的是 `OpenRouterModels::for()` 的回傳值，也就是**要求的**那個字串，不是實際的。
+
+解法是 `OpenRouterProvider extends OpenAILike`，覆寫 `processChatResult()` 把 `$result['model']` 塞進訊息 metadata。只缺這一個欄位，不值得為它改用 `Completion` 自己控 payload——那要連 Agent、訊息映射與串流一起重寫。
+
+**串流那條還沒解**：`HandleStream` 不走 `processChatResult()`，要另外覆寫才拿得到。所以 `NeuronChatStreamer` 目前若改走 auto，會是盲的。
+
+## `openrouter/auto` 在 `ai_models` 的單價是 -1000000
+
+`code:` `app/Console/Commands/OpenRouter/SyncModels.php` → `price` · `updated:` `2026-09-07` · `status:` `active`
+
+OpenRouter 的型錄對 auto 系列回報的每 token 單價是 **`-1`**（意思是「由實際路由到的模型決定」），而 `SyncModels::price()` 會把每 token 價乘上 `PRICE_UNIT`（100 萬）換算成每百萬 token，於是資料表裡長這樣：
+
+| provider_model | input_price | output_price |
+|---|---|---|
+| `openrouter/auto` | -1000000 | -1000000 |
+| `openrouter/auto-beta` | -1000000 | -1000000 |
+
+`price()` 只擋掉非數值（回 null），`-1` 是合法數值所以照樣寫進去。**任何讀這兩欄算成本的邏輯拿到的會是負數**，而且不會拋錯，只會靜靜地把總成本算小。要對 `ai_models` 做成本統計時記得排除負值，或改以 `provider.max_price` 設的上限當估算基準。
+
+（這兩列的 `enabled` 是 0，因為 `SyncModels` 對新模型一律 disabled。但 `OpenRouterModels` 讀的是 `configs`，不看 `ai_models.enabled`，所以用途照樣可以指定 auto——`enabled` 管的是使用者可選的型錄，不是後端實際能用什麼。）
+
+## `openrouter/free` 放進 `models` 陣列會被靜默跳過並計費
+
+`code:` `app/Utils/AI/RoutedInference.php` · `updated:` `2026-09-09` · `status:` `active`
+
+`openrouter/free` 是一個 router slug（從約 24 個免費模型裡隨機挑，不計費），**單獨當 `model` 用完全正常**——實測三次，`cost` 都是 0，每次挑到不同模型。
+
+但把它放進 OpenRouter 的原生 fallback 陣列就不行：
+
+```json
+{"models": ["openrouter/free", "openrouter/auto"], ...}
+```
+
+實測兩次（帶與不帶 `plugins` 都試過），回應的 `model` 都是 `deepseek/deepseek-v4-flash-0731`，`cost` 不是 0。**free 被完全跳過，直接掉到付費模型，而且沒有任何錯誤訊息。** 也就是說「free 優先、auto 備援」這個一次請求的寫法會靜默地變成付費。
+
+所以 Free 方案的 fallback 只能寫在應用層（`RoutedInference`），退路是用途層設定。
+
+順帶一提，文件說 fallback 對「any error」都會觸發，但**無效的 model id 是直接回 400**，不會觸發 fallback。
+
+品質也要注意：隨機挑的第一次就挑到 `nvidia/nemotron-3.5-content-safety:free`——那是審核模型，不是聊天模型。
+
+## 免費模型的限流是「整個帳號」共用的，20 RPM / 1000 RPD
+
+`code:` `app/Utils/AI/RoutingProfile.php` · `code:` `database/migrations/2026_09_16_100000_drop_openrouter_free_routing.php` · `updated:` `2026-09-16` · `status:` `active`
+
+OpenRouter 對 `:free` 模型的平台限流（2026-09 查官方文件）：
+
+| 限制 | 值 | 能不能提高 |
+|---|---|---|
+| 每分鐘請求數 | **20** | 不能，所有帳號一律 20 |
+| 每日請求數 | **50** | 歷史累計購買 < 10 credits 時 |
+| 每日請求數 | **1000** | 歷史累計購買 ≥ 10 credits 時 |
+
+兩件文件講得很明白、但很容易誤判的事：
+
+1. **限流是帳號層級，不是 key 層級。**原文：「Making additional accounts or API keys will
+   not affect your rate limits, as we govern capacity globally.」多開 key 沒有用。
+2. **50 → 1000 的門檻是「累計買過 10 credits」，不是「現在還有 10 credits」。**
+
+本專案的位置（2026-09-16 實測 `GET https://openrouter.ai/api/v1/key`）：`is_free_tier`
+為 `false`，所以吃的是 **1000 RPD**。要重新確認時打同一個端點，它會回 `limit_remaining`
+與 `usage_daily`。
+
+### 這就是專案撤掉免費模型的原因
+
+**現況：2026-09-16 起專案沒有任何路徑走 `openrouter/free`**（見 business-rules
+〈專案不用免費模型，因為它的限流是帳號共用的〉）。這一則留著不是描述現狀，是留給
+「下次有人想省錢再走一次這條路」的人。
+
+當時的配置是 Free 方案的 chat／延伸問題／自訂摘要試跑，加上背景的摘要翻譯，**四條路
+共用同一個 1000**，不是各自 1000。要命的組合有兩個：
+
+- **20 RPM 比 1000 RPD 先撞到。**批次補跑或一次同步進大量新影片時，摘要完成是密集發生
+  的，一分鐘內超過 20 個翻譯請求就開始吃 429，而**重試本身也算一次請求**。
+- **撞牆不會停下來，會轉付費。**`RoutedInference` 失敗時退回用途層的付費 Auto Router，
+  只留一行 log。
+
+所以要再評估免費模型時，先算「N 支影片 × 語系數 + 使用者互動量 ≤ 1000」，再回答「撞牆時
+退去哪裡、那個退路會不會計費」。
+
+### 429 長什麼樣
+
+- **非串流**：標準 error body，附 `X-RateLimit-Limit` / `X-RateLimit-Remaining` /
+  `X-RateLimit-Reset`，有時還有 `Retry-After`。注意 `Completion` 不會對非 2xx 拋例外，
+  這種回應到呼叫端會是一個**沒有 `choices` 的陣列**。
+- **串流且已經開始吐**：HTTP 200 已經送出去了，所以改用 SSE event 帶
+  `finish_reason: "error"` 通知——不會有 429 狀態碼可以攔。
+
+### 未確認的部分
+
+`openrouter/free` 這個 slug **官方文件沒有記載**（只寫了 `openrouter/auto` 與
+`openrouter/auto-beta`），它的限流沒有明文。目前的假設是比照 `:free` 模型，因為它挑的就是
+那批模型——但這是推定不是實測。另外「失敗的請求算不算進每日額度」文件也沒寫，第三方文章說
+會算，同樣未經我們自己驗證。
+
+## Auto Router 各價格帶的實際落點
+
+`code:` `app/Utils/AI/OpenRouterRouting.php` · `updated:` `2026-09-09` · `status:` `active`
+
+2026-09 實測（同一個 prompt，只換 `cost_tier`）：
+
+| cost_tier | 路由到 | 單價（in / out，每百萬 token） |
+|---|---|---|
+| `low` | `deepseek/deepseek-v4-flash-0731` | 0.065 / 0.18 |
+| `medium` | `z-ai/glm-5.2` | 1.19 / 3.74 |
+| `max` | `anthropic/claude-opus-5` | 5 / 25 |
+| （對照）`openai/gpt-4.1-mini` | — | 0.4 / 1.6 |
+
+兩件事值得記住：
+
+- **`low` 比先前釘死的 `gpt-4.1-mini` 便宜約 6 倍**，換過去是省錢不是省品質妥協。
+- 每次路由的結果**會變**，上表只是抽樣。要靠它算成本天花板必須配 `provider.max_price`，理由見〈Auto Router 的 `cost_tier` 是價格帶，不是成本上限〉。
+
+### 心智圖的額度從來沒被計入定價
+
+依上表估算 Advance（`chat_limit` 50/日、`mindmap_limit` 50/日，medium 帶）：chat 約 $5.5/月、心智圖約 $6.6/月，合計 **$12.1**，而 `docs/lore/subscription/business-rules.md` 用 70% 毛利回推的 AI 預算是 **$6.03**。
+
+`mindmap_limit` 是後來加的，比照 `chat_limit` 設成同一個數字，而那張成本天花板表只算了「影片上限 + 提問上限」。**心智圖現在是比 chat 更大的一條成本線，但沒有出現在任何定價計算裡。** 排方案時要把它算進去。
+
+## NeuronAI 的字串內容與 content block 陣列不等價，純文字回合不要包成陣列
+
+`code:` `app/Utils/AI/NeuronChatStreamer.php` → `toContent()` · `updated:` `2026-09-13` · `status:` `active`
+
+`new Message($role, $content)` 的 `$content` 收字串也收 `ContentBlockInterface[]`，但兩者送到上游的形狀不同：字串會被包成單一 `TextContent`，陣列則由 `OpenAI\MessageMapper::mapBlocks()` 原樣映射成 OpenAI 的 content parts。
+
+所以**只有真的帶圖的回合才組陣列**，沒附圖時維持傳字串——一律走陣列只是讓每一次請求的 payload 多一層結構，沒有任何好處。`buildMessages()` 因此在最後把 `images` 為空的回合的該 key 整個拿掉，而不是留一個空陣列。
+
+圖片用 `ImageContent($url, SourceType::URL)` 而不是 `SourceType::BASE64`：mapper 會把 base64 展開成 `data:` URI 內嵌進 payload，而同一張圖在多輪對話裡會被重複帶上，等於每一輪都把它整個重傳一次。走 URL 則是讓上游自己去抓（URL 是 24 小時的 presigned，S3 物件本身維持 private）。

@@ -4,7 +4,33 @@ declare(strict_types=1);
 
 return [
     'daily_digest' => [
-        'subject' => '今日新增了 :count 部影片摘要',
+        'subject'    => '今日新增了 :count 部视频摘要',
+        'page_title' => 'RSSPilot — 每日摘要通知',
+
+        // Carbon isoFormat 的格式字符串，随语系走，不能写死在程序里。
+        'date_format' => 'YYYY 年 M 月 D 日，dddd',
+
+        'greeting'    => '嗨，:name！今天是 :date',
+        'title'       => '今日新增了 :count 部视频摘要',
+        'meta_videos' => ':count 部视频',
+        'meta_ready'  => 'AI 摘要已备妥',
+        'meta_view'   => '可立即查看',
+        'intro'       => '您订阅的频道今天新增了 <strong>:count 部视频</strong>，我们已自动产出 AI 摘要，让您快速掌握每部视频的重点内容，不必花时间完整观看每一部。',
+
+        'key_points' => '重点摘要',
+        'video_cta'  => '查看完整摘要 →',
+        'views'      => ':count 次观看',
+
+        'summary_title' => '前往 Dashboard 查看所有视频',
+        'summary_text'  => '您的订阅共有 :channels 个频道・已累积 :media 部视频摘要',
+        'summary_cta'   => '打开 Dashboard',
+
+        'link_pricing'       => '升级方案',
+        'link_terms'         => '服务条款',
+        'link_privacy'       => '隐私政策',
+        'unsubscribe'        => '不想再收到每日摘要通知？:unsubscribe 或 :settings',
+        'unsubscribe_action' => '取消订阅',
+        'settings_action'    => '调整通知设置',
     ],
 
     'reset_password' => [

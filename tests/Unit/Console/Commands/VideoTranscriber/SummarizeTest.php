@@ -6,6 +6,7 @@ namespace Tests\Unit\Console\Commands\VideoTranscriber;
 
 use Tests\TestCase;
 use App\Models\Media;
+use ReflectionProperty;
 use Hypervel\Support\Facades\Queue;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Jobs\Media\VideoTranscriberSmartSummaryJob;
@@ -70,6 +71,47 @@ class SummarizeTest extends TestCase
         Queue::assertPushed(
             fn (VideoTranscriberSmartSummaryJob $job) => $job->queue === 'videotranscriber.smart-summary'
         );
+    }
+
+    /**
+     * 不帶 --language 時指令不再預設 en——語言交給 job 跟字幕對齊。
+     */
+    public function testDispatchesWithoutALanguageSoTheJobFollowsTheCaption(): void
+    {
+        Queue::fake();
+
+        Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+
+        $this->artisan('videotranscriber:summary')->assertExitCode(0);
+
+        Queue::assertPushed(
+            VideoTranscriberSmartSummaryJob::class,
+            fn (VideoTranscriberSmartSummaryJob $job) => $this->languageOf($job) === null
+        );
+    }
+
+    /** --language 仍然是明確覆寫，重跑成別的語言時用得上。 */
+    public function testLanguageOptionOverridesTheCaptionLanguage(): void
+    {
+        Queue::fake();
+
+        Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
+
+        $this->artisan('videotranscriber:summary', ['--language' => 'zh-TW'])->assertExitCode(0);
+
+        Queue::assertPushed(
+            VideoTranscriberSmartSummaryJob::class,
+            fn (VideoTranscriberSmartSummaryJob $job) => $this->languageOf($job) === 'zh-TW'
+        );
+    }
+
+    /** job 的語言是 protected，測試用反射讀它。 */
+    private function languageOf(VideoTranscriberSmartSummaryJob $job): ?string
+    {
+        $property = new ReflectionProperty($job, 'languageCode');
+        $property->setAccessible(true);
+
+        return $property->getValue($job);
     }
 
     public function testDoesNothingWhenNoMediaIsTranscribed(): void

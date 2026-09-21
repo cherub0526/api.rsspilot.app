@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\FollowUpQuestions;
 
+use App\Models\User;
 use NeuronAI\Agent\Agent;
-use App\Utils\AI\OpenRouterModels;
-use NeuronAI\Providers\OpenAILike;
+use App\Utils\AI\RoutingProfile;
+use App\Utils\AI\RoutedInference;
+use Hypervel\Support\Facades\Log;
+use NeuronAI\Chat\Messages\Message;
+use App\Utils\AI\OpenRouterProvider;
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Providers\AIProviderInterface;
 
@@ -32,22 +36,63 @@ class NeuronFollowUpQuestions implements FollowUpQuestionsGeneratorInterface
     ) {
     }
 
-    public function generate(string $answers, string $language): array
+    public function generate(string $answers, string $language, ?User $user = null): array
     {
-        $message = Agent::make()
-            ->setAiProvider($this->provider ?? $this->defaultProvider())
-            ->chat(new UserMessage($this->template->build($answers, $language)))
-            ->getMessage();
+        $message = RoutedInference::run(
+            self::class,
+            $user,
+            function (RoutingProfile $profile) use ($answers, $language) {
+                $message = Agent::make()
+                    ->setAiProvider($this->provider ?? $this->defaultProvider($profile))
+                    ->chat(new UserMessage($this->template->build($answers, $language)))
+                    ->getMessage();
+
+                $this->logRouting($profile->model, $message);
+
+                return $message;
+            }
+        );
 
         return $this->parser->parse($message->getContent());
     }
 
-    protected function defaultProvider(): AIProviderInterface
+    /**
+     * 路由參數（Auto Router 的 cost tier、價格上限等）與模型一樣來自 configs，
+     * 沒設定就是空陣列。NeuronAI 把 parameters 原封不動展開進 request body。
+     */
+    protected function defaultProvider(RoutingProfile $profile): AIProviderInterface
     {
-        return new OpenAILike(
+        return new OpenRouterProvider(
             baseUri: (string) config('ai.openrouter.base_uri'),
             key: (string) config('ai.openrouter.api_key'),
-            model: OpenRouterModels::for(self::class),
+            model: $profile->model,
+            parameters: $profile->parameters,
         );
+    }
+
+    /**
+     * 走 Auto Router 時把「實際跑了哪個模型、用了多少 token」記下來。
+     *
+     * 指定單一模型時不記：那種情況下實際模型恆等於要求的模型，每次呼叫都寫一行
+     * 只是把 log 灌滿。這條路徑不扣 chat 額度、成本靠 throttle 擋，所以帳單上的
+     * 異常只能靠這行事後追。
+     *
+     * 注入替身的測試不會帶 metadata，所以 actual 允許是 null——沒有它也不該讓
+     * 產生延伸問題這件事失敗。
+     */
+    private function logRouting(string $requested, Message $message): void
+    {
+        if (!str_starts_with($requested, 'openrouter/auto')) {
+            return;
+        }
+
+        $usage = $message->getUsage();
+
+        Log::info('follow-up questions routed by openrouter auto', [
+            'requested'     => $requested,
+            'actual'        => $message->getMetadata(OpenRouterProvider::META_MODEL),
+            'input_tokens'  => $usage?->inputTokens,
+            'output_tokens' => $usage?->outputTokens,
+        ]);
     }
 }

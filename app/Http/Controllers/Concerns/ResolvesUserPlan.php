@@ -52,6 +52,85 @@ trait ResolvesUserPlan
     }
 
     /**
+     * 下載摘要／字幕是付費功能，擋下方案沒開通的使用者。
+     *
+     * 判準與 assertCustomSummaryEnabled 相同，用 plans.download_enabled 而不是
+     * 方案名稱。沒有方案時一併擋下：無從判斷權益的預設是不給。
+     *
+     * 這道閘門擋的是「產好的檔案」；顯示用的 captions / summaries 端點仍對所有
+     * 方案開放（定價頁承諾的就是人人看得到），所以有心人仍能自己把 JSON 組成
+     * 字幕檔。它的作用是讓權益在伺服器上有一個真的執行點，而不是一個改掉就沒
+     * 了的前端判斷。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertDownloadEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('download_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.download.plan_required')]]
+        );
+    }
+
+    /**
+     * 播放器截圖是 Advance 方案的功能，擋下方案沒開通的使用者。
+     *
+     * 判準與前兩道相同，用 plans.screenshot_enabled 而不是方案名稱。
+     * 沒有方案時一併擋下：無從判斷權益的預設是不給。
+     *
+     * 這道閘門要在**兩處**執行：上傳截圖，以及帶圖提問。真正的成本在後者——
+     * vision 推論的單次成本明顯高於純文字，而每日 chat 額度沒有為帶圖加權。
+     * 只擋上傳的話，理論上仍能引用別人存過的同一張畫面去問。
+     *
+     * 已經存在於對話歷史裡的截圖不受影響：降級之後回頭看舊對話仍該看得到圖，
+     * 讓歷史破圖不是權益該有的表達方式。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertScreenshotEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('screenshot_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.thumbnails.plan_required')]]
+        );
+    }
+
+    /**
+     * 把資料接到自己的 AI 工具（MCP）是 Pro 以上的功能。
+     *
+     * 這道閘門擋的是**產生金鑰**；真正的資料存取在 `/mcp` 自己還會再檢查一次。
+     * 兩處都要做：金鑰不會過期而方案會，只擋產生的話，降級之後那把舊金鑰仍然
+     * 讀得到資料。
+     *
+     * 反過來只擋 `/mcp` 也不夠——那會讓免費方案的使用者順利拿到一把金鑰，貼進
+     * 第三方工具之後才收到一個看不懂的錯誤。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertMcpEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('mcp_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.api_keys.plan_required')]]
+        );
+    }
+
+    /**
      * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
      * 否則一律回 null 當成「不指定」。
      *

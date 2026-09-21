@@ -128,7 +128,7 @@ class FollowUpsController
         // 語言由 videotranscriber.ai 決定，未必等於使用者設定，比對素材會產出
         // 使用者讀不懂的問題。
         return response()->json([
-            'data' => $this->generator->generate($answer, $request->user()->aiLanguageName()),
+            'data' => $this->generator->generate($answer, $request->user()->aiLanguageName(), $request->user()),
         ]);
     }
 }

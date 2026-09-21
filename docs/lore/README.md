@@ -17,8 +17,8 @@ Implicit knowledge that code, types, tests, and git history can't reveal — bus
 | [subscription](subscription/) | 訂閱與計費：Stripe（現行金流）與 Paddle（前一代）、webhook 驗簽、plan/price 同步、額度規則、方案定價的成本結構 |
 | [media](media/) | Media 狀態流轉、RSS source 同步、summary 產生 |
 | [auth](auth/) | JWT guard、Socialite OAuth、token 與帳號綁定 |
-| [prompts](prompts/) | AI prompt 模板組裝：TemplateCompletionManager、訊息順序、回應語言來源 |
-| [framework](framework/) | Hypervel / Hyperf / Swoole 的執行期行為與踩雷處，含容器化部署與測試執行環境的差異 |
+| [prompts](prompts/) | AI prompt 模板組裝與推論層：TemplateCompletionManager、訊息順序、回應語言來源、OpenRouter 模型路由與計價陷阱 |
+| [framework](framework/) | Hypervel / Hyperf / Swoole 的執行期行為與踩雷處，含容器化部署與測試執行環境的差異；佇列 worker 的參數規則見 [queue-workers.md](framework/queue-workers.md) |
 
 ## Optional
 

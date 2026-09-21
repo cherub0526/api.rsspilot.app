@@ -11,6 +11,8 @@ use App\Models\Caption;
 use App\Models\Summary;
 use App\Utils\Const\ISO6391;
 use Hypervel\Queue\Queueable;
+use App\Utils\AI\SummaryPayload;
+use Hypervel\Support\Facades\Log;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Exceptions\VideoTranscriberAuthException;
@@ -46,12 +48,18 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
 
     protected Media $media;
 
-    protected string $languageCode;
+    /**
+     * 摘要要用哪個語言寫。
+     *
+     * null 代表「跟著字幕走」——影片是什麼語言，主摘要就是什麼語言。給值則是
+     * 明確覆寫（`videotranscriber:summary --language=`），重跑成別的語言時用。
+     */
+    protected ?string $languageCode;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Media $media, string $languageCode = SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE)
+    public function __construct(Media $media, ?string $languageCode = null)
     {
         $this->media = $media;
         $this->languageCode = $languageCode;
@@ -83,16 +91,18 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
 
         $this->media->fill(['status' => Media::STATUS_SUMMARIZING])->save();
 
+        $language = $this->languageFor($caption);
+
         // 只認全站共用那一筆：使用者自己的摘要（user_id 有值）不能被這支
         // 排程重跑蓋掉。locale 一律存正規化後的值，否則就跟 settings 那邊的
         // 寫法對不上，Media::summaryFor() 永遠選不到。
         /** @var Summary $summary */
         $summary = $this->media->summaries()->firstOrCreate([
             'user_id' => null,
-            'locale'  => ISO6391::normalize((string) $caption->locale),
+            'locale'  => $language,
         ]);
 
-        $template = new SmartSummaryTemplate($this->languageCode);
+        $template = new SmartSummaryTemplate($language);
 
         // 時間戳只存在 segments 裡，`text` 是把每段用空白接起來的扁平字串——
         // 餵 `text` 的話 prompt 裡那句「有時間戳就標註」永遠不會生效。舊資料或
@@ -114,7 +124,7 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         // body carrying no SSE frames at all, and a model can always ignore
         // the output format — both clear on a retry, so it is worth another
         // attempt rather than storing something unusable.
-        $text = $this->decode($response);
+        $text = SummaryPayload::decode($response);
 
         if ($text === null) {
             $this->releaseOrFail($summary, self::RETRY_DELAY_SECONDS);
@@ -128,6 +138,36 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
         ])->save();
 
         $this->media->fill(['status' => Media::STATUS_SUMMARIZED])->save();
+
+        $this->dispatchTranslations($summary);
+    }
+
+    /**
+     * Fan the finished summary out to every other UI locale.
+     *
+     * Dispatched from here rather than picked up by a scheduled command the way
+     * the rest of the pipeline is, because translation owns no `media.status`
+     * of its own to be selected by — same shape as the `VideoTranscriberFetchJob`
+     * → `VideoTranscriberArchiveJob` hand-off, and with the same consequence:
+     * a media only ever gets this one chance, there is no back-fill.
+     *
+     * A failing dispatch must not undo a summary that is already saved, so the
+     * loop swallows its own errors: the worst case is a missing translation,
+     * and `Media::summaryFor()` falls back to this summary for those readers.
+     */
+    private function dispatchTranslations(Summary $summary): void
+    {
+        foreach (SummaryTranslationJob::targetLocales((string) $summary->locale) as $locale) {
+            try {
+                dispatch(new SummaryTranslationJob($summary, $locale));
+            } catch (Throwable $e) {
+                Log::warning('failed to dispatch a summary translation', [
+                    'summary' => $summary->id,
+                    'locale'  => $locale,
+                    'error'   => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -142,13 +182,16 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
      */
     public function failed(?Throwable $e): void
     {
-        $locale = $this->media->captions()->where('primary', true)->value('locale');
+        /** @var null|Caption $caption */
+        $caption = $this->media->captions()->where('primary', true)->first();
 
+        // 用跟 handle() 同一套解析：摘要那一列的 locale 是「摘要寫成什麼語言」，
+        // 不是字幕的語言，兩邊算法不一致就會找不到要標記失敗的那一列。
         /** @var null|Summary $summary */
-        $summary = $locale
+        $summary = ($caption || $this->languageCode !== null)
             ? $this->media->summaries()
                 ->whereNull('user_id')
-                ->where('locale', ISO6391::normalize((string) $locale))
+                ->where('locale', $this->languageFor($caption))
                 ->first()
             : null;
 
@@ -156,49 +199,24 @@ class VideoTranscriberSmartSummaryJob implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Decode the JSON the prompt asks for, or null when the response cannot be
-     * used.
+     * 這份摘要要寫成哪個語言，也就是它那一列的 `locale`。
      *
-     * `long_summary.content` is the one field worth failing over — the rest is
-     * normalised so a model that omits an optional array does not cost a whole
-     * summary. The fenced-block tolerance is deliberate: the prompt forbids
-     * code fences, but models add them anyway often enough that discarding an
-     * otherwise-good summary over one would be the wrong trade.
+     * **這一欄記的是摘要本身的語言，不是字幕的語言。**兩者原本會不一致：指令
+     * 的 `--language` 預設是 en，而資料列卻存字幕的語系，於是中文影片會產出一列
+     * 標著 `zh-CN`、內容卻是英文的摘要。那不只是標示錯誤——`SummaryTranslationJob`
+     * 以這一欄當來源語言展開翻譯目標，會把英文「翻譯」成英文，而真正需要的中文版
+     * 永遠不會被產生，因為系統認為它已經存在。
      *
-     * @return null|array<string, mixed>
+     * 沒有指定時跟著字幕走（影片是什麼語言，主摘要就是什麼語言）；字幕語系不明時
+     * 才退回模板的預設值。
      */
-    private function decode(string $response): ?array
+    private function languageFor(?Caption $caption): string
     {
-        $decoded = json_decode($this->stripCodeFence(trim($response)), true);
+        $code = $this->languageCode ?? (string) ($caption?->locale ?? '');
 
-        if (!is_array($decoded) || !is_string($decoded['long_summary']['content'] ?? null)) {
-            return null;
-        }
-
-        return [
-            'short_summary' => (string) ($decoded['short_summary'] ?? ''),
-            'long_summary'  => [
-                'content'    => $decoded['long_summary']['content'],
-                'key_points' => array_values((array) ($decoded['long_summary']['key_points'] ?? [])),
-                'keywords'   => array_values((array) ($decoded['long_summary']['keywords'] ?? [])),
-            ],
-        ];
-    }
-
-    /**
-     * Unwrap a ```json … ``` block, leaving anything else untouched.
-     */
-    private function stripCodeFence(string $response): string
-    {
-        if (!str_starts_with($response, '```')) {
-            return $response;
-        }
-
-        // Drop the opening fence with its optional language tag, then the
-        // closing one.
-        $response = (string) preg_replace('/^```[a-zA-Z]*\R?/', '', $response);
-
-        return rtrim((string) preg_replace('/\R?```$/', '', $response));
+        return $code === ''
+            ? SmartSummaryTemplate::DEFAULT_LANGUAGE_CODE
+            : ISO6391::normalize($code);
     }
 
     /**

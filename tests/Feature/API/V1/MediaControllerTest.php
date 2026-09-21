@@ -156,6 +156,20 @@ class MediaControllerTest extends TestCase
             ->assertJsonPath('short_summary', '');
     }
 
+    /** 前端靠 status 區分「處理中」與「已完成」，缺了它只能猜。 */
+    public function testShowReturnsProcessingStatus(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $media = Media::factory()->create(['status' => Media::STATUS_SUMMARIZING]);
+        $user->media()->attach($media->id);
+
+        $this->json('GET', route('api.v1.media.show', ['mediaId' => $media->id]))
+            ->assertStatus(200)
+            ->assertJsonPath('status', Media::STATUS_SUMMARIZING);
+    }
+
     public function testShowSucceedsForFreeSourceMedia(): void
     {
         $this->fakeLogin();

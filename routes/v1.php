@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Hypervel\Support\Facades\Route;
-use App\Http\Controllers\API\V1\RSSController;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
 use App\Http\Controllers\API\V1\PlansController;
@@ -16,19 +15,22 @@ use App\Http\Controllers\API\V1\Media\ChatController;
 use App\Http\Controllers\API\V1\PopulariesController;
 use App\Http\Controllers\API\V1\Auth\GoogleController;
 use App\Http\Controllers\API\V1\Auth\LogoutController;
+use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Auth\RefreshController;
 use App\Http\Controllers\API\V1\Users\AvatarController;
 use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\CustomPromptsController;
+use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
+use App\Http\Controllers\API\V1\Users\ApiKeysController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
-use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
+use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
@@ -171,6 +173,26 @@ Route::group('/users', function () {
         'uses'       => UserSessionsController::class . '@destroy',
         'middleware' => ['auth'],
     ]);
+
+    // API key 的產生與撤銷。走 jwt 而不是 sanctum：不該用一把 key 去生下一把，
+    // 那會讓外洩的 key 自我續命，撤銷也就失去意義。
+    Route::get('/api-keys', [
+        'as'         => 'api-keys.index',
+        'uses'       => ApiKeysController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::post('/api-keys', [
+        'as'         => 'api-keys.store',
+        'uses'       => ApiKeysController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::delete('/api-keys/{id}', [
+        'as'         => 'api-keys.destroy',
+        'uses'       => ApiKeysController::class . '@destroy',
+        'middleware' => ['auth'],
+    ]);
 }, ['as' => 'users']);
 
 Route::group('/settings', function () {
@@ -183,30 +205,6 @@ Route::group('/settings', function () {
         ]
     );
 }, ['as' => 'settings']);
-
-Route::group('/rss', function () {
-    Route::get(
-        '/',
-        [
-            'as'         => 'index',
-            'uses'       => RSSController::class . '@index',
-            'middleware' => ['auth'],
-        ]
-    );
-    Route::post(
-        '/',
-        [
-            'as'         => 'store',
-            'uses'       => RSSController::class . '@store',
-            'middleware' => ['auth'],
-        ]
-    );
-    Route::delete('/{rssId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
-        'as'         => 'destroy',
-        'uses'       => RSSController::class . '@destroy',
-        'middleware' => ['auth'],
-    ]);
-}, ['as' => 'rss']);
 
 Route::group('/popularies', function () {
     Route::get('/', [
@@ -287,6 +285,15 @@ Route::group('/media', function () {
                 'middleware' => ['auth'],
             ]
         );
+        // 字面路徑排在 /{summaryId} 前面，不去依賴那條 ULID pattern 擋掉 'download'
+        Route::get(
+            '/download',
+            [
+                'as'         => 'download',
+                'uses'       => SummariesController::class . '@download',
+                'middleware' => ['auth'],
+            ]
+        );
         Route::get(
             '/{summaryId:[0-7][0-9a-hjkmnp-tv-z]{25}}',
             [
@@ -297,12 +304,41 @@ Route::group('/media', function () {
         );
     }, ['as' => 'summaries']);
 
+    // 心智圖是「一次性、使用者主動觸發、單一消費者」的產物，所以不像 chat 拆成
+    // POST 觸發 + 常駐 GET 長連線：POST 的回應本身就是 SSE 串流。
+    Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/mindmap', function () {
+        Route::get(
+            '/',
+            [
+                'as'         => 'show',
+                'uses'       => MindmapController::class . '@show',
+                'middleware' => ['auth'],
+            ]
+        );
+        Route::post(
+            '/',
+            [
+                'as'         => 'store',
+                'uses'       => MindmapController::class . '@store',
+                'middleware' => ['auth'],
+            ]
+        );
+    }, ['as' => 'mindmap']);
+
     Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/captions', function () {
         Route::get(
             '/',
             [
                 'as'         => 'index',
                 'uses'       => CaptionsController::class . '@index',
+                'middleware' => ['auth'],
+            ]
+        );
+        Route::get(
+            '/{captionId}/download',
+            [
+                'as'         => 'download',
+                'uses'       => CaptionsController::class . '@download',
                 'middleware' => ['auth'],
             ]
         );
@@ -315,6 +351,30 @@ Route::group('/media', function () {
             ]
         );
     }, ['as' => 'captions']);
+
+    // 播放器截圖。以內容定址：key 是 (second, checksum)，識別畫面的是 checksum——
+    // 一秒有 24–60 幀，只用秒數會讓同一秒的不同畫面互相頂替。GET 因此也要帶
+    // checksum，前端算完 hash 先問一次，命中就不必再把那 150KB 傳上來。
+    Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/thumbnails', function () {
+        // 唯一會花到頻寬的一支，成本上限交給 throttle。
+        Route::post(
+            '/',
+            [
+                'as'         => 'store',
+                'uses'       => ThumbnailsController::class . '@store',
+                'middleware' => ['auth', 'throttle:30,1'],
+            ]
+        );
+        // second 的 6 位上限與 ThumbnailService::MAX_SECOND 是同一條界線，要一起改。
+        Route::get(
+            '/{second:[0-9]{1,6}}/{checksum:[0-9a-f]{64}}',
+            [
+                'as'         => 'show',
+                'uses'       => ThumbnailsController::class . '@show',
+                'middleware' => ['auth'],
+            ]
+        );
+    }, ['as' => 'thumbnails']);
 
     Route::group('/{mediaId:[0-7][0-9a-hjkmnp-tv-z]{25}}/chat', function () {
         Route::post('/', [

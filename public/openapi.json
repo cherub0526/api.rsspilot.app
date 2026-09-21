@@ -65,10 +65,10 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account"
+                                    "email"
                                 ],
                                 "properties": {
-                                    "account": {
+                                    "email": {
                                         "type": "string",
                                         "maxLength": 255,
                                         "minLength": 6,
@@ -209,6 +209,7 @@
                     "Auth"
                 ],
                 "summary": "Exchange the current access token for a new one",
+                "description": "刻意用 login() 而不是 guard()->refresh()。\n\nJWTManager::refresh() 產出的 claims 只有 sub 與原始 iat（見 buildRefreshClaims()），\nencode() 不補預設值，於是換發出來的 token **沒有 exp**；而 ExpiredClaim 對缺少\nexp 的 payload 直接放行，等於發出一張永不過期的憑證。\nlogin() 走的是登入那條路徑，iat / exp 齊全，也保證三支發 token 的端點形狀一致。\n\n代價是 iat 會跟著換發更新，所以「從首次登入起算」的上限不存在——本來也不存在，\n這個套件沒有任何 validation 在檢查 refresh_ttl。見 docs/lore/auth/business-rules.md。",
                 "operationId": "api.v1.auth.refresh.store",
                 "responses": {
                     "200": {
@@ -259,18 +260,11 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account",
                                     "email",
                                     "password",
                                     "password_confirmation"
                                 ],
                                 "properties": {
-                                    "account": {
-                                        "type": "string",
-                                        "maxLength": 255,
-                                        "minLength": 6,
-                                        "example": "johndoe"
-                                    },
                                     "email": {
                                         "type": "string",
                                         "format": "email",
@@ -294,15 +288,58 @@
                     }
                 },
                 "responses": {
-                    "201": {
-                        "description": "User registered and access token issued",
+                    "202": {
+                        "description": "帳號已建立，驗證信已寄出。刻意不回 token——要先通過 /v1/auth/verify 才算完成註冊。"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
+        "/v1/auth/verify": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "以驗證碼或信件 token 完成 email 驗證，成功後發放 token",
+                "operationId": "api.v1.auth.verify.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email",
+                                        "example": "johndoe@example.com"
+                                    },
+                                    "code": {
+                                        "type": "string",
+                                        "maxLength": 6,
+                                        "minLength": 6,
+                                        "example": "048213"
+                                    },
+                                    "token": {
+                                        "type": "string",
+                                        "example": "a1b2c3..."
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Email verified and access token issued",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
                                         "access_token": {
-                                            "type": "string",
-                                            "example": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+                                            "type": "string"
                                         },
                                         "token_type": {
                                             "type": "string",
@@ -324,6 +361,43 @@
                 }
             }
         },
+        "/v1/auth/verify/resend": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "重新寄送 email 驗證碼",
+                "description": "重寄驗證碼。冷卻由 Service 判斷——前端的倒數只是體驗，擋不住直接打 API。",
+                "operationId": "api.v1.auth.verify.resend.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "email"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "202": {
+                        "description": "驗證信已重新寄出"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                }
+            }
+        },
         "/v1/auth": {
             "post": {
                 "tags": [
@@ -337,11 +411,11 @@
                         "application/json": {
                             "schema": {
                                 "required": [
-                                    "account",
+                                    "email",
                                     "password"
                                 ],
                                 "properties": {
-                                    "account": {
+                                    "email": {
                                         "type": "string",
                                         "maxLength": 255,
                                         "minLength": 6,
@@ -469,6 +543,9 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/422"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
                     }
                 },
                 "security": [
@@ -838,6 +915,60 @@
                 ]
             }
         },
+        "/v1/media/{mediaId}/captions/{captionId}/download": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Download a caption as a subtitle file",
+                "operationId": "api.v1.media.captions.download",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/captionId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "srt",
+                            "enum": [
+                                "srt",
+                                "vtt",
+                                "txt"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The subtitle file",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/media/{mediaId}/chat/sessions/{sessionId}/follow-ups": {
             "get": {
                 "tags": [
@@ -1099,6 +1230,7 @@
                                         "nullable": true
                                     },
                                     "messages": {
+                                        "description": "Only the LAST item is used — it is the question being asked. Earlier items are ignored: the conversation history is rebuilt server-side from the session, so it cannot be forged or padded by the client. Send just the new question and the session_id it belongs to.",
                                         "type": "array",
                                         "items": {
                                             "required": [
@@ -1118,6 +1250,28 @@
                                                 "content": {
                                                     "type": "string",
                                                     "example": "What is this video about?"
+                                                },
+                                                "images": {
+                                                    "description": "Player screenshots attached to this turn, each identified by its second and the SHA-256 of its bytes (a second holds many frames). Upload them via POST /v1/media/{mediaId}/thumbnails first. At most 4 per message, and the 4 most recent across the whole conversation (this question plus the stored history) are the ones actually sent to the model. Only screenshots attached to THIS question make it cost 2 quota units; ones inherited from earlier turns do not.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "required": [
+                                                            "second",
+                                                            "checksum"
+                                                        ],
+                                                        "properties": {
+                                                            "second": {
+                                                                "type": "integer",
+                                                                "example": 125
+                                                            },
+                                                            "checksum": {
+                                                                "type": "string",
+                                                                "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    },
+                                                    "nullable": true
                                                 }
                                             },
                                             "type": "object"
@@ -1135,7 +1289,7 @@
                         "description": "AI response dispatched via SSE events",
                         "headers": {
                             "X-RateLimit-Limit": {
-                                "description": "Daily question limit of the current plan. Absent when the plan is unlimited.",
+                                "description": "Daily question limit of the current plan. A question carrying screenshots costs 2 instead of 1. Absent when the plan is unlimited.",
                                 "schema": {
                                     "type": "integer",
                                     "example": 3
@@ -1182,6 +1336,91 @@
                     },
                     "404": {
                         "$ref": "#/components/responses/404"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
+                    }
+                }
+            }
+        },
+        "/v1/media/{mediaId}/mindmap": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Get the mind map for this media in the user AI language",
+                "description": "GET /v1/media/{mediaId}/mindmap.\n\n取這位使用者在這支影片、這個 AI 語言下的心智圖。\n\n沒有就是 404，不回空陣列——摘要端點回 `[]` 的做法逼得前端把型別寫成\n`SummaryResource | []` 再用 Array.isArray() 分辨，不要再複製一次。",
+                "operationId": "api.v1.media.mindmap.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Mind map",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "language": {
+                                            "type": "string",
+                                            "example": "zh-TW"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "completed"
+                                        },
+                                        "markdown": {
+                                            "type": "string",
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Generate the mind map and stream it back over SSE",
+                "description": "POST /v1/media/{mediaId}/mindmap.\n\n產生（或重新產生）心智圖，回應本身就是 SSE 串流。\n事件格式與對話一致：connected / token / done / error。\n\n命中既有心智圖時前端不會走到這裡（它先打 GET），所以這支端點一律扣一次額度。",
+                "operationId": "api.v1.media.mindmap.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSE stream: connected / token / done / error events",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "example": "data: {\"type\":\"token\",\"token\":\"# \"}\n\ndata: {\"type\":\"done\"}\n\n"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
                     },
                     "429": {
                         "$ref": "#/components/responses/429"
@@ -1254,6 +1493,184 @@
                         "$ref": "#/components/responses/401"
                     }
                 }
+            }
+        },
+        "/v1/media/{mediaId}/summaries/download": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Download the summary as a document",
+                "description": "匯出的是 index 挑出來的那一份（Media::summaryFor），不另外收 summaryId：\n使用者按下的下載鈕就在他當下看著的那份摘要旁邊。",
+                "operationId": "api.v1.media.summaries.download",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "md",
+                            "enum": [
+                                "md",
+                                "txt"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The summary document",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/media/{mediaId}/thumbnails/{second}/{checksum}": {
+            "get": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Check whether this exact frame is already stored",
+                "description": "GET /v1/media/{mediaId}/thumbnails/{second}.\n\n取這一秒已存在的截圖。沒有就是 404，前端據此決定要不要上傳。",
+                "operationId": "api.v1.media.thumbnails.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    },
+                    {
+                        "$ref": "#/components/parameters/second"
+                    },
+                    {
+                        "$ref": "#/components/parameters/checksum"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "This frame is already stored; upload can be skipped",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/media/{mediaId}/thumbnails": {
+            "post": {
+                "tags": [
+                    "Media"
+                ],
+                "summary": "Upload the screenshot for one second of the video",
+                "description": "POST /v1/media/{mediaId}/thumbnails.\n\n存下這張截圖。同樣的內容已經有了就直接回傳既有的 URL，不再寫一次。\n\nchecksum 由前端算、由這裡**重算驗證**：路徑是 checksum 決定的，採信客戶端\n自己說的值等於讓它把任意內容擺到任意 key 上，內容定址的保證就沒了。\n\n截圖是 Advance 方案的功能（plans.screenshot_enabled）。GET 不設這道閘門——\n它只是「這張存過了嗎」的查詢，而且要先有 checksum 才問得出來。",
+                "operationId": "api.v1.media.thumbnails.store",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/mediaId"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "required": [
+                                    "file",
+                                    "second",
+                                    "checksum"
+                                ],
+                                "properties": {
+                                    "file": {
+                                        "description": "JPEG frame, max 2 MB",
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "second": {
+                                        "description": "Whole-second offset. Must not exceed the video duration, nor 999999 — the GET route only addresses up to 6 digits. Used for ordering and readability, not for identity.",
+                                        "type": "integer",
+                                        "example": 125
+                                    },
+                                    "checksum": {
+                                        "description": "Lowercase hex SHA-256 of the uploaded bytes. Recomputed and compared server-side; a mismatch is rejected with 422.",
+                                        "type": "string",
+                                        "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Stored",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "These exact bytes are already stored; the existing URL is returned",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ThumbnailResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
             }
         },
         "/v1/media": {
@@ -1647,176 +2064,6 @@
                                                 },
                                                 "type": "object"
                                             }
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/rss": {
-            "get": {
-                "tags": [
-                    "RSS"
-                ],
-                "summary": "List RSS feed subscriptions",
-                "operationId": "api.v1.rss.index",
-                "parameters": [
-                    {
-                        "name": "type",
-                        "in": "query",
-                        "description": "Type of RSS feed",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": [
-                                "youtube"
-                            ]
-                        }
-                    },
-                    {
-                        "name": "limit",
-                        "in": "query",
-                        "description": "Number of items per page (1-10)",
-                        "required": false,
-                        "schema": {
-                            "type": "integer",
-                            "maximum": 10,
-                            "minimum": 1
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successful operation",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/RSSResource"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            },
-            "post": {
-                "tags": [
-                    "RSS"
-                ],
-                "summary": "Subscribe to RSS feed",
-                "operationId": "api.v1.rss.store",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "type",
-                                    "url"
-                                ],
-                                "properties": {
-                                    "type": {
-                                        "description": "Type of RSS feed",
-                                        "type": "string",
-                                        "enum": [
-                                            "youtube"
-                                        ],
-                                        "example": "youtube"
-                                    },
-                                    "url": {
-                                        "description": "YouTube channel URL or RSS feed URL",
-                                        "type": "string",
-                                        "format": "url",
-                                        "example": "https://www.youtube.com/@channelname"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "RSS feed subscribed successfully",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/RSSResource"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            }
-        },
-        "/v1/rss/{rssId}": {
-            "delete": {
-                "tags": [
-                    "RSS"
-                ],
-                "summary": "Unsubscribe from RSS feed",
-                "operationId": "api.v1.rss.destroy",
-                "parameters": [
-                    {
-                        "name": "rssId",
-                        "in": "path",
-                        "description": "RSS feed ID",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "example": "01JCXYZ123456789ABCDEFGHIJ"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/200"
-                    },
-                    "404": {
-                        "description": "RSS feed not found",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Resource not found"
                                         }
                                     },
                                     "type": "object"
@@ -2451,13 +2698,13 @@
                                         "example": "01JCXYZ123456789ABCDEFGHIJ"
                                     },
                                     "paymentMethod": {
-                                        "description": "Payment gateway (stripe or paddle, defaults to stripe)",
+                                        "description": "Payment gateway (stripe or paddle, defaults to paddle)",
                                         "type": "string",
                                         "enum": [
                                             "stripe",
                                             "paddle"
                                         ],
-                                        "example": "stripe"
+                                        "example": "paddle"
                                     }
                                 },
                                 "type": "object"
@@ -3313,7 +3560,8 @@
                                         "text",
                                         "thinking",
                                         "tool_call",
-                                        "tool_result"
+                                        "tool_result",
+                                        "image"
                                     ],
                                     "example": "text"
                                 },
@@ -3350,6 +3598,24 @@
                                 "is_error": {
                                     "description": "tool_result",
                                     "type": "boolean",
+                                    "nullable": true
+                                },
+                                "second": {
+                                    "description": "image",
+                                    "type": "integer",
+                                    "example": 125,
+                                    "nullable": true
+                                },
+                                "checksum": {
+                                    "description": "image — SHA-256 of the frame; this is what identifies it",
+                                    "type": "string",
+                                    "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                                    "nullable": true
+                                },
+                                "url": {
+                                    "description": "image — pre-signed, valid 24 hours. Re-fetch the session instead of storing it.",
+                                    "type": "string",
+                                    "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.e3b0c442....jpg?X-Amz-Signature=...",
                                     "nullable": true
                                 }
                             },
@@ -3479,6 +3745,24 @@
                         "type": "string",
                         "example": "Video Title"
                     },
+                    "status": {
+                        "description": "處理進度，見 App\\Models\\Media 的 STATUS_* 常數",
+                        "type": "string",
+                        "enum": [
+                            "created",
+                            "progress",
+                            "transcribing",
+                            "transcribed",
+                            "transcribe_failed",
+                            "summarizing",
+                            "summarized",
+                            "summarize_failed",
+                            "ready",
+                            "cancelled",
+                            "failed"
+                        ],
+                        "example": "ready"
+                    },
                     "description": {
                         "type": "string",
                         "example": "Video description"
@@ -3583,6 +3867,11 @@
                         "type": "integer",
                         "example": 50
                     },
+                    "mindmap_limit": {
+                        "description": "Daily mind map generation limit. 0 means unlimited.",
+                        "type": "integer",
+                        "example": 50
+                    },
                     "download_enabled": {
                         "type": "boolean",
                         "example": true
@@ -3596,6 +3885,10 @@
                         "example": true
                     },
                     "custom_summary_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "screenshot_enabled": {
                         "type": "boolean",
                         "example": true
                     },
@@ -3637,37 +3930,6 @@
                     },
                     "paddle": {
                         "$ref": "#/components/schemas/PaddleResource"
-                    }
-                },
-                "type": "object"
-            },
-            "RSSResource": {
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "example": "01JCXYZ123456789ABCDEFGHIJ"
-                    },
-                    "type": {
-                        "type": "string",
-                        "example": "youtube"
-                    },
-                    "list_id": {
-                        "type": "string",
-                        "example": "PLu96Vzt7fGU7IC5vsXXKgUWwASv5FTWMx",
-                        "nullable": true
-                    },
-                    "url": {
-                        "type": "string",
-                        "example": "https://www.youtube.com/channel/UCxxxxxx"
-                    },
-                    "title": {
-                        "type": "string",
-                        "example": "Channel Title"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "example": "2024-01-01 12:00:00"
                     }
                 },
                 "type": "object"
@@ -3718,6 +3980,29 @@
                     },
                     "text": {
                         "type": "object"
+                    }
+                },
+                "type": "object"
+            },
+            "ThumbnailResource": {
+                "properties": {
+                    "media_id": {
+                        "type": "string",
+                        "example": "01JCXYZ123456789ABCDEFGHIJ"
+                    },
+                    "second": {
+                        "type": "integer",
+                        "example": 125
+                    },
+                    "checksum": {
+                        "description": "Lowercase hex SHA-256 of the JPEG bytes — this is what identifies the frame.",
+                        "type": "string",
+                        "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    },
+                    "url": {
+                        "description": "Pre-signed S3 URL, valid for 24 hours. Re-request instead of storing it.",
+                        "type": "string",
+                        "example": "https://bucket.s3.amazonaws.com/media/01JCXYZ.../thumbnails/000125.e3b0c442....jpg?X-Amz-Signature=..."
                     }
                 },
                 "type": "object"
@@ -3778,10 +4063,6 @@
                         "type": "string",
                         "format": "email",
                         "example": "john@example.com"
-                    },
-                    "account": {
-                        "type": "string",
-                        "example": "johndoe"
                     },
                     "avatar": {
                         "type": "string",
@@ -3959,6 +4240,16 @@
                     "example": "01JCXYZ123456789ABCDEFGHIJ"
                 }
             },
+            "checksum": {
+                "name": "checksum",
+                "in": "path",
+                "description": "Lowercase hex SHA-256 of the JPEG bytes",
+                "required": true,
+                "schema": {
+                    "type": "string",
+                    "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                }
+            },
             "mediaId": {
                 "name": "mediaId",
                 "in": "path",
@@ -3977,6 +4268,16 @@
                 "schema": {
                     "type": "string",
                     "example": "01k9v7m2q8n4r6t0w3y5z7b1c9"
+                }
+            },
+            "second": {
+                "name": "second",
+                "in": "path",
+                "description": "Whole-second offset into the video (floor of the player currentTime)",
+                "required": true,
+                "schema": {
+                    "type": "integer",
+                    "example": 125
                 }
             },
             "sourceId": {
@@ -4089,10 +4390,6 @@
         {
             "name": "Popularies",
             "description": "Popularies"
-        },
-        {
-            "name": "RSS",
-            "description": "RSS"
         },
         {
             "name": "Settings",

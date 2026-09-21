@@ -17,6 +17,11 @@ return [
             'provider_not_configured' => '该登录方式尚未设置。',
             'exchange_failed'         => '授权验证失败，请重新登录。',
         ],
+        'api_keys' => [
+            'plan_required' => '串接 AI 工具需要 Pro 以上的方案。',
+            'name'          => 'API key 名称必填，且不可超过 60 个字。',
+            'limit'         => '最多只能创建 :max 把 API key，请先删除不用的。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
@@ -27,12 +32,23 @@ return [
             'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
         ],
+        'download' => [
+            'plan_required'  => '下载摘要与字幕需要付费方案。',
+            'invalid_format' => '不支持的下载格式。',
+            'not_found'      => '没有可下载的内容。',
+        ],
         'chat' => [
             'chat_limit_reached' => '已达到方案允许的每日 AI 对话上限。',
         ],
-        'rss' => [
-            'invalid_url' => '无效的 RSS 网址。',
-            'not_found'   => '找不到指定的 RSS。',
+        'mindmap' => [
+            'mindmap_limit_reached' => '已达到方案允许的每日思维导图生成上限。',
+            'summary_required'      => '摘要完成后才能生成思维导图。',
+        ],
+        'thumbnails' => [
+            'plan_required'     => '播放器截图是 Advance 方案的功能。',
+            'checksum_mismatch' => '截图的 checksum 与文件内容不符。',
+            'not_found'         => '找不到指定秒数的截图，请重新截图后再发送。',
+            'out_of_range'      => '截图的秒数超出视频长度。',
         ],
         'sources' => [
             'invalid_url'           => '无效的 YouTube 网址。',
@@ -49,6 +65,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => '交易状态未完成。',
+                'ip_not_allowed'            => '来源 IP 不在允许清单内。',
             ],
         ],
     ],
@@ -64,7 +81,7 @@ return [
             'required' => '电子邮件为必填。',
             'email'    => '电子邮件格式无效。',
             'max'      => '电子邮件长度不能超过 255 个字符。',
-                    'unique'   => '此电子邮件已被注册。',
+            'unique'   => '此电子邮件已被注册。',
         ],
         'code' => [
             'required' => '请输入验证码。',
@@ -103,6 +120,21 @@ return [
             'content' => [
                 'required' => '内容为必填。',
                 'string'   => '内容必须是字符串。',
+            ],
+            'images' => [
+                'array'  => '截图必须是数组。',
+                'max'    => '一条消息最多只能附上 4 张截图。',
+                'second' => [
+                    'required' => '截图的秒数为必填。',
+                    'integer'  => '截图的秒数必须是整数。',
+                    'min'      => '截图的秒数不能小于 0。',
+                    'max'      => '截图的秒数超出可处理的范围。',
+                ],
+                'checksum' => [
+                    'required' => '截图的 checksum 为必填。',
+                    'string'   => '截图的 checksum 必须是字符串。',
+                    'regex'    => '截图的 checksum 必须是 64 位小写十六进制的 SHA-256。',
+                ],
             ],
         ],
     ],
@@ -158,16 +190,6 @@ return [
             'string'   => '跳转网址必须是字符串。',
             'url'      => '跳转网址格式不正确。',
             'max'      => '跳转网址不得超过 :max 个字符。',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => '类型为必填。',
-            'string'   => '类型必须是字符串。',
-            'in'       => '类型无效。',
-        ],
-        'url' => [
-            'required' => 'URL 为必填。',
         ],
     ],
     'source' => [
@@ -315,6 +337,25 @@ return [
                     'array'    => 'text.long_summary.keywords 必须是数组。',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => '请提供截图文件。',
+            'file'      => '截图必须是文件。',
+            'mimetypes' => '截图必须是 JPEG 图片。',
+            'max'       => '截图不能超过 2 MB。',
+        ],
+        'second' => [
+            'required' => '秒数为必填。',
+            'integer'  => '秒数必须是整数。',
+            'min'      => '秒数不能小于 0。',
+            'max'      => '秒数超出可处理的范围。',
+        ],
+        'checksum' => [
+            'required' => '请提供截图的 checksum。',
+            'string'   => 'checksum 必须是字符串。',
+            'regex'    => 'checksum 必须是 64 位小写十六进制的 SHA-256。',
         ],
     ],
 ];

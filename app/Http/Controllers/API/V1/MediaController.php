@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
+use App\Services\SourceService;
 use App\OpenApi\Parameters\Path;
 use App\Services\YoutubeService;
 use App\OpenApi\Parameters\Query;
@@ -150,7 +151,8 @@ class MediaController extends AbstractController
         Request $request,
         YoutubeService $youtubeService,
         VideoTranscriberClient $client,
-        SubscriptionService $subscriptionService
+        SubscriptionService $subscriptionService,
+        SourceService $sourceService
     ): ResponseInterface {
         $params = $request->only(['url']);
 
@@ -184,7 +186,7 @@ class MediaController extends AbstractController
         $created = false;
 
         if ($media === null) {
-            $media = $this->createMediaFromUrl($videoId, $resourceId, $youtubeService, $client);
+            $media = $this->createMediaFromUrl($videoId, $resourceId, $youtubeService, $client, $sourceService);
             $created = true;
         }
 
@@ -270,8 +272,14 @@ class MediaController extends AbstractController
      * 建立一筆手動加入的 media。
      *
      * 資料分兩個來源：getUrlInfo() 負責確認這支影片真的存在且可轉錄，順便給
-     * 標題、縮圖、時長與頻道；它沒有的 description 與發布時間再由 YouTube Data
-     * API 補。後者是 best-effort——配額用盡不該讓整個「新增影片」功能停擺。
+     * 標題、縮圖、時長與頻道；它沒有的 description 與發布時間、以及它偶爾漏掉的
+     * 頻道，再由 YouTube Data API 補。後者是 best-effort——配額用盡不該讓整個
+     * 「新增影片」功能停擺。
+     *
+     * 影片所屬的頻道也會一併建成 source（同一個頻道全站只有一列），讓手動加入的
+     * 影片跟 RSS 收進來的一樣掛得到來源。使用者**不會**因此被訂閱到該來源——
+     * 訂閱是 user_sources 的事，會吃掉方案的頻道額度。沒人訂閱又非免費的來源
+     * 不會被 sources:sync 抓去同步整個頻道。
      *
      * @throws InvalidRequestException 影片不存在或無法轉錄
      */
@@ -279,7 +287,8 @@ class MediaController extends AbstractController
         string $videoId,
         string $resourceId,
         YoutubeService $youtubeService,
-        VideoTranscriberClient $client
+        VideoTranscriberClient $client,
+        SourceService $sourceService
     ): Media {
         // 一律用正規化過的網址，不把使用者原本帶的追蹤參數送到外部服務。
         $url = 'https://www.youtube.com/watch?v=' . $videoId;
@@ -311,10 +320,26 @@ class MediaController extends AbstractController
         $publishedAt = $snippet?->getPublishedAt();
         $publishedAt = $publishedAt ? Carbon::parse($publishedAt) : null;
 
+        // getUrlInfo 沒給頻道時退回 YouTube Data API 的 snippet。這一次呼叫本來就
+        // 為了 description 與發布時間而發，所以不會多耗配額；同理它也是 best-effort，
+        // 兩邊都拿不到就讓 source 留 null——沒有頻道 ID 就湊不出能同步的 RSS 來源，
+        // 硬建一列只會製造對不上任何頻道的孤兒資料。
+        if ($channelId === '') {
+            $channelId = (string) ($snippet?->getChannelId() ?? '');
+        }
+
+        if ($channelTitle === '') {
+            $channelTitle = (string) ($snippet?->getChannelTitle() ?? '');
+        }
+
+        $source = $channelId === ''
+            ? null
+            : $sourceService->firstOrCreateYoutubeChannel($channelId, $channelTitle);
+
         return Media::create([
             'type'         => Media::TYPE_YOUTUBE,
             'resource_id'  => $resourceId,
-            'source_id'    => null,
+            'source_id'    => $source?->getKey(),
             'title'        => $title,
             'description'  => $description,
             'duration'     => $duration,

@@ -33,6 +33,19 @@ class StorageService
     }
 
     /**
+     * 檔案是否已存在於 S3。
+     *
+     * 只發一次 HEAD，不取回內容——呼叫端要的是「該不該上傳」這個布林，
+     * 為此把物件抓下來等於把要省的頻寬又付一次。
+     *
+     * @param string $path the path to the file on S3
+     */
+    public function exists(string $path): bool
+    {
+        return Storage::disk('s3')->exists($path);
+    }
+
+    /**
      * Generate a temporary shared link for the file.
      *
      * @param string $path the path to the file on S3

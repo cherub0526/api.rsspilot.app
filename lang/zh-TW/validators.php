@@ -17,6 +17,11 @@ return [
             'provider_not_configured' => '該登入方式尚未設定。',
             'exchange_failed'         => '授權驗證失敗，請重新登入。',
         ],
+        'api_keys' => [
+            'plan_required' => '串接 AI 工具需要 Pro 以上的方案。',
+            'name'          => 'API key 名稱必填，且不可超過 60 個字。',
+            'limit'         => '最多只能建立 :max 把 API key，請先刪除不用的。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自訂 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
@@ -27,12 +32,23 @@ return [
             'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
         ],
+        'download' => [
+            'plan_required'  => '下載摘要與字幕需要付費方案。',
+            'invalid_format' => '不支援的下載格式。',
+            'not_found'      => '沒有可下載的內容。',
+        ],
         'chat' => [
             'chat_limit_reached' => '已達到方案允許的每日 AI 對話上限。',
         ],
-        'rss' => [
-            'invalid_url' => '無效的 RSS 網址。',
-            'not_found'   => '找不到指定的 RSS。',
+        'mindmap' => [
+            'mindmap_limit_reached' => '已達到方案允許的每日心智圖產生上限。',
+            'summary_required'      => '摘要完成後才能產生心智圖。',
+        ],
+        'thumbnails' => [
+            'plan_required'     => '播放器截圖是 Advance 方案的功能。',
+            'checksum_mismatch' => '截圖的 checksum 與檔案內容不符。',
+            'not_found'         => '找不到指定秒數的截圖，請重新截圖後再送出。',
+            'out_of_range'      => '截圖的秒數超出影片長度。',
         ],
         'sources' => [
             'invalid_url'           => '無效的 YouTube 網址。',
@@ -49,6 +65,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => '交易狀態未完成。',
+                'ip_not_allowed'            => '來源 IP 不在允許清單內。',
             ],
         ],
     ],
@@ -64,7 +81,7 @@ return [
             'required' => '電子郵件為必填。',
             'email'    => '電子郵件格式無效。',
             'max'      => '電子郵件長度不能超過 255 個字元。',
-                    'unique'   => '此電子郵件已被註冊。',
+            'unique'   => '此電子郵件已被註冊。',
         ],
         'code' => [
             'required' => '請輸入驗證碼。',
@@ -103,6 +120,21 @@ return [
             'content' => [
                 'required' => '內容為必填。',
                 'string'   => '內容必須是字串。',
+            ],
+            'images' => [
+                'array'  => '截圖必須是陣列。',
+                'max'    => '一則訊息最多只能附上 4 張截圖。',
+                'second' => [
+                    'required' => '截圖的秒數為必填。',
+                    'integer'  => '截圖的秒數必須是整數。',
+                    'min'      => '截圖的秒數不能小於 0。',
+                    'max'      => '截圖的秒數超出可處理的範圍。',
+                ],
+                'checksum' => [
+                    'required' => '截圖的 checksum 為必填。',
+                    'string'   => '截圖的 checksum 必須是字串。',
+                    'regex'    => '截圖的 checksum 必須是 64 位小寫十六進位的 SHA-256。',
+                ],
             ],
         ],
     ],
@@ -158,16 +190,6 @@ return [
             'string'   => '導轉網址必須是字串。',
             'url'      => '導轉網址格式不正確。',
             'max'      => '導轉網址不得超過 :max 個字元。',
-        ],
-    ],
-    'rss' => [
-        'type' => [
-            'required' => '類型為必填。',
-            'string'   => '類型必須是字串。',
-            'in'       => '類型無效。',
-        ],
-        'url' => [
-            'required' => 'URL 為必填。',
         ],
     ],
     'source' => [
@@ -314,6 +336,25 @@ return [
                     'array'    => 'text.long_summary.keywords 必須是陣列。',
                 ],
             ],
+        ],
+    ],
+    'thumbnail' => [
+        'file' => [
+            'required'  => '請提供截圖檔案。',
+            'file'      => '截圖必須是檔案。',
+            'mimetypes' => '截圖必須是 JPEG 圖片。',
+            'max'       => '截圖不能超過 2 MB。',
+        ],
+        'second' => [
+            'required' => '秒數為必填。',
+            'integer'  => '秒數必須是整數。',
+            'min'      => '秒數不能小於 0。',
+            'max'      => '秒數超出可處理的範圍。',
+        ],
+        'checksum' => [
+            'required' => '請提供截圖的 checksum。',
+            'string'   => 'checksum 必須是字串。',
+            'regex'    => 'checksum 必須是 64 位小寫十六進位的 SHA-256。',
         ],
     ],
 ];

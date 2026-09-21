@@ -20,10 +20,19 @@ use OpenApi\Attributes as OAT;
             description: 'Daily AI chat question limit. 0 means unlimited.',
             example: 50
         ),
+        new OAT\Property(
+            property: 'mindmap_limit',
+            type: 'integer',
+            description: 'Daily mind map generation limit. 0 means unlimited.',
+            example: 50
+        ),
         new OAT\Property(property: 'download_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'agent_enabled', type: 'boolean', example: false),
+        new OAT\Property(property: 'thinking_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'mcp_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'advanced_model_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'custom_summary_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'screenshot_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'ai_quality', type: 'string', enum: ['pro', 'advanced', 'deep'], example: 'advanced'),
         new OAT\Property(
             property: 'prices',

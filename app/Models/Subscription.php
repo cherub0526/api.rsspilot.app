@@ -34,6 +34,15 @@ class Subscription extends Model
 
     public const string PAYMENT_METHOD_TRIAL = 'trial';
 
+    /**
+     * 首月免費的長度（月）。
+     *
+     * 一個數字有三個落點，改的時候要一起動：Paddle 是設在 price 的
+     * `trial_period`（`paddle:sync`）、Stripe 是結帳時的 `trial_end`、我們自己的
+     * `next_date` 則照金流商回報的日期寫入。
+     */
+    public const int FREE_MONTHS = 1;
+
     public static array $statusMaps = [
         self::STATUS_PAYING   => '付款中',
         self::STATUS_TRIAL    => '試用中',

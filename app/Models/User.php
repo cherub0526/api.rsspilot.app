@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Utils\Const\ISO6391;
 use Hyperf\Database\Model\Builder;
+use Hypervel\Sanctum\HasApiTokens;
 use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
@@ -19,17 +21,24 @@ use Hypervel\Foundation\Auth\User as Authenticatable;
  * @property null|string $account
  * @property string $name
  * @property null|string $email
- * @property null|\Carbon\Carbon $email_verified_at
+ * @property null|Carbon $email_verified_at
  * @property string $password
  * @property null|string $social_type
  * @property null|string $provider_id
  * @property null|string $avatar
- * @property \Carbon\Carbon $created_at
- * @property \Carbon\Carbon $updated_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 class User extends Authenticatable
 {
     use HasUlids;
+
+    /**
+     * 使用者自己產生的 API key（personal access token）。
+     *
+     * 只給 /mcp 那條路用；自家前端走的是 jwt guard，兩者刻意分開。
+     */
+    use HasApiTokens;
 
     use HasFactory;
 
@@ -80,16 +89,6 @@ class User extends Authenticatable
     public function customPrompts(): HasMany
     {
         return $this->hasMany(CustomPrompt::class, 'user_id', 'id');
-    }
-
-    public function rss()
-    {
-        return $this->belongsToMany(
-            Rss::class,
-            'userables',
-            'user_id',
-            'rss_id'
-        )->wherePivot('media_id', null)->withTimestamps();
     }
 
     public function sources(): UlidBelongsToMany
@@ -171,6 +170,21 @@ class User extends Authenticatable
         $name = ISO6391::getNameByCode($code);
 
         return is_string($name) ? $name : $code;
+    }
+
+    /**
+     * AI 回應語言的「代碼」（如 ja、zh-TW），供快取鍵與 API 回應使用。
+     *
+     * 與 aiLanguageName() 讀同一個設定值，差別只在給誰看：prompt 要的是語言名稱，
+     * 資料庫欄位與前端比對要的是代碼。兩者必須同源，否則會出現「用日文產生、
+     * 存成英文」這種對不起來的資料。
+     */
+    public function aiLanguageCode(): string
+    {
+        $data = $this->setting()->first()?->data ?? [];
+        $code = $data['ai']['language'] ?? self::DEFAULT_AI_LANGUAGE;
+
+        return is_string($code) && $code !== '' ? $code : self::DEFAULT_AI_LANGUAGE;
     }
 
     /**

@@ -9,6 +9,7 @@ use Hypervel\Bus\UniqueLock;
 use Hypervel\Console\Command;
 use App\Jobs\Media\VideoTranscriberStartJob;
 use Hypervel\Cache\Contracts\Factory as CacheFactory;
+use App\Services\VideoTranscriber\VideoTranscriberClient;
 
 class Start extends Command
 {
@@ -27,8 +28,31 @@ class Start extends Command
     /**
      * Execute the console command.
      */
-    public function handle(): void
+    public function handle(VideoTranscriberClient $client): int
     {
+        // 派工之前先確認那組共用帳號還登得進去。帳號被踢掉時（只允許單一裝置
+        // 登入，見 docs/lore/transcription/pitfalls.md）這裡不擋的話，指令會照樣
+        // 對每一筆 media 印出 "Starting transcription"、退出碼 0，而真正的失敗
+        // 要到 worker 才發生——每一筆各自撞 auth、退避 300 秒重試到時限為止，
+        // 指令這一側完全看不出來。
+        //
+        // ensureAuthenticated() 驗不過就會自己重新登入一次（跟
+        // videotranscriber:login 同一條路），所以順帶把過期的 token 續上。
+        if (!$user = $client->ensureAuthenticated()) {
+            $this->error(
+                'videotranscriber.ai authentication failed. '
+                . 'Run `videotranscriber:login` and check services.videotranscriber credentials.'
+            );
+
+            return 1;
+        }
+
+        $this->line(sprintf(
+            'Authenticated as %s <%s>.',
+            $user['user_name'] ?? '?',
+            $user['email'] ?? '?'
+        ));
+
         $query = Media::query();
 
         // Naming a media is an explicit manual override, so it is dispatched
@@ -52,7 +76,7 @@ class Start extends Command
                 $this->maxConcurrent()
             ));
 
-            return;
+            return 0;
         }
 
         $dispatched = 0;
@@ -88,6 +112,8 @@ class Start extends Command
                 $this->maxConcurrent()
             ));
         }
+
+        return 0;
     }
 
     /**

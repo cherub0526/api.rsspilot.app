@@ -23,6 +23,7 @@ class TemplateFactory
         'analysis'            => AnalysisTemplate::class,
         'customPrompt'        => CustomPromptTemplate::class,
         'follow_up_questions' => FollowUpQuestionsTemplate::class,
+        'mindmap'             => MindMapTemplate::class,
     ];
 
     /**

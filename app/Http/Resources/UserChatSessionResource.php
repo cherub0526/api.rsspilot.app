@@ -22,7 +22,7 @@ class UserChatSessionResource extends JsonResource
             'updated_at'    => $this->resource->getAttribute('updated_at')?->toIso8601String(),
             'message_count' => (int) $this->resource->messages_count,
             'media'         => $this->whenLoaded('media', fn () => new MediaResource($this->resource->media)),
-            'last_messages' => ChatMessageResource::collection($lastMessages),
+            'last_messages' => ChatMessageResource::forSession($this->resource, $lastMessages),
         ];
     }
 }

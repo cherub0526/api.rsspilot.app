@@ -15,6 +15,9 @@ class Config extends Model
     /** class → OpenRouter 模型的對照表，見 App\Utils\AI\OpenRouterModels */
     public const KEY_OPENROUTER_MODELS = 'openrouter_models';
 
+    /** class → OpenRouter 路由參數的對照表，見 App\Utils\AI\OpenRouterRouting */
+    public const KEY_OPENROUTER_ROUTING = 'openrouter_routing';
+
     protected ?string $table = 'configs';
 
     /**

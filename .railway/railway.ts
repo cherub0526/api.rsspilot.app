@@ -44,8 +44,29 @@ const build = {
 
 const ARTISAN = "php /var/www/artisan";
 
-/** worker 共用的旗標，差別只在 --queue 與 --timeout。 */
-const WORKER_FLAGS = "--sleep=3 --max-time=3600 --memory=256";
+/**
+ * worker 共用的旗標，差別只在 --queue 與 --timeout。
+ *
+ * **刻意沒有 `--max-time`**（2026-09-18 拿掉）。它原本是「每小時輪替一次 worker，
+ * 不要等到撞記憶體上限」，但在 hypervel/framework v0.3.17 上它不會輪替，會讓
+ * worker 變成活死人：
+ *
+ *   Worker::stop() 只 dispatch 一個事件然後 `return $status`，沒有 exit；而
+ *   monitorTimeoutJobs() 用 `Timer::tick` 註冊的 Swoole timer 從頭到尾沒有被
+ *   clear（`monitorId` 全 class 只有寫入、沒有清除）。daemon 迴圈 return 之後
+ *   event loop 還有那個 timer，**process 因此不會結束**。
+ *
+ * 後果是 PID 1 還活著 → Railway 判定服務正常 → restartPolicy 永遠不觸發 →
+ * 容器顯示 Online，但從第 3601 秒起一筆 job 都不再領。實測 2026-09-18：兩支
+ * worker 都已經這樣「上線但不工作」約 29 小時，videotranscriber.start 積了 26 筆
+ * 且 attempts 全是 0，容器只印過一行 Starting Container，20 秒內 CPU 用量是 0
+ * （同期 scheduler 是 +10 ticks，對照組正常）。
+ *
+ * 拿掉之後 worker 會一直跑下去。殘留風險是記憶體超過 `--memory` 時走的是同一條
+ * stop() 路徑，一樣會變活死人——但那從「每小時一次」變成「久久一次」。根治要修
+ * 上游的 stop()（退出前 Timer::clear 並真的結束 process）。
+ */
+const WORKER_FLAGS = "--sleep=3 --memory=256";
 
 /**
  * 四個 service 與 Postgres / Redis 必須同區，否則私有網路連不過去。
@@ -71,17 +92,49 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 102 個破壞性變更。IaC 的 omit=delete 對變數同樣適用。
  *
  * 新增變數時要同步加進這裡，否則下一次 apply 會把它刪掉。
+ *
+ * APP_KEY 與 APP_URL 是後來補上的——兩者缺席時都不會有明確的錯誤訊息：
+ *   - 少了 APP_KEY，config('app.key') 是 null，而 UrlGenerator::getSignedKey()
+ *     宣告回傳 string，忘記密碼那支端點組簽章連結時直接 TypeError → 500。
+ *   - 少了 APP_URL，config('app.url') 退回 http://localhost，信件裡的圖片就
+ *     指向收件人自己的電腦，靜靜破圖。
+ * 兩者都是「設定沒設」而不是程式壞掉，所以不會出現在任何測試裡。
+ *
+ * 三個 PADDLE_* 是同樣的情況：Paddle 只留給既有訂閱、沒有人在動它，所以它們
+ * 一直不在這份清單裡，plan 每次都提議把四個 service 上的那三個變數刪掉。真的
+ * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
+ * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
+ *
+ * `DB_QUEUE_RETRY_AFTER` 同樣是後來補的（2026-09-18）。它決定佇列多久之後判定
+ * 「這個 job 沒人在跑」並重新發給別人，必須大於所有 worker 的 `--timeout`
+ * （目前最大 300，所以設 360）。沒設過的那段期間它是 config 的預設值 90，比兩支
+ * worker 的 timeout 都小，實測造成 26 筆 job 以 MaxAttemptsExceededException 收場。
+ * 它不在任何旗標旁邊，是最容易被漏掉的一個——被 IaC 刪掉的話會安靜地退回 90，
+ * 症狀看起來像外部服務一直失敗。
+ *
+ * 六個 AWS_* 也是（2026-09-18 補）：S3 是在這個檔案寫完之後才接上的，變數直接
+ * 開在面板上，所以 plan 提議把四個 service 上的它們全部刪掉，共 24 個破壞性變更。
+ * 刪掉的後果是播放器截圖、頭像上傳與 VideoTranscriberArchiveJob 的歸檔一起壞掉，
+ * 而且症狀會是「S3 認證失敗」，看起來像金鑰過期而不是設定被刪。
+ * 補進清單前已比對過四個 service 的值完全相同（逐一比 sha256），所以 worker 從
+ * 自己的值改成參照 api 的同名變數不會變動任何實際設定。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
-    "APP_LOCALE", "APP_NAME", "BROADCAST_CONNECTION", "CACHE_DRIVER",
+    "APP_KEY", "APP_LOCALE", "APP_NAME", "APP_URL",
+    "AWS_ACCESS_KEY_ID", "AWS_BUCKET", "AWS_DEFAULT_REGION", "AWS_ENDPOINT",
+    "AWS_SECRET_ACCESS_KEY", "AWS_USE_PATH_STYLE_ENDPOINT",
+    "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
-    "DB_USERNAME", "GITHUB_TOKEN", "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
+    "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+    "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
-    "PADDLE_SANDBOX", "QUEUE_CONNECTION", "RAPID_API_KEY", "REDIS_AUTH",
-    "REDIS_DB", "REDIS_HOST", "REDIS_PORT", "SERVER_WORKERS_NUMBER",
+    "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_SANDBOX",
+    "PADDLE_WEBHOOK_SECRET_KEY", "QUEUE_CONNECTION", "RAPID_API_KEY",
+    "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
+    "SERVER_WORKERS_NUMBER",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
     "SESSION_PATH", "STRIPE_API_KEY", "STRIPE_PUBLISHABLE_KEY",
     "STRIPE_RETURN_URL", "STRIPE_WEBHOOK_SECRET", "VIDEOTRANSCRIBER_EMAIL",
@@ -134,19 +187,34 @@ export default defineRailway((ctx) => {
             region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
-            // staging 開著以省成本；production 一定要關——休眠後的第一個
-            // 請求要等冷啟動，而 Hyperf 開機還要產生 DI proxy，webhook 打
-            // 進來會吃到這段延遲。
+            // 兩個環境都不休眠。
             //
-            // 兩邊都顯式給值而不是省略：不宣告的話 plan 會設成 null，等於
-            // 順手改掉了沒人要求改的行為。
-            // sleepApplication: !isProduction,
-            sleepApplication: true
+            // production 不能休眠的理由很直接：休眠後的第一個請求要等冷啟動，
+            // 而 Hyperf 開機還要產生 DI proxy，webhook 打進來會吃到這段延遲。
+            //
+            // staging 一度開著休眠以省成本，後來收回——省下的錢遠不及它造成的
+            // 誤判。同一個專案裡的 mailpit 就是這樣：它睡著時 SMTP 連不上，
+            // 症狀是「寄信失敗」，跟設定錯誤長得一模一樣，查了才知道只是沒醒。
+            // 測試環境要能被信任，前提是它的行為跟正式環境一致。
+            //
+            // 顯式給值而不是省略：不宣告的話 plan 會設成 null，等於順手改掉了
+            // 沒人要求改的行為。
+            sleepApplication: false
         },
     });
 
     // media.info、media.caption、media.youtube-data-caption 暫停中，
     // 恢復時加回 --queue 清單即可，順序即優先序。
+    //
+    // media.notify 一直都漏掉了：Forge 那邊有 supervisor/media-notify.conf，
+    // Railway 這邊從來沒宣告，所以 DailyDigestJob 派出去之後沒有人在聽——
+    // 靜靜躺在 jobs 表裡，不報錯也不進 failed_jobs（2026-09-18 實測 staging
+    // 有 9 筆最舊 9.7 天）。它每天 09:00 一次派完全部使用者、之後整天閒置，
+    // 放在 worker-fast 不會排擠到轉錄入口。
+    //
+    // media.summary-translation 排在最後：它是摘要完成後的加值翻譯，讓它跟
+    // 轉錄的入口搶 worker 只會延後新影片開工。單次執行是一個 OpenRouter 請求，
+    // 上限就是 Completion 自己的 60 秒 HTTP timeout，塞得進 120 那組。
     const workerFast = service("worker-fast", {
         source,
         env: mirrorOf(api),
@@ -154,17 +222,24 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.start,videotranscriber.fetch' ` +
+                `--queue='videotranscriber.start,videotranscriber.fetch,media.notify,media.summary-translation' ` +
                 `--timeout=120 ${WORKER_FLAGS}`,
-            // 必須是 ALWAYS：worker 因 --max-time 自我了結時退出碼是 0，
-            // ON_FAILURE 不會把它拉起來，service 會顯示部署成功但永久停擺。
+            // 必須是 ALWAYS：worker 自我了結時退出碼是 0，ON_FAILURE 不會把它
+            // 拉起來，service 會顯示部署成功但永久停擺。
+            //
+            // 但這道保險救不了 stop() 那條路徑——process 根本不會退出，也就沒有
+            // 退出碼可言（見 WORKER_FLAGS）。
             region: REGION,
             restartPolicyType: "ALWAYS",
             numReplicas: 1,
         },
     });
 
-    // rss.sync、media.summary 暫停中。
+    // media.summary 暫停中。rss.sync 已隨 RSS 管線一併下架。
+    //
+    // videotranscriber.archive 跟 smart-summary 同放這裡是因為 timeout：它一趟
+    // 要抓七個檔案，其中 mp3 動輒十幾 MB，120 秒那組裝不下。job 內另有 180 秒
+    // 的預算上限，確保單次執行不會逼近 --timeout=300。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -172,7 +247,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",

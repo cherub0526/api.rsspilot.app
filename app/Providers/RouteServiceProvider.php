@@ -34,6 +34,15 @@ class RouteServiceProvider extends BaseServiceProvider
             ]
         );
 
+        // MCP 端點單獨掛在根路徑而不是 /v1 底下：使用者要把這個網址貼進第三方
+        // 工具的設定，`https://api.rsspilot.app/mcp` 比 `/v1/mcp` 好記也好解釋，
+        // 而且它走的是 JSON-RPC，本來就不屬於我們自己那套 REST 的版本線。
+        Route::group(
+            '/mcp',
+            base_path('routes/mcp.php'),
+            ['middleware' => 'api', 'as' => 'mcp']
+        );
+
         Route::group(
             '/',
             base_path('routes/web.php'),

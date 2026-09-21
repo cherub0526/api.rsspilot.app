@@ -26,15 +26,21 @@ class FakeAIProvider implements AIProviderInterface
     /** @var Message[] 收到的訊息，供斷言送出的提示詞 */
     public array $received = [];
 
-    public function __construct(private string $reply = '')
-    {
+    /**
+     * @param null|AssistantMessage $replyMessage 需要帶 metadata / usage 時直接給整個
+     *                                            訊息物件，`$reply` 就會被忽略
+     */
+    public function __construct(
+        private string $reply = '',
+        private ?AssistantMessage $replyMessage = null,
+    ) {
     }
 
     public function chat(Message ...$messages): Message
     {
         $this->received = $messages;
 
-        return new AssistantMessage($this->reply);
+        return $this->replyMessage ?? new AssistantMessage($this->reply);
     }
 
     public function systemPrompt(?string $prompt): AIProviderInterface

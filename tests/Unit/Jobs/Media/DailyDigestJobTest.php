@@ -72,6 +72,56 @@ class DailyDigestJobTest extends TestCase
         );
     }
 
+    /**
+     * 版型與日期原本都寫死繁中，英文使用者收到的是中文信配中文日期。
+     *
+     * 斷言比對 lang/ 裡的字面值而不是 __()：__() 會受 render() 期間設定的語系
+     * 影響，拿它當期望值等於用被測物驗證自己。
+     */
+    public function testRendersTheDigestInTheUsersLocale(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $user->setting()->create(['data' => ['locale' => 'zh-TW']]);
+        $source = $this->subscribe($user, true);
+        $this->mediaFor($user, $source);
+
+        (new DailyDigestJob($user->id, Carbon::today()->toDateString()))->handle();
+
+        Mail::assertSent(DailyDigestMail::class, function (DailyDigestMail $mail) {
+            $html = $mail->render();
+
+            return str_contains($html, '重點摘要')
+                && str_contains($html, '查看完整摘要')
+                && !str_contains($html, 'Key points');
+        });
+    }
+
+    public function testRendersTheDigestInEnglish(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $user->setting()->create(['data' => ['locale' => 'en']]);
+        $source = $this->subscribe($user, true);
+        $this->mediaFor($user, $source);
+
+        (new DailyDigestJob($user->id, Carbon::today()->toDateString()))->handle();
+
+        Mail::assertSent(DailyDigestMail::class, function (DailyDigestMail $mail) {
+            $html = $mail->render();
+
+            return str_contains($html, 'Key points')
+                && str_contains($html, 'Read the full summary')
+                // 日期與相對時間也要跟著換，不能停在中文
+                && str_contains($html, Carbon::now()->locale('en')->isoFormat('dddd, MMMM D, YYYY'))
+                // 退訂那句把連結當參數塞進整句翻譯，要真的輸出成 <a> 而不是被跳脫
+                && str_contains($html, '>Unsubscribe</a>')
+                && !str_contains($html, '重點摘要');
+        });
+    }
+
     public function testSkipsMediaAddedOnAnotherDay(): void
     {
         Mail::fake();
