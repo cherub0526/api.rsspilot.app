@@ -41,11 +41,28 @@ max_price 同一處，改資料不必部署），沒指定時才吃 `ai.chat.rea
 文案，與實際成本刻意不綁定，理由見 `Plan::aiRouting()` 的註解：調成本不該被迫改文案，
 改文案也不該動成本。
 
-`withReasoning` 預設 false，只有 chat 打開。**這是成本決定**：推理 token 按 output
-計價，而每日提問額度承保的月上限是 `chat_limit × 30`（見
-[subscription/business-rules.md](../subscription/business-rules.md)〈方案定價的成本曝險〉）。
-心智圖與摘要沒有地方顯示思考過程，開了就是純粹多付錢。同理 `ai.chat.reasoning_effort`
-預設 `low`——把它調到 `high` 等於直接乘在那個成本天花板上，要調就得回去重算方案定價。
+`withReasoning` 預設 false，而且分兩道判斷：
+
+- **哪條路**：只有 chat 會開。心智圖與摘要沒有地方顯示思考過程，開了就是純粹多付錢
+- **哪個方案**：`plans.thinking_enabled`（目前只有 Advance）。其餘方案與沒有方案的
+  人一律關掉——推理 token 按 output 計價，而每日提問額度承保的月上限是
+  `chat_limit × 30`（見
+  [subscription/business-rules.md](../subscription/business-rules.md)〈方案定價的成本曝險〉），
+  免費方案的成本天花板本來就只有約 $0.6/月
+
+**三個欄位各司其職，不要互相取代**：
+
+| 問題 | 欄位 | 性質 |
+|---|---|---|
+| 能不能思考 | `plans.thinking_enabled` | 權益（定價頁讀它） |
+| 能不能上網查 | `plans.agent_enabled` | 權益（定價頁讀它） |
+| 想多久 | `plans.ai_routing.reasoning.effort` | 成本設定 |
+
+兩個權益目前的值剛好一樣（只有 Advance 開），但**刻意分成兩欄**：它們是兩個能賣的
+東西，哪天想讓 Pro 只有思考、沒有搜尋，改資料就好，不必回來動程式。
+
+`ai_quality`（pro / advanced / deep）不在這張表裡——它是定價頁的行銷文案，與成本和
+權益都刻意不綁定（見 `Plan::aiRouting()` 的註解）。
 
 額度的退還判準看的是**回答**而不是推理：只吐了思考過程就斷掉的話，使用者拿到的是
 一段沒有結論的獨白，那一次要退。上游確實已經收了推理的錢，但那是我們選擇開

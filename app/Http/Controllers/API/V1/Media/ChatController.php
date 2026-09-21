@@ -78,6 +78,11 @@ class ChatController
      * 接收使用者訊息，向 OpenRouter 發送串流請求。
      * 每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線；會思考的模型在回答
      * 之前先送出的推理內容走 ChatReasoningEvent，兩者在前端是不同的片段。
+     *
+     * 思考與上網查資料都是**方案權益**（`plans.thinking_enabled` /
+     * `plans.agent_enabled`），沒開通的人不會被擋下請求——它們是能力不是閘門，
+     * 他照常對話，只是看不到思考過程、模型也查不到摘要以外的東西。無從判斷權益
+     * （沒有方案）時一律關掉，與其他付費功能的預設一致。
      * 回傳時機：完整回應產生後（或發生錯誤時）。
      *
      * @throws InvalidRequestException
@@ -287,15 +292,18 @@ class ChatController
             // 帶使用者進去：對話是 per-user 的產物，吃這個人方案的路由設定。
             // 帶 session 進去：讓同一段對話的每一輪黏在同一家 provider，重送的
             // 摘要與歷史才有機會命中對方的 prompt cache。
-            // 對話是唯一會把思考過程顯示出來的路徑，所以只有這裡開 withReasoning。
-            // 上網查資料另外看方案：plans.agent_enabled（目前只有 Advance）。
+            // 兩個能力各自看方案：思考是 plans.thinking_enabled（Pro 以上），
+            // 上網查資料是 plans.agent_enabled（目前只有 Advance）。心智圖那條路
+            // 兩個都不開——沒有地方顯示過程，開了只是多付錢。
+            $plan = $this->userPlan($request);
+
             $stream = $this->streamer->stream(
                 $template->getSystemPrompt(),
                 $this->buildMessages($history, $userMessage, $currentImages, $imageUrls),
                 $request->user(),
                 (string) $session->getKey(),
-                true,
-                $this->webSearchEnabled($request)
+                (bool) $plan?->getAttribute('thinking_enabled'),
+                (bool) $plan?->getAttribute('agent_enabled')
             );
 
             foreach ($stream as $chunk) {
@@ -833,19 +841,5 @@ class ChatController
             ),
             default => new ChatTokenEvent($chunk->text, $userId, $mediaId),
         };
-    }
-
-    /**
-     * 這位使用者能不能讓模型上網查資料。
-     *
-     * 判準是 plans.agent_enabled，與其他付費功能同一個做法：權益寫在資料上，
-     * 不寫死方案名稱。沒有方案時一併關掉——無從判斷權益的預設是不給。
-     *
-     * 不拋例外而是靜默關閉：這是一個能力，不是一道閘門。沒開通的人照常對話，
-     * 只是模型答不出摘要以外的東西時只能說不知道。
-     */
-    private function webSearchEnabled(Request $request): bool
-    {
-        return (bool) $this->userPlan($request)?->getAttribute('agent_enabled');
     }
 }

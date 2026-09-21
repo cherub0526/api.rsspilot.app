@@ -24,6 +24,7 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 3,
                 'download_enabled'       => false,
                 'agent_enabled'          => false,
+                'thinking_enabled'       => false,
                 'advanced_model_enabled' => false,
                 'custom_summary_enabled' => false,
                 'screenshot_enabled'     => false,
@@ -46,6 +47,7 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 20,
                 'download_enabled'       => true,
                 'agent_enabled'          => false,
+                'thinking_enabled'       => false,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
                 // 截圖只開放給 Advance
@@ -69,6 +71,7 @@ class PlanPriceSeeder extends Seeder
                 'mindmap_limit'          => 50,
                 'download_enabled'       => true,
                 'agent_enabled'          => true,
+                'thinking_enabled'       => true,
                 'advanced_model_enabled' => true,
                 'custom_summary_enabled' => true,
                 'screenshot_enabled'     => true,

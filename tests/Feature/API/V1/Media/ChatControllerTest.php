@@ -78,13 +78,14 @@ class ChatControllerTest extends TestCase
      * 沒有訂閱的人吃的是「月費 0 元」的方案，所以只要建這一個即可。包
      * withoutEvents：Plan / Price 的 observer 會直接打 Stripe API。
      */
-    private function createPlan(bool $agentEnabled): Plan
+    private function createPlan(bool $agentEnabled, bool $thinkingEnabled = true): Plan
     {
-        return Plan::withoutEvents(function () use ($agentEnabled) {
+        return Plan::withoutEvents(function () use ($agentEnabled, $thinkingEnabled) {
             $plan = Plan::factory()->create([
-                'title'         => $agentEnabled ? 'Advance' : 'Free',
-                'agent_enabled' => $agentEnabled,
-                'status'        => Plan::STATUS_ACTIVE,
+                'title'            => $agentEnabled ? 'Advance' : 'Free',
+                'agent_enabled'    => $agentEnabled,
+                'thinking_enabled' => $thinkingEnabled,
+                'status'           => Plan::STATUS_ACTIVE,
             ]);
 
             Price::create([
@@ -571,6 +572,8 @@ class ChatControllerTest extends TestCase
 
         $this->createUserSetting($user);
 
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
+
         Event::fake([ChatTokenEvent::class, ChatReasoningEvent::class, ChatDoneEvent::class]);
 
         $this->fakeThinkingStreamer(
@@ -614,6 +617,7 @@ class ChatControllerTest extends TestCase
 
         $this->createUserSetting($user);
 
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
         $this->fakeThinkingStreamer(ChatChunk::reasoning('嗯……'), '答案');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
@@ -666,6 +670,7 @@ class ChatControllerTest extends TestCase
         $media = Media::factory()->create(['source_id' => $source->id]);
 
         $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false, thinkingEnabled: true);
         $streamer = $this->fakeStreamer('答案');
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
@@ -673,6 +678,48 @@ class ChatControllerTest extends TestCase
         ])->assertStatus(200);
 
         $this->assertTrue($streamer->withReasoning);
+    }
+
+    /**
+     * 8-0-3-1. 思考是 Pro 以上的權益，免費方案不該向上游要推理內容。
+     *
+     * 推理 token 按 output 計價，而免費方案的成本天花板本來就很薄。
+     */
+    public function testStoreDoesNotAskForReasoningOnPlansWithoutIt(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $this->createPlan(agentEnabled: false, thinkingEnabled: false);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withReasoning);
+    }
+
+    /** 沒有方案時一併關掉——無從判斷權益的預設是不給。 */
+    public function testStoreDoesNotAskForReasoningWithoutAPlan(): void
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
+
+        $this->createUserSetting($user);
+        $streamer = $this->fakeStreamer('答案');
+
+        $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [
+            'messages' => [['role' => 'user', 'content' => '問題']],
+        ])->assertStatus(200);
+
+        $this->assertFalse($streamer->withReasoning);
+        $this->assertFalse($streamer->withWebSearch);
     }
 
     /**
@@ -774,6 +821,7 @@ class ChatControllerTest extends TestCase
 
         $this->createUserSetting($user);
 
+        $this->createPlan(agentEnabled: true, thinkingEnabled: true);
         $this->fakeThinkingStreamer(
             ChatChunk::reasoning('要先查一下'),
             ChatChunk::toolCall('call_1', 'web_search', ['search_query' => 'CLSK']),
