@@ -559,6 +559,12 @@ Plan: 2 to add, 6 to change, 102 to destroy
   （`mirrorOf(api)`），兩個 worker 不必各自維護一份。
 - `ENV_KEYS` 是那 51 個變數的名單。**在面板新增變數時要同步加進這份清單**，
   否則下一次 apply 會把它刪掉。
+- **S3 認證是例外**（2026-09-22）：`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、
+  `AWS_DEFAULT_REGION`、`AWS_BUCKET`、`AWS_ENDPOINT` 五個不再 `preserve()`，改由
+  `awsFrom(store)` 參照 Railway Bucket 本身（`bucket.ACCESS_KEY_ID` 等）。要輪替
+  金鑰時在 bucket 上 reset 即可，不必動這個檔案也不必動面板。
+  `AWS_USE_PATH_STYLE_ENDPOINT` 沒有對應的輸出，仍由 `preserve()` 保住；`AWS_URL`
+  與 `CDN_URL` 從來就不在 `ENV_KEYS` 裡，IaC 不管。
 
 這也是為什麼把共用變數搬到專案層 Shared Variables 值得做——名單只要維護
 一份，而且 `ctx.shared.NAME` 可以直接參照。目前是 service 層各存一份。

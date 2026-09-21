@@ -19,8 +19,8 @@
  * 同理不宣告 source 與資料庫資源：service 已經接好 repo，Postgres / Redis
  * 也已存在，讓 IaC 只管理 build 與 deploy 設定是風險最低的起點。
  */
-import {defineRailway, github, preserve, project, service} from "railway/iac";
-import type {VariableValue} from "railway/iac";
+import {bucket, defineRailway, github, preserve, project, ref, service} from "railway/iac";
+import type {BucketNode, VariableValue} from "railway/iac";
 
 /**
  * 限縮 omit=delete 的作用域，只涵蓋本檔宣告的資源。
@@ -118,6 +118,10 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 而且症狀會是「S3 認證失敗」，看起來像金鑰過期而不是設定被刪。
  * 補進清單前已比對過四個 service 的值完全相同（逐一比 sha256），所以 worker 從
  * 自己的值改成參照 api 的同名變數不會變動任何實際設定。
+ *
+ * 其中五個在 2026-09-22 之後由 `awsFrom()` 覆蓋成 bucket 的 reference，留在這份
+ * 清單裡仍有作用：`AWS_USE_PATH_STYLE_ENDPOINT` 要靠它保住現值，兩個 worker 也
+ * 要靠它從 api 鏡射過去。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
@@ -155,6 +159,39 @@ const mirrorOf = (
 ): Record<string, VariableValue> =>
     Object.fromEntries(ENV_KEYS.map((k) => [k, from.env[k]]));
 
+/**
+ * S3 認證改為直接參照 Railway Bucket，不再在面板上另存一份（2026-09-22）。
+ *
+ * 這五個值原本是從 `railway bucket credentials` 複製出來、手動貼進 Shared
+ * Variables 的。複製出來的那一刻它就跟來源脫鉤了：在面板上按下 reset
+ * credentials、或把 bucket 換成另一個，面板上的舊金鑰不會跟著變，只會開始回
+ * 403——而 `config/filesystems.php` 的 s3 disk 設了 `'throw' => true`，症狀是
+ * 上傳直接拋例外，看起來像金鑰過期而不是設定沒同步。
+ *
+ * 改成 reference 之後 Railway 在部署時才解析，輪替金鑰不必再動這個檔案，也
+ * 不必動面板。
+ *
+ * 左邊是 Laravel 在 `config/filesystems.php` 讀的名字，右邊是 bucket 對外輸出
+ * 的名字，兩邊不同名所以不能省略這張對照表。
+ *
+ * **`AWS_USE_PATH_STYLE_ENDPOINT` 不在這裡**：bucket 沒有對應的輸出，它仍然由
+ * `preserved()` 保住面板上的現值。`AWS_URL` 與 `CDN_URL` 同理，而且它們從一開始
+ * 就不在 ENV_KEYS 裡，IaC 不管。
+ */
+const AWS_FROM_BUCKET: Record<string, string> = {
+    AWS_ACCESS_KEY_ID: "ACCESS_KEY_ID",
+    AWS_SECRET_ACCESS_KEY: "SECRET_ACCESS_KEY",
+    AWS_DEFAULT_REGION: "REGION",
+    AWS_BUCKET: "BUCKET",
+    AWS_ENDPOINT: "ENDPOINT",
+};
+
+/** 展開在 `preserved()` 之後，覆蓋掉同名的那幾個 preserve()。 */
+const awsFrom = (store: BucketNode): Record<string, VariableValue> =>
+    Object.fromEntries(
+        Object.entries(AWS_FROM_BUCKET).map(([key, output]) => [key, ref(store, output)]),
+    );
+
 export default defineRailway((ctx) => {
     // 同一份檔案會被套用到每個 environment，plan 是對「當下 link 的那個」
     // 做 diff。凡是兩邊該不一樣的東西都必須在這裡分岔，寫死等於把 staging
@@ -170,9 +207,24 @@ export default defineRailway((ctx) => {
     const source = github("cherub0526/api.rsspilot.app", {
         branch: isProduction ? "main" : "develop",
     });
+    /**
+     * bucket 早就存在（staging 實測 42 個物件 / 133.9 MB），這裡只是把它納入宣告，
+     * 好讓下面的 ref() 有東西可以指——plan 顯示 0 to add，沒有要新建。
+     *
+     * 套用到新環境前先確認那邊也有同名 bucket：沒有的話 apply 會照這份宣告建一個
+     * 空的，然後把 AWS_* 指過去，症狀是「檔案全部不見了」而不是錯誤訊息。
+     *
+     * 名稱必須跟 Railway 上的一致（`bucket`）——資源是以名稱配對的，改名等同於
+     * 「刪掉舊的、建一個新的」，而 bucket 一旦刪掉，裡面的物件跟著沒了。
+     *
+     * region 顯式寫成建立當時的 `sin`。它在建立後不可變更，寫對的值是為了讓
+     * plan 不要把它當成待修改的欄位；寫錯或省略都只會讓 plan 噪音變多。
+     */
+    const store = bucket("bucket", {region: "sin"});
+
     const api = service("api", {
         source,
-        env: preserved(),
+        env: {...preserved(), ...awsFrom(store)},
         build,
         deploy: {
             startCommand: `${ARTISAN} start`,
@@ -262,7 +314,7 @@ export default defineRailway((ctx) => {
     // 改名等同於「刪掉舊的、建一個新的」。
     const scheduler = service("scheduler", {
         source,
-        env: preserved(),
+        env: {...preserved(), ...awsFrom(store)},
         build,
         deploy: {
             startCommand: `${ARTISAN} schedule:run`,
@@ -275,6 +327,6 @@ export default defineRailway((ctx) => {
     // ctx.projectName 的型別是 string | undefined，必須給 fallback。
     // plan 是對「已 link 的環境」做 diff，名稱不會用來配對既有專案。
     return project(ctx.projectName ?? "api.rsspilot.app", {
-        resources: [api, workerFast, workerSlow, scheduler],
+        resources: [store, api, workerFast, workerSlow, scheduler],
     });
 });
