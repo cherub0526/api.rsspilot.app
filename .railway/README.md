@@ -553,10 +553,13 @@ Plan: 2 to add, 6 to change, 102 to destroy
 
 ### 現行做法
 
-- **既有 service**（`api`、`scheduler`）用 `preserve()`：保留 Railway 上的
-  現值，值不進 repo。
-- **新建的 worker** 沒有現值可保留，改為參照 `api` 的同名變數
-  （`mirrorOf(api)`），兩個 worker 不必各自維護一份。
+- **只有 `api` 用 `preserve()`**：保留 Railway 上的現值，值不進 repo。它是
+  唯一一份來源。
+- **其餘三個（`worker-fast`、`worker-slow`、`scheduler`）用 `mirrorOf(api)`**，
+  全部參照 `api` 的同名變數，不各自維護一份。scheduler 是 2026-09-22 從
+  `preserve()` 改過來的；切換前在容器內逐一比過 sha256，66 個值裡 64 個相同，
+  另外兩個（`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`）在 scheduler 上原本
+  沒設，所以切換只是補上，沒有覆寫任何既有值。
 - `ENV_KEYS` 是那 51 個變數的名單。**在面板新增變數時要同步加進這份清單**，
   否則下一次 apply 會把它刪掉。
 - **S3 認證是例外**（2026-09-22）：`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、

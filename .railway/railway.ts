@@ -151,8 +151,16 @@ const preserved = (): Record<string, VariableValue> =>
     Object.fromEntries(ENV_KEYS.map((k) => [k, preserve()]));
 
 /**
- * 新建的 worker 用：沒有現值可保留，改為參照 api service 的同名變數。
- * 這樣兩個 worker 不必各自維護一份，也不必把值寫進 repo。
+ * 兩個 worker 與 scheduler 用：全部參照 api service 的同名變數，不各自存一份。
+ *
+ * worker 是新建的、本來就沒有現值可保留；scheduler 2026-09-22 從 `preserved()`
+ * 改過來——手貼四份必然漂移，而漂移的症狀是「只有某一個 service 壞掉」，最難查。
+ *
+ * 切換前逐一比對過 api 與 scheduler 的 66 個值（在容器內比 sha256，不印出值）：
+ * 64 個完全相同，只有 `GOOGLE_CLIENT_ID` 與 `GOOGLE_CLIENT_SECRET` 在 scheduler
+ * 上根本沒設。也就是說這次切換沒有覆寫掉任何既有值，只補上那兩個。
+ *
+ * AWS_* 因此是兩層參照：worker/scheduler → api → bucket。Railway 會遞迴解析。
  */
 const mirrorOf = (
     from: { env: Record<string, VariableValue> },
@@ -314,7 +322,7 @@ export default defineRailway((ctx) => {
     // 改名等同於「刪掉舊的、建一個新的」。
     const scheduler = service("scheduler", {
         source,
-        env: {...preserved(), ...awsFrom(store)},
+        env: mirrorOf(api),
         build,
         deploy: {
             startCommand: `${ARTISAN} schedule:run`,
