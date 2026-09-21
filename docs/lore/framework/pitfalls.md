@@ -5,6 +5,33 @@ kind: pitfalls
 
 # framework — Pitfalls
 
+## preg 的 `\R` 沒帶 `u` 會把中文從中間切開
+
+`code:` `app/Services/McpService.php` → `splitSections()` · `updated:` `2026-09-21` · `status:` `active`
+
+`preg_split('/\R/', $text)` 看起來只是「依換行切開」，但**沒有 `u` 修飾符時 PCRE 是
+位元組層級比對**，而 `\R` 的定義包含 Unicode 的 NEL（U+0085）——在非 UTF 模式下，
+那就是單一位元組 `0x85`。
+
+中文的 UTF-8 編碼裡到處都是這個位元組：
+
+| 字 | UTF-8 | 會被切開嗎 |
+|---|---|---|
+| 內 | `E5 85 A7` | 會 |
+| 節 | `E7 AF 80` | 不會 |
+| 學 | `E5 AD B8` | 不會 |
+
+切開之後字串變成無效的 UTF-8，後果是 **`json_encode()` 回 `false`**。如果呼叫端寫的是
+`(string) json_encode(...)`，那個 false 會變成空字串——沒有例外、沒有 log，API 就只是
+回了一個空的結果。實際發作時看起來像「這個端點壞了但不知道為什麼」。
+
+兩件事一起做才安全：
+
+1. 處理可能含非 ASCII 的文字時，`preg_*` 一律帶 `u`
+2. `json_encode()` 的失敗不要用 `(string)` 吞掉，至少 `JSON_THROW_ON_ERROR`
+
+**英文測資測不出來**。這個 bug 是用中文章節標題的測資才浮現的。
+
 ## 讀 null 的屬性不是 warning，是 500
 
 `code:` `vendor/hypervel/foundation/src/ConfigProvider.php` · `code:` `vendor/hyperf/exception-handler/src/Listener/ErrorExceptionHandler.php` · `updated:` `2026-08-14` · `status:` `active`
