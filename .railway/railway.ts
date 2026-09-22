@@ -105,6 +105,13 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
  * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
  *
+ * `PADDLE_WEBHOOK_IP_ALLOWLIST` 與 `PADDLE_WEBHOOK_TRUSTED_PROXY` 是 2026-09-22
+ * 切 live 時補的，同樣直接開在面板上，所以也要登記進來才不會被 plan 刪掉。它們
+ * **必須成對存在**：這個服務跑在 Railway 的反向代理後面，`remote_addr` 看到的是
+ * 代理而不是 Paddle，只留下 IP_ALLOWLIST 會把每一則 webhook 都擋掉，症狀是「付款
+ * 成功但訂閱沒生效」。兩個都被刪掉則是靜靜地退回「不檢查來源 IP」，見
+ * `PaddleController::assertAllowedIp()`。
+ *
  * `DB_QUEUE_RETRY_AFTER` 同樣是後來補的（2026-09-18）。它決定佇列多久之後判定
  * 「這個 job 沒人在跑」並重新發給別人，必須大於所有 worker 的 `--timeout`
  * （目前最大 300，所以設 360）。沒設過的那段期間它是 config 的預設值 90，比兩支
@@ -136,7 +143,8 @@ const ENV_KEYS = [
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
     "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_SANDBOX",
-    "PADDLE_WEBHOOK_SECRET_KEY", "QUEUE_CONNECTION", "RAPID_API_KEY",
+    "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
+    "PADDLE_WEBHOOK_TRUSTED_PROXY", "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
     "SERVER_WORKERS_NUMBER",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
