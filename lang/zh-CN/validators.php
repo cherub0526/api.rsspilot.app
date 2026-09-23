@@ -28,6 +28,7 @@ return [
         ],
         'media' => [
             'not_found'           => '找不到指定的媒体。',
+            'cancel_unavailable'  => '找不到此订阅在支付服务商的记录，请联系客服处理。',
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',

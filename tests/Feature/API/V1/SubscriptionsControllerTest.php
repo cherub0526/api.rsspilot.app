@@ -584,6 +584,68 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * 系統贈送的試用訂閱沒經過金流商，取消只在本地記錄。
+     *
+     * 修正前它會掉進 destroy() 的 match default 走 Paddle 分支，拋出
+     * "Attempt to read property paddle_id on null"。
+     */
+    public function testDestroyCancelsAGiftedTrialLocally()
+    {
+        $user = $this->fakeLogin();
+
+        $subscription = Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'next_date'      => now()->addDays(7),
+        ]);
+
+        $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+            ->assertStatus(200);
+
+        $this->assertNotNull($subscription->fresh()->cancellation_date);
+        // at_period_end：權限不能被提早收回
+        $this->assertSame(Subscription::STATUS_TRIAL, $subscription->fresh()->status);
+    }
+
+    /**
+     * 金流型訂閱卻連不到金流商的訂閱：回 422 而不是 500，也**不能**記成已取消——
+     * 金流商那邊若其實仍在扣款，顯示「已取消」就是之後才爆的客訴。
+     */
+    public function testDestroyRefusesAProviderSubscriptionWithoutAProviderLink()
+    {
+        $user = $this->fakeLogin();
+
+        foreach ([
+            Subscription::PAYMENT_METHOD_PADDLE,
+            Subscription::PAYMENT_METHOD_STRIPE,
+            Subscription::PAYMENT_METHOD_CREEM,
+        ] as $method) {
+            Subscription::query()->where('user_id', $user->id)->forceDelete();
+
+            $subscription = Subscription::factory()->create([
+                'user_id'        => $user->id,
+                'plan_id'        => $this->basicPlan->id,
+                'price_id'       => $this->basicMonthlyPrice->id,
+                'payment_method' => $method,
+                'status'         => Subscription::STATUS_ACTIVE,
+                'next_date'      => now()->addMonth(),
+            ]);
+
+            $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+                ->assertStatus(422)
+                ->assertJsonPath(
+                    'messages.subscription.0',
+                    __('validators.controllers.subscription.cancel_unavailable')
+                );
+
+            $this->assertNull($subscription->fresh()->cancellation_date, "{$method} 不該被記成已取消");
+        }
+    }
+
+    /**
      * Only the reachable-without-a-live-Stripe-call surface is covered here.
      * StripeSubscriptionService::retrieveCheckoutSession() always constructs
      * a real Stripe client, so the "complete" success path can't be

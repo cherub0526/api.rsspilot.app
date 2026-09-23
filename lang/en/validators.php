@@ -28,6 +28,7 @@ return [
         ],
         'media' => [
             'not_found'           => 'Media not found.',
+            'cancel_unavailable'  => 'We could not find this subscription with the payment provider. Please contact support.',
             'caption_not_found'   => 'Caption not found.',
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
