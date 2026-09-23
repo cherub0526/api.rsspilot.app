@@ -16,6 +16,7 @@ use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
+use App\Services\CreemSubscriptionService;
 use App\Exceptions\InvalidRequestException;
 use App\Services\PaddleSubscriptionService;
 use App\Services\StripeSubscriptionService;
@@ -125,9 +126,9 @@ class SubscriptionsController extends AbstractController
                     ),
                     new OAT\Property(
                         property: 'paymentMethod',
-                        description: 'Payment gateway (stripe or paddle, defaults to paddle)',
+                        description: 'Payment gateway. Defaults to PAYMENT_DEFAULT_PROVIDER.',
                         type: 'string',
-                        enum: ['stripe', 'paddle'],
+                        enum: ['stripe', 'paddle', 'creem'],
                         example: 'paddle'
                     ),
                 ]
@@ -187,9 +188,14 @@ class SubscriptionsController extends AbstractController
             );
         }
 
-        // 預設走 Paddle。Stripe 仍然收：既有訂閱的取消與 webhook 都還依
-        // subscription.payment_method 分流，只是新的結帳不再導向它。
-        $paymentMethod = $params['paymentMethod'] ?? Subscription::PAYMENT_METHOD_PADDLE;
+        // 三條金流並存，用參數切換：
+        //
+        // 1. 請求帶 `paymentMethod` → 用它（前端可針對特定使用者或 A/B 指定）
+        // 2. 沒帶 → 用 env 的 PAYMENT_DEFAULT_PROVIDER
+        //
+        // 預設放在 env 而不是寫死，是為了讓「整站換金流」變成改一個環境變數＋重啟，
+        // 不必動前端也不必重新部署——Paddle 退件那次的教訓是，這個開關遲早要用。
+        $paymentMethod = $params['paymentMethod'] ?? self::defaultPaymentMethod();
 
         $subscription = $request->user()->subscriptions()->create([
             'plan_id'        => $plan->id,
@@ -198,21 +204,12 @@ class SubscriptionsController extends AbstractController
             'status'         => Subscription::STATUS_PAYING,
         ]);
 
-        if ($paymentMethod === Subscription::PAYMENT_METHOD_STRIPE) {
-            $data = (new StripeSubscriptionService())->createCheckout(
-                $request->user(),
-                $plan,
-                $price,
-                $subscription
-            );
-        } else {
-            $data = (new PaddleSubscriptionService())->createCheckout(
-                $request->user(),
-                $plan,
-                $price,
-                $subscription
-            );
-        }
+        $data = $this->checkoutServiceFor($paymentMethod)->createCheckout(
+            $request->user(),
+            $plan,
+            $price,
+            $subscription
+        );
 
         return response()->json($data);
     }
@@ -291,12 +288,45 @@ class SubscriptionsController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        if ($subscription->payment_method === Subscription::PAYMENT_METHOD_STRIPE) {
-            (new StripeSubscriptionService())->cancel($subscription);
-        } else {
-            (new PaddleSubscriptionService())->cancel($subscription);
-        }
+        // 依這筆訂閱**當初建立時**的金流分流，不是依現在的預設值——換了預設供應商
+        // 之後，既有訂閱仍然要回到原本那家去取消。
+        match ($subscription->payment_method) {
+            Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
+            Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
+            default                             => (new PaddleSubscriptionService())->cancel($subscription),
+        };
 
         return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * 沒有指定 `paymentMethod` 時要用哪一家。
+     *
+     * 認不得的值退回 Paddle 而不是拋例外：這個變數打錯字的後果應該是「用回舊的」，
+     * 不是「所有人都結不了帳」。
+     */
+    private static function defaultPaymentMethod(): string
+    {
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', Subscription::PAYMENT_METHOD_PADDLE);
+
+        return in_array($configured, [
+            Subscription::PAYMENT_METHOD_PADDLE,
+            Subscription::PAYMENT_METHOD_STRIPE,
+            Subscription::PAYMENT_METHOD_CREEM,
+        ], true) ? $configured : Subscription::PAYMENT_METHOD_PADDLE;
+    }
+
+    /**
+     * 建立結帳用的 service。三家的 createCheckout() 簽章刻意一致，
+     * 所以這裡只挑物件，不做分支邏輯。
+     */
+    private function checkoutServiceFor(
+        string $paymentMethod
+    ): CreemSubscriptionService|PaddleSubscriptionService|StripeSubscriptionService {
+        return match ($paymentMethod) {
+            Subscription::PAYMENT_METHOD_STRIPE => new StripeSubscriptionService(),
+            Subscription::PAYMENT_METHOD_CREEM  => new CreemSubscriptionService(),
+            default                             => new PaddleSubscriptionService(),
+        };
     }
 }

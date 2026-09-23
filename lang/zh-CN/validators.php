@@ -68,6 +68,9 @@ return [
                 'sync_failed'               => '与 Paddle 同步订阅失败。',
                 'ip_not_allowed'            => '来源 IP 不在允许清单内。',
             ],
+            'creem' => [
+                'malformed_payload' => 'Creem webhook 内容格式错误。',
+            ],
         ],
     ],
     'auth' => [
@@ -216,7 +219,7 @@ return [
             'string'   => '价格 ID 必须是字符串。',
         ],
         'paymentMethod' => [
-            'in' => '付款方式必须是 stripe 或 paddle。',
+            'in' => '付款方式必须是 stripe、paddle 或 creem。',
         ],
     ],
     'user' => [

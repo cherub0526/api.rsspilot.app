@@ -46,5 +46,19 @@
         <env name="STRIPE_PUBLISHABLE_KEY" value="pk_test_fake_for_tests_only" force="true"/>
         <env name="STRIPE_RETURN_URL" value="https://tests.invalid/billing/return" force="true"/>
         <env name="PADDLE_WEBHOOK_SECRET_KEY" value="pdl_ntfset_test_secret" force="true"/>
+        <!--
+            Creem 的驗簽測試要這個值；CREEM_SUCCESS_URL 則是 createCheckout() 的
+            必要設定，缺了會在建立結帳時就拋例外而不是走到我們要測的那一段。
+        -->
+        <!--
+            一定要釘住：預設金流現在由 PAYMENT_DEFAULT_PROVIDER 決定，不釘的話
+            測試會讀開發者本機的 .env——誰把預設切成 creem，誰的測試就會紅，
+            而且症狀是「store() 回 500」這種看不出原因的錯。
+        -->
+        <env name="PAYMENT_DEFAULT_PROVIDER" value="paddle" force="true"/>
+        <env name="CREEM_WEBHOOK_SECRET" value="creem_test_secret" force="true"/>
+        <env name="CREEM_API_KEY" value="creem_test_api_key" force="true"/>
+        <env name="CREEM_SUCCESS_URL" value="https://tests.invalid/billing/return" force="true"/>
+        <env name="CREEM_TEST_MODE" value="true" force="true"/>
     </php>
 </phpunit>

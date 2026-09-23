@@ -29,6 +29,7 @@ use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
+use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
@@ -486,6 +487,14 @@ Route::group('/webhook', function () {
         [
             'as'   => 'stripe.store',
             'uses' => StripeController::class . '@store',
+        ]
+    );
+
+    Route::post(
+        '/creem',
+        [
+            'as'   => 'creem.store',
+            'uses' => CreemController::class . '@store',
         ]
     );
 
