@@ -185,6 +185,28 @@ class Verify extends Command
             $problems[] = sprintf('standard 變體但 Creem 上有 %s 天試用', (string) $trialDays);
         }
 
+        // tax_mode 錯掉不會讓任何東西報錯，只會讓歐盟客戶的實收少一截（Creem 的
+        // 預設 inclusive 會把 VAT 從我們的收入裡扣），所以要主動比對。
+        $taxMode = (string) ($product['tax_mode'] ?? '');
+
+        if ($taxMode !== Sync::TAX_MODE) {
+            $problems[] = sprintf(
+                'tax_mode 是「%s」，應為「%s」（Creem 的 product 不能改，要重建並改指過去）',
+                $taxMode !== '' ? $taxMode : '未設',
+                Sync::TAX_MODE
+            );
+        }
+
+        $taxCategory = (string) ($product['tax_category'] ?? '');
+
+        if ($taxCategory !== Sync::TAX_CATEGORY) {
+            $problems[] = sprintf(
+                'tax_category 是「%s」，應為「%s」',
+                $taxCategory !== '' ? $taxCategory : '未設',
+                Sync::TAX_CATEGORY
+            );
+        }
+
         if ($problems !== []) {
             $this->error(sprintf('  ✗ %s → %s：%s', $label, $productId, implode('、', $problems)));
 
@@ -192,12 +214,13 @@ class Verify extends Command
         }
 
         $this->line(sprintf(
-            '  ✓ %-24s → %s  %d %s%s',
+            '  ✓ %-26s %d %s  tax_mode=%-9s tax_category=%-22s trial=%s',
             $label,
-            $productId,
             $actual,
             (string) ($product['currency'] ?? '?'),
-            $trialDays ? "  trial {$trialDays}d" : ''
+            (string) ($product['tax_mode'] ?? '(未設)'),
+            (string) ($product['tax_category'] ?? '(未設)'),
+            $trialDays ? "{$trialDays}d @" . (string) ($product['trial_price'] ?? '?') : '無'
         ));
 
         return true;
