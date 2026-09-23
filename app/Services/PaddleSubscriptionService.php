@@ -71,13 +71,19 @@ class PaddleSubscriptionService
                 // 首次訂閱的結帳金額是 0（price 上帶著一個月的 trial_period），所以
                 // 日期不能從這筆交易推算——要問 Paddle 訂閱本身的 next_billed_at。
                 if ($paddleTransaction->subscriptionId) {
-                    $this->syncFromPaddle(
+                    $paddleSubscription = $this->applyFreeMonth(
                         $subscription,
-                        $this->applyFreeMonth(
-                            $subscription,
-                            $paddle->subscriptions()->get($paddleTransaction->subscriptionId)
-                        )
+                        $paddle->subscriptions()->get($paddleTransaction->subscriptionId)
                     );
+
+                    $this->syncFromPaddle($subscription, $paddleSubscription);
+
+                    // 這裡一定要記下對應，不能只靠 webhook 補。少了這行，訂閱會變成
+                    // active 卻連不到 Paddle——webhook 延遲、失敗，或本機開發根本收
+                    // 不到（sandbox 通知目的地不是 localhost）時，使用者之後按取消
+                    // 就會找不到要取消哪一筆。rememberPaddleSubscription() 是冪等的，
+                    // 跟 webhook 誰先到都不會重複建列。
+                    $this->rememberPaddleSubscription($subscription, $paddleSubscription);
 
                     return true;
                 }
