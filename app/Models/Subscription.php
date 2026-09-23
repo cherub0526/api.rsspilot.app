@@ -32,6 +32,8 @@ class Subscription extends Model
 
     public const string PAYMENT_METHOD_STRIPE = 'stripe';
 
+    public const string PAYMENT_METHOD_CREEM = 'creem';
+
     public const string PAYMENT_METHOD_TRIAL = 'trial';
 
     /**
@@ -53,6 +55,7 @@ class Subscription extends Model
     public static array $paymentMethodMaps = [
         self::PAYMENT_METHOD_PADDLE => 'Paddle',
         self::PAYMENT_METHOD_STRIPE => 'Stripe',
+        self::PAYMENT_METHOD_CREEM  => 'Creem',
     ];
 
     protected ?string $table = 'subscriptions';
@@ -113,6 +116,12 @@ class Subscription extends Model
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')
+            ->where('foreign_type', self::class);
+    }
+
+    public function creem(): Builder|HasOne
+    {
+        return $this->hasOne(Creem::class, 'foreign_id', 'id')
             ->where('foreign_type', self::class);
     }
 

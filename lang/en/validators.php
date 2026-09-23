@@ -68,6 +68,9 @@ return [
                 'sync_failed'               => 'Could not sync the subscription with Paddle.',
                 'ip_not_allowed'            => 'Request IP is not in the allowlist.',
             ],
+            'creem' => [
+                'malformed_payload' => 'The Creem webhook payload is malformed.',
+            ],
         ],
     ],
     'auth' => [
@@ -216,7 +219,7 @@ return [
             'string'   => 'Price ID must be a string.',
         ],
         'paymentMethod' => [
-            'in' => 'Payment method must be stripe or paddle.',
+            'in' => 'Payment method must be stripe, paddle or creem.',
         ],
     ],
     'user' => [

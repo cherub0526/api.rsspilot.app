@@ -8,6 +8,7 @@ use Hyperf\Database\Model\Builder;
 use Hypervel\Database\Eloquent\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
+use Hypervel\Database\Eloquent\Relations\HasMany;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
@@ -62,6 +63,18 @@ class Price extends Model
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /**
+     * 這個 price 在 Creem 上的 product 們（含試用／不含試用兩個變體）。
+     *
+     * 是 hasMany 而不是 hasOne——Creem 的試用期綁在 product 上且結帳時不可覆寫，
+     * 所以「首月免費只送第一次」得靠同一個 price 建兩個 product 來守。
+     * 取用時一定要帶 variant 過濾，見 CreemSubscriptionService::productIdFor()。
+     */
+    public function creem(): Builder|HasMany
+    {
+        return $this->hasMany(Creem::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     /**
