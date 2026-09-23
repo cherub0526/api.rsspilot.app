@@ -220,6 +220,78 @@ class CreemSubscriptionService
         return $subscriptionId;
     }
 
+    /**
+     * 付款完成、使用者被導回來時，當場開通訂閱——不必等 webhook。
+     *
+     * 與 Paddle 的 confirm() 同一個用意：Creem 原本完全靠 webhook 開通，webhook
+     * 延遲、失敗，或本機開發收不到時，使用者付了錢卻用不到方案，而且因為訂閱
+     * 從沒生效，連取消都找不到它。
+     *
+     * **只把前端帶來的 checkout_id 當索引，其餘一律向 Creem 查證**：checkout 是否
+     * 真的 completed、對應的是哪一筆我們的訂閱（metadata.subscriptionId）、那筆
+     * 訂閱是不是這個使用者的。redirect 網址是使用者可以任意改的，不能拿它當依據。
+     *
+     * 與 webhook 同時到也沒關係：syncFromCreem 是覆寫、rememberCreemSubscription
+     * 是冪等的。
+     *
+     * @return null|Subscription 開通成功的訂閱；checkout 不存在、未完成、不屬於
+     *                           這個使用者時為 null
+     */
+    public function confirmCheckout(string $userId, string $checkoutId): ?Subscription
+    {
+        if (!self::isCheckoutId($checkoutId)) {
+            return null;
+        }
+
+        $client = new CreemClient();
+
+        try {
+            $checkout = $client->getCheckout($checkoutId);
+        } catch (RuntimeException $e) {
+            Log::warning('Could not retrieve a Creem checkout to confirm', [
+                'checkout_id' => $checkoutId,
+                'error'       => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $metadata = is_array($checkout['metadata'] ?? null) ? $checkout['metadata'] : [];
+        $ourId = $metadata['subscriptionId'] ?? null;
+
+        if (!is_string($ourId) || $ourId === '') {
+            return null;
+        }
+
+        $subscription = Subscription::query()
+            ->where('id', $ourId)
+            ->where('user_id', $userId)
+            ->where('payment_method', Subscription::PAYMENT_METHOD_CREEM)
+            ->first();
+
+        // 不屬於這個使用者：不開通，也不透露那筆訂閱存在與否。
+        if (!$subscription) {
+            return null;
+        }
+
+        if (($checkout['status'] ?? null) !== 'completed') {
+            return null;
+        }
+
+        $creemSubscriptionId = self::subscriptionIdFromCheckout($checkout);
+
+        if ($creemSubscriptionId === null) {
+            return null;
+        }
+
+        $creemSubscription = $client->getSubscription($creemSubscriptionId);
+
+        $this->syncFromCreem($subscription, $creemSubscription);
+        $this->rememberCreemSubscription($subscription, $creemSubscription);
+
+        return $subscription->refresh();
+    }
+
     /** Creem 的 checkout id 一律以 ch_ 開頭；訂閱 id 是 sub_。 */
     public static function isCheckoutId(string $creemId): bool
     {
