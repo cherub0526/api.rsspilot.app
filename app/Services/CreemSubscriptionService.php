@@ -134,7 +134,9 @@ class CreemSubscriptionService
     {
         return match ($creemStatus) {
             'trialing' => Subscription::STATUS_TRIAL,
-            'active', 'past_due' => Subscription::STATUS_ACTIVE,
+            // scheduled_cancel：使用者已按取消、但這一期已付款，權限要保留到期末。
+            // 少了這一行它會落到 default 變成 canceled，付費使用者一按取消就當場斷線。
+            'active', 'past_due', 'scheduled_cancel' => Subscription::STATUS_ACTIVE,
             default => Subscription::STATUS_CANCELED,
         };
     }
@@ -169,16 +171,76 @@ class CreemSubscriptionService
 
     public function cancel(Subscription $subscription): void
     {
-        $creem = $subscription->creem()->whereNotNull('creem_id')->first();
+        $creemSubscriptionId = $this->resolveCreemSubscriptionId($subscription);
 
-        if (!$creem) {
+        if ($creemSubscriptionId === null) {
             throw new RuntimeException(sprintf(
                 'Subscription %s has no Creem subscription to cancel.',
                 (string) $subscription->getKey()
             ));
         }
 
-        (new CreemClient())->cancelSubscription((string) $creem->creem_id);
+        (new CreemClient())->cancelSubscription($creemSubscriptionId);
+    }
+
+    /**
+     * 找出這筆訂閱在 Creem 上真正的訂閱 id（sub_…）。
+     *
+     * `creems` 對應列在結帳當下存的是 **checkout** 的 id（ch_…）——那時 Creem 還沒建
+     * 訂閱——要等 subscription.* webhook 進來才會改寫成 sub_…。webhook 延遲、失敗，
+     * 或本機開發收不到時，手上就只有 checkout id，拿它去打取消只會失敗。
+     *
+     * 所以遇到 checkout id 時回頭問 Creem 這個 checkout 建出了哪個訂閱，並把結果
+     * 寫回對應列，下次就不必再查。查不到（例如使用者其實沒付完款）回 null，
+     * 由呼叫端決定怎麼回應。
+     */
+    public function resolveCreemSubscriptionId(Subscription $subscription): ?string
+    {
+        $creem = $subscription->creem()->whereNotNull('creem_id')->first();
+
+        if (!$creem) {
+            return null;
+        }
+
+        $storedId = (string) $creem->creem_id;
+
+        if (!self::isCheckoutId($storedId)) {
+            return $storedId;
+        }
+
+        $checkout = (new CreemClient())->getCheckout($storedId);
+        $subscriptionId = self::subscriptionIdFromCheckout($checkout);
+
+        if ($subscriptionId === null) {
+            return null;
+        }
+
+        $creem->fill(['creem_id' => $subscriptionId])->save();
+
+        return $subscriptionId;
+    }
+
+    /** Creem 的 checkout id 一律以 ch_ 開頭；訂閱 id 是 sub_。 */
+    public static function isCheckoutId(string $creemId): bool
+    {
+        return str_starts_with($creemId, 'ch_');
+    }
+
+    /**
+     * 從 checkout 物件取出它建立的訂閱 id。
+     *
+     * Creem 的 checkout 會把訂閱嵌成物件（`subscription.id`），但展開與否可能因
+     * 端點而異，也可能只給字串 id，兩種都接。還沒建訂閱（沒付完款）時為 null。
+     *
+     * @param array<string, mixed> $checkout
+     */
+    public static function subscriptionIdFromCheckout(array $checkout): ?string
+    {
+        $subscription = $checkout['subscription'] ?? null;
+
+        $id = is_array($subscription) ? ($subscription['id'] ?? null) : $subscription;
+
+        return is_string($id) && str_starts_with($id, 'sub_') ? $id : null;
     }
 
     /**

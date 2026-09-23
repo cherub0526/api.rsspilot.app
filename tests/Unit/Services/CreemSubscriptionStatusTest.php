@@ -48,6 +48,16 @@ class CreemSubscriptionStatusTest extends TestCase
         $this->assertSame(Subscription::STATUS_ACTIVE, $this->service->statusFor('past_due'));
     }
 
+    /**
+     * 已排定取消（付費期間仍有效）不能停權——這是實測 Creem 取消 API 時抓到的：
+     * 付費訂閱用 mode=scheduled 取消後狀態是 scheduled_cancel，原本會落到
+     * default 被當成 canceled，使用者一按取消就當場失去已付費的權限。
+     */
+    public function testScheduledCancelKeepsAccessUntilPeriodEnd(): void
+    {
+        $this->assertSame(Subscription::STATUS_ACTIVE, $this->service->statusFor('scheduled_cancel'));
+    }
+
     /** 重試用盡，這時才真的收不到錢。 */
     public function testUnpaidMapsToCanceled(): void
     {

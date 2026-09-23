@@ -74,7 +74,8 @@ class CreemClient
      */
     public function getCheckout(string $checkoutId): array
     {
-        return $this->get('/checkouts/' . rawurlencode($checkoutId));
+        // Creem 的單筆查詢是 query string，不是路徑參數：/checkouts/{id} 會回 404。
+        return $this->get('/checkouts?checkout_id=' . rawurlencode($checkoutId));
     }
 
     /**
@@ -82,18 +83,22 @@ class CreemClient
      */
     public function getSubscription(string $subscriptionId): array
     {
-        return $this->get('/subscriptions/' . rawurlencode($subscriptionId));
+        // 同上：/subscriptions/{id} 不存在，要用 ?subscription_id=。
+        // （取消則是 POST /subscriptions/{id}/cancel，那個確實是路徑參數。）
+        return $this->get('/subscriptions?subscription_id=' . rawurlencode($subscriptionId));
     }
 
     /**
      * 取消訂閱。
      *
-     * mode 預設 `at_period_end`——與 Paddle / Stripe 兩條路一致：使用者付過的那一期
-     * 要讓他用完。傳 `immediately` 會當場斷，退款政策寫的是「用到期末」，不要違背。
+     * mode 只接受 `scheduled` 與 `immediate`（查證自官方 SDK 的
+     * CancelSubscriptionRequestEntity；文件沒列，傳別的值回 400）。預設 `scheduled`
+     * ——與 Paddle / Stripe 兩條路一致：使用者付過的那一期要讓他用完。`immediate`
+     * 會當場斷，退款政策寫的是「用到期末」，不要違背。
      *
      * @return array<string, mixed>
      */
-    public function cancelSubscription(string $subscriptionId, string $mode = 'at_period_end'): array
+    public function cancelSubscription(string $subscriptionId, string $mode = 'scheduled'): array
     {
         return $this->post(
             '/subscriptions/' . rawurlencode($subscriptionId) . '/cancel',
