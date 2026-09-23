@@ -222,6 +222,8 @@ class SubscriptionsController extends AbstractController
             );
         }
 
+        $this->assertNoPaidSubscription((string) $request->user()->id);
+
         // 三條金流並存，用參數切換：
         //
         // 1. 請求帶 `paymentMethod` → 用它（前端可針對特定使用者或 A/B 指定）
@@ -347,6 +349,33 @@ class SubscriptionsController extends AbstractController
         $subscription->fill(['cancellation_date' => now()])->save();
 
         return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * 已經有生效中的付費訂閱就不能再開一筆結帳。
+     *
+     * 少了這道檢查，使用者多按一次升級（或 Pro 想換 Advance）就會在金流商那邊
+     * 多出一筆訂閱、每期被扣兩次錢——實測時就真的發生過。換方案要走金流商的
+     * 升級流程，不是再訂一次。
+     *
+     * 已排定取消但還沒到期的也算：這時再訂一筆，到期前的那段會重疊計費。
+     *
+     * 系統贈送的試用（payment_method = trial）不算——那是送的不是買的，這些使用者
+     * 本來就該能升級成付費方案。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertNoPaidSubscription(string $userId): void
+    {
+        $existing = (new SubscriptionService())->getUserSubscription($userId);
+
+        if (!$existing || $existing->payment_method === Subscription::PAYMENT_METHOD_TRIAL) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['subscription' => [__('validators.controllers.subscription.already_subscribed')]]
+        );
     }
 
     /**

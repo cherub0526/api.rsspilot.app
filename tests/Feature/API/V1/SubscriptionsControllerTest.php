@@ -584,6 +584,67 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * 已有生效中的付費訂閱時不能再結帳——否則金流商那邊會多一筆、每期扣兩次錢。
+     * 已排定取消但還沒到期的也一樣擋，否則到期前會重疊計費。
+     */
+    public function testStoreRefusesWhenAPaidSubscriptionIsActive()
+    {
+        $user = $this->fakeLogin();
+
+        foreach ([null, now()] as $cancellationDate) {
+            Subscription::query()->where('user_id', $user->id)->forceDelete();
+
+            Subscription::factory()->create([
+                'user_id'           => $user->id,
+                'plan_id'           => $this->basicPlan->id,
+                'price_id'          => $this->basicMonthlyPrice->id,
+                'payment_method'    => Subscription::PAYMENT_METHOD_CREEM,
+                'status'            => Subscription::STATUS_ACTIVE,
+                'next_date'         => now()->addMonth(),
+                'cancellation_date' => $cancellationDate,
+            ]);
+
+            $before = Subscription::query()->where('user_id', $user->id)->count();
+
+            $this->json('POST', route('api.v1.subscriptions.store'), [
+                'planId'  => $this->basicPlan->id,
+                'priceId' => $this->basicMonthlyPrice->id,
+            ])
+                ->assertStatus(422)
+                ->assertJsonPath(
+                    'messages.subscription.0',
+                    __('validators.controllers.subscription.already_subscribed')
+                );
+
+            // 被擋下時連 paying 紀錄都不該建
+            $this->assertSame($before, Subscription::query()->where('user_id', $user->id)->count());
+        }
+    }
+
+    /**
+     * 系統贈送的試用不擋：那是送的不是買的，這些使用者本來就該能升級。
+     */
+    public function testStoreAllowsUpgradingFromAGiftedTrial()
+    {
+        $user = $this->fakeLogin();
+
+        Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'next_date'      => now()->addDays(7),
+        ]);
+
+        // 走到預設金流（phpunit 釘成 paddle）的結帳建立，不會被 already_subscribed 擋下
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'  => $this->basicPlan->id,
+            'priceId' => $this->basicMonthlyPrice->id,
+        ])->assertStatus(200);
+    }
+
+    /**
      * 系統贈送的試用訂閱沒經過金流商，取消只在本地記錄。
      *
      * 修正前它會掉進 destroy() 的 match default 走 Paddle 分支，拋出
