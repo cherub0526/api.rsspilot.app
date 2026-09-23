@@ -28,6 +28,7 @@ return [
         ],
         'media' => [
             'not_found'           => '找不到指定的媒體。',
+            'cancel_unavailable'  => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',

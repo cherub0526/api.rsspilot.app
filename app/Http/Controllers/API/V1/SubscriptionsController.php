@@ -9,6 +9,7 @@ use App\Models\Price;
 use Hypervel\Http\Request;
 use App\Models\Subscription;
 use OpenApi\Attributes as OAT;
+use Hypervel\Support\Facades\Log;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Http\Resources\PlanResource;
@@ -321,13 +322,20 @@ class SubscriptionsController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        // 依這筆訂閱**當初建立時**的金流分流，不是依現在的預設值——換了預設供應商
-        // 之後，既有訂閱仍然要回到原本那家去取消。
-        match ($subscription->payment_method) {
-            Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
-            Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
-            default                             => (new PaddleSubscriptionService())->cancel($subscription),
-        };
+        // 系統贈送的試用訂閱（2026-09 前註冊即送）從來沒經過任何金流商，沒有帳單可停，
+        // 只要在本地記下取消即可。少了這個分支它會掉進下面 match 的 default，被當成
+        // Paddle 訂閱去讀一個不存在的對應列。
+        if ($subscription->payment_method !== Subscription::PAYMENT_METHOD_TRIAL) {
+            $this->assertHasProviderLink($subscription);
+
+            // 依這筆訂閱**當初建立時**的金流分流，不是依現在的預設值——換了預設供應商
+            // 之後，既有訂閱仍然要回到原本那家去取消。
+            match ($subscription->payment_method) {
+                Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
+                Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
+                default                             => (new PaddleSubscriptionService())->cancel($subscription),
+            };
+        }
 
         // 就地記下取消時間，讓畫面立刻反映。
         //
@@ -339,6 +347,37 @@ class SubscriptionsController extends AbstractController
         $subscription->fill(['cancellation_date' => now()])->save();
 
         return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * 金流型訂閱必須連得到金流商那邊的訂閱，否則沒有東西可以取消。
+     *
+     * 遇到這種資料**不能假裝取消成功**：如果金流商那邊其實還在扣款，我們卻顯示
+     * 「已取消」，就是一筆之後才爆的客訴。所以回 422 讓前端顯示「請聯絡客服」，
+     * 並留 log 讓我們知道有一筆對不起來的訂閱。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertHasProviderLink(Subscription $subscription): void
+    {
+        $link = match ($subscription->payment_method) {
+            Subscription::PAYMENT_METHOD_STRIPE => $subscription->stripe()->first(),
+            Subscription::PAYMENT_METHOD_CREEM  => $subscription->creem()->first(),
+            default                             => $subscription->paddle()->first(),
+        };
+
+        if ($link) {
+            return;
+        }
+
+        Log::warning('Cannot cancel a subscription that has no payment provider link', [
+            'subscription_id' => (string) $subscription->getKey(),
+            'payment_method'  => $subscription->payment_method,
+        ]);
+
+        throw new InvalidRequestException(
+            ['subscription' => [__('validators.controllers.subscription.cancel_unavailable')]]
+        );
     }
 
     /**
