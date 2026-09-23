@@ -65,6 +65,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => 'Transaction status is not completed.',
+                'sync_failed'               => 'Could not sync the subscription with Paddle.',
                 'ip_not_allowed'            => 'Request IP is not in the allowlist.',
             ],
         ],

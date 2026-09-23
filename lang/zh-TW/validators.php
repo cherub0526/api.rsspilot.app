@@ -65,6 +65,7 @@ return [
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => '交易狀態未完成。',
+                'sync_failed'               => '與 Paddle 同步訂閱失敗。',
                 'ip_not_allowed'            => '來源 IP 不在允許清單內。',
             ],
         ],

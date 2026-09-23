@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Validators;
 
+use App\Http\Controllers\API\V1\Webhook\PaddleController;
+
 class PaddleTransactionValidator extends BaseValidator
 {
     public function __construct($params)
@@ -23,9 +25,11 @@ class PaddleTransactionValidator extends BaseValidator
 
     public function setStoreRules(): self
     {
+        // event_type 白名單的事實來源在 controller，避免「訂閱了事件卻在驗證層
+        // 被擋掉」這種只有上線後才看得到的落差。
         $this->rules = [
             'event_id'        => 'required',
-            'event_type'      => 'required|in:transaction.completed',
+            'event_type'      => 'required|in:' . implode(',', PaddleController::HANDLED_EVENTS),
             'occurred_at'     => 'required',
             'notification_id' => 'required',
             'data'            => 'required',

@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Price;
+use App\Models\Paddle;
 use App\Models\Transaction;
 use App\Models\Subscription;
 use Paddle\SDK\Exceptions\ApiError;
@@ -15,6 +16,7 @@ use Paddle\SDK\Entities\Shared\TransactionStatus;
 use Paddle\SDK\Entities\Subscription\SubscriptionStatus;
 use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 use Paddle\SDK\Notifications\Entities\Payout\PayoutStatus;
+use Paddle\SDK\Entities\Transaction as PaddleTransactionEntity;
 use Paddle\SDK\Entities\Subscription as PaddleSubscriptionEntity;
 
 class PaddleSubscriptionService
@@ -156,6 +158,39 @@ class PaddleSubscriptionService
     }
 
     /**
+     * 把 Paddle 的訂閱狀態轉成我們自己的 `status`。
+     *
+     * 抽成純函式的理由同 `freeMonthAction()`：Paddle SDK 的 client 到處直接 new，
+     * 換不掉，所以判斷本身要能單獨測。
+     *
+     * 對照表與**為什麼**：
+     *
+     * - `trialing` → `trial`：免費月期間。前端靠這個顯示 Trial 徽章
+     * - `active` → `active`
+     * - `past_due` → **`active`**（不是取消）。扣款失敗後 Paddle 會進入 dunning，
+     *   自動重試兩週左右才放棄。這段期間把人停權是錯的——卡片過期這種小事會
+     *   讓還在付錢的客人當場失去服務。真的收不到時 Paddle 會再送一則
+     *   `subscription.canceled`，那時才轉 `canceled`。注意 `scopeActive()` 對
+     *   `active` 不看 `next_date`，所以 dunning 期間權限自然維持
+     * - `canceled` / `inactive` → `canceled`
+     * - `paused` → `canceled`：我們自己沒有暫停的流程，但有人從 Dashboard 按下去
+     *   時不能把它讀成「還在訂閱」。Paddle 暫停期間不計費，權限就該停；之後
+     *   `subscription.resumed` 會把它帶回 `active`
+     *
+     * 未知狀態一律回 `canceled`：Paddle 之後新增狀態時，寧可少給權限也不要
+     * 因為 `default` 落在 `active` 而把不該有權限的人放進來。
+     */
+    public function statusFor(string $paddleStatus): string
+    {
+        return match ($paddleStatus) {
+            SubscriptionStatus::Trialing()->getValue() => Subscription::STATUS_TRIAL,
+            SubscriptionStatus::Active()->getValue(),
+            SubscriptionStatus::PastDue()->getValue() => Subscription::STATUS_ACTIVE,
+            default                                   => Subscription::STATUS_CANCELED,
+        };
+    }
+
+    /**
      * 照 Paddle 回報的狀態與日期寫回我們自己的訂閱。
      *
      * 三個欄位的語意：
@@ -171,11 +206,8 @@ class PaddleSubscriptionService
      */
     public function syncFromPaddle(Subscription $subscription, PaddleSubscriptionEntity $paddleSubscription): void
     {
-        $isTrialing = (string) $paddleSubscription->status->getValue()
-            === SubscriptionStatus::Trialing()->getValue();
-
         $attributes = [
-            'status'     => $isTrialing ? Subscription::STATUS_TRIAL : Subscription::STATUS_ACTIVE,
+            'status'     => $this->statusFor((string) $paddleSubscription->status->getValue()),
             'start_date' => Carbon::parse($paddleSubscription->createdAt)->toDateTime(),
         ];
 
@@ -183,6 +215,12 @@ class PaddleSubscriptionService
         // null 會讓 scopeActive() 把一筆早就該結束的訂閱當成永遠有效。
         if ($paddleSubscription->nextBilledAt) {
             $attributes['next_date'] = Carbon::parse($paddleSubscription->nextBilledAt)->toDateTime();
+        }
+
+        // Paddle 是取消日期的事實來源。只在它有值時寫入，不要因為某一則事件沒帶
+        // 就把既有的取消日期抹掉。
+        if ($paddleSubscription->canceledAt) {
+            $attributes['cancellation_date'] = Carbon::parse($paddleSubscription->canceledAt)->toDateTime();
         }
 
         $subscription->fill($attributes)->save();
@@ -194,31 +232,26 @@ class PaddleSubscriptionService
         $paddle->subscriptions()->cancel($subscription->paddle->paddle_id);
     }
 
-    public function handleTransactionCompleted(Subscription $subscription, string $paddleTransactionId): void
-    {
+    /**
+     * `transaction.completed`：把這筆交易與它背後的訂閱寫回我們自己的資料表。
+     *
+     * 交易實體由呼叫端取好再傳進來——controller 本來就要先拿它才能從
+     * `customData.subscriptionId` 找出是哪一筆訂閱，這裡再抓一次是白跑一趟。
+     */
+    public function handleTransactionCompleted(
+        Subscription $subscription,
+        PaddleTransactionEntity $paddleTransaction
+    ): void {
         $paddleClient = new PaddleClient();
 
         try {
-            $paddleTransaction = $paddleClient->transactions()->get($paddleTransactionId);
-
-            if ($paddleTransaction->status->getValue() !== TransactionStatus::Completed()->getValue()) {
-                return;
-            }
-
             $paddleSubscription = $this->applyFreeMonth(
                 $subscription,
                 $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
             );
 
             $this->syncFromPaddle($subscription, $paddleSubscription);
-
-            if (!$subscription->paddle()->where(['paddle_id' => $paddleTransaction->subscriptionId])->first()) {
-                $subscription->paddle()->create([
-                    'paddle_id'     => $paddleSubscription->id,
-                    'paddle_detail' => $paddleSubscription,
-                    'foreign_type'  => Subscription::class,
-                ]);
-            }
+            $this->rememberPaddleSubscription($subscription, $paddleSubscription);
 
             $transactionPaddle = $subscription->transactions()->whereHas(
                 'paddle',
@@ -238,8 +271,100 @@ class PaddleSubscriptionService
                     'foreign_type'  => Transaction::class,
                 ]);
             }
+
+            $subscription->fill([
+                'last_charged_date' => Carbon::parse($paddleTransaction->billedAt)->toDateTime(),
+            ])->save();
         } catch (ApiError $e) {
         } catch (MalformedResponse $e) {
         }
+    }
+
+    /**
+     * 所有 `subscription.*` 事件共用的處理：跟 Paddle 重新對一次答案。
+     *
+     * **不看 webhook 帶來的 payload，一律回頭跟 Paddle 要現況**，理由是 Paddle
+     * 不保證事件的送達順序。照 payload 寫的話，一則晚到的 `subscription.updated`
+     * 會把已經寫好的 `canceled` 蓋回 `active`——而且是安靜地蓋掉。改成每次都讀
+     * 當下的真實狀態，順序就不再重要，重送也不會有副作用（冪等）。
+     *
+     * 也因為這樣，這一個方法就足以應付 activated / updated / canceled / past_due /
+     * paused / resumed 六種事件，不必一種寫一段。
+     *
+     * @return bool 成功對完答案才回 true；對不到（Paddle 那邊出錯）回 false，
+     *              由呼叫端決定要不要讓 Paddle 重送
+     */
+    public function handleSubscriptionEvent(Subscription $subscription, string $paddleSubscriptionId): bool
+    {
+        $paddleClient = new PaddleClient();
+
+        try {
+            $paddleSubscription = $paddleClient->subscriptions()->get($paddleSubscriptionId);
+        } catch (ApiError $e) {
+            return false;
+        } catch (MalformedResponse $e) {
+            return false;
+        }
+
+        $this->syncFromPaddle($subscription, $paddleSubscription);
+        $this->rememberPaddleSubscription($subscription, $paddleSubscription);
+
+        return true;
+    }
+
+    /**
+     * 從事件內容找出這是我們哪一筆訂閱。
+     *
+     * 兩條路，順序有意義：
+     *
+     * 1. `paddles` 表以 `paddle_id` 反查——首購走完 `transaction.completed` 之後
+     *    就會有這一列，是最可靠的對應
+     * 2. 退回結帳時塞進 `customData.subscriptionId` 的值。第一筆 `subscription.*`
+     *    事件有可能比 `transaction.completed` 早到，那時第 1 條還查不到東西
+     *
+     * 兩條都沒中就回 null，讓呼叫端決定怎麼回應。
+     */
+    public function resolveSubscription(string $paddleSubscriptionId, ?string $customDataSubscriptionId): ?Subscription
+    {
+        $paddle = Paddle::query()
+            ->where('foreign_type', Subscription::class)
+            ->where('paddle_id', $paddleSubscriptionId)
+            ->first();
+
+        if ($paddle && $subscription = Subscription::query()->find($paddle->foreign_id)) {
+            return $subscription;
+        }
+
+        if ($customDataSubscriptionId === null || $customDataSubscriptionId === '') {
+            return null;
+        }
+
+        return Subscription::query()->find($customDataSubscriptionId);
+    }
+
+    /**
+     * 記住（或更新）這筆訂閱對應的 Paddle 訂閱列。
+     *
+     * 已經有同一個 `paddle_id` 時只刷新 `paddle_detail`，不要再插一列——
+     * `subscription.*` 事件會反覆進來，每次都 create 的話這張表會長滿重複資料，
+     * 而 `subscription->paddle()` 是 hasOne，之後讀到哪一列就看運氣。
+     */
+    private function rememberPaddleSubscription(
+        Subscription $subscription,
+        PaddleSubscriptionEntity $paddleSubscription
+    ): void {
+        $existing = $subscription->paddle()->where('paddle_id', $paddleSubscription->id)->first();
+
+        if ($existing) {
+            $existing->fill(['paddle_detail' => $paddleSubscription])->save();
+
+            return;
+        }
+
+        $subscription->paddle()->create([
+            'paddle_id'     => $paddleSubscription->id,
+            'paddle_detail' => $paddleSubscription,
+            'foreign_type'  => Subscription::class,
+        ]);
     }
 }
