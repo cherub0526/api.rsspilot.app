@@ -248,8 +248,12 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 沒帶 paymentMethod 時要落在 Paddle——這是 store() 的預設值，
-     * 改回 Stripe 的話前端拿到的 payload 形狀會整個換掉。
+     * 沒帶 paymentMethod 時要落在 `PAYMENT_DEFAULT_PROVIDER`，而 phpunit.xml.dist
+     * 把它釘成 paddle。
+     *
+     * 這一條同時守著兩件事：預設值真的有被讀到，以及回傳的 payload 形狀是
+     * Paddle 那一種——前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條
+     * 結帳流程換掉。
      */
     public function testStoreDefaultsToPaddle()
     {
