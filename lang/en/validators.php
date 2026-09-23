@@ -28,8 +28,6 @@ return [
         ],
         'media' => [
             'not_found'           => 'Media not found.',
-            'already_subscribed'  => 'You already have an active subscription. To change plans, please contact support.',
-            'cancel_unavailable'  => 'We could not find this subscription with the payment provider. Please contact support.',
             'caption_not_found'   => 'Caption not found.',
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
@@ -63,6 +61,8 @@ return [
             'price_not_in_plan'   => 'Price not found in plan.',
             'not_found'           => 'Subscription not found.',
             'session_id_required' => 'session_id is required.',
+            'already_subscribed'  => 'You already have an active subscription. To change plans, please contact support.',
+            'cancel_unavailable'  => 'We could not find this subscription with the payment provider. Please contact support.',
         ],
         'webhook' => [
             'paddle' => [

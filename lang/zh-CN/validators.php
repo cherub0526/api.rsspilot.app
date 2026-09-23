@@ -28,8 +28,6 @@ return [
         ],
         'media' => [
             'not_found'           => '找不到指定的媒体。',
-            'already_subscribed'  => '你已经有订阅中的方案。如需更换方案，请联系客服。',
-            'cancel_unavailable'  => '找不到此订阅在支付服务商的记录，请联系客服处理。',
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
@@ -63,6 +61,8 @@ return [
             'price_not_in_plan'   => '方案中找不到指定的价格。',
             'not_found'           => '找不到指定的订阅。',
             'session_id_required' => 'session_id 为必填。',
+            'already_subscribed'  => '你已经有订阅中的方案。如需更换方案，请联系客服。',
+            'cancel_unavailable'  => '找不到此订阅在支付服务商的记录，请联系客服处理。',
         ],
         'webhook' => [
             'paddle' => [

@@ -584,6 +584,28 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * 訂閱相關的錯誤訊息在三個語系都要真的有譯文。
+     *
+     * 其他測試用 `assertJsonPath(..., __('validators...'))` 比對訊息，但翻譯不存在時
+     * `__()` 會回傳 key 本身，兩邊一樣是那串 key，測試照樣綠燈——cancel_unavailable
+     * 與 already_subscribed 就是這樣被放錯群組、上線時只會顯示 key 原文而沒被發現。
+     * 這裡直接檢查「譯文不等於 key」。
+     */
+    public function testSubscriptionErrorMessagesAreTranslated()
+    {
+        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found'];
+
+        foreach (['en', 'zh-TW', 'zh-CN'] as $locale) {
+            app()->setLocale($locale);
+
+            foreach ($keys as $key) {
+                $full = "validators.controllers.subscription.{$key}";
+                $this->assertNotSame($full, __($full), "{$locale} 缺少 {$full} 的譯文");
+            }
+        }
+    }
+
+    /**
      * 已有生效中的付費訂閱時不能再結帳——否則金流商那邊會多一筆、每期扣兩次錢。
      * 已排定取消但還沒到期的也一樣擋，否則到期前會重疊計費。
      */

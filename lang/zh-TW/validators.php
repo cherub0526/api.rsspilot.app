@@ -28,8 +28,6 @@ return [
         ],
         'media' => [
             'not_found'           => '找不到指定的媒體。',
-            'already_subscribed'  => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
-            'cancel_unavailable'  => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
@@ -63,6 +61,8 @@ return [
             'price_not_in_plan'   => '方案中找不到指定的價格。',
             'not_found'           => '找不到指定的訂閱。',
             'session_id_required' => 'session_id 為必填。',
+            'already_subscribed'  => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
+            'cancel_unavailable'  => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
         ],
         'webhook' => [
             'paddle' => [
