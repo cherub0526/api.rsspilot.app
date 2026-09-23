@@ -62,6 +62,29 @@ class SubscriptionsController extends AbstractController
                                     example: true,
                                     description: 'true = this account has not used its one-off free first month yet'
                                 ),
+                                new OAT\Property(
+                                    property: 'subscription_id',
+                                    type: 'string',
+                                    nullable: true,
+                                    example: '01JCXYZ123456789ABCDEFGHIJ',
+                                    description: 'Subscription ULID; null on the free plan'
+                                ),
+                                new OAT\Property(
+                                    property: 'next_date',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    nullable: true,
+                                    example: '2026-10-14T00:00:00+00:00',
+                                    description: 'Next renewal date, or the end of paid access once canceled'
+                                ),
+                                new OAT\Property(
+                                    property: 'cancellation_date',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    nullable: true,
+                                    example: null,
+                                    description: 'Set once the subscription is canceled; access runs until next_date'
+                                ),
                             ]
                         ),
                         new OAT\Schema(ref: PlanSchema::class),
@@ -92,9 +115,19 @@ class SubscriptionsController extends AbstractController
             : null;
 
         return response()->json([
-            'status'           => $status,
-            'trial_ends_at'    => $trialEndsAt,
-            'first_month_free' => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
+            'status'        => $status,
+            'trial_ends_at' => $trialEndsAt,
+            // 方案管理區塊要的三個欄位。
+            //
+            // subscription_id 必須單獨給：底下展開的 PlanResource 也有 `id`，
+            // 但那是**方案**的 id，不是訂閱的——前端要用它打 DELETE。
+            //
+            // next_date 在已取消時就是「權限到什麼時候」，沒取消時是下次續費日，
+            // 同一個欄位兩種讀法，由 cancellation_date 決定要怎麼講。
+            'subscription_id'   => $subscription?->getKey(),
+            'next_date'         => $subscription?->next_date?->toIso8601String(),
+            'cancellation_date' => $subscription?->cancellation_date?->toIso8601String(),
+            'first_month_free'  => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
             ...(new PlanResource($plan))->toArray(),
         ]);
     }
@@ -295,6 +328,15 @@ class SubscriptionsController extends AbstractController
             Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
             default                             => (new PaddleSubscriptionService())->cancel($subscription),
         };
+
+        // 就地記下取消時間，讓畫面立刻反映。
+        //
+        // 權威來源仍然是金流商送回來的 webhook（syncFromPaddle / syncFromCreem 會用
+        // 它們回報的 canceled_at 覆寫），但那可能要幾秒到幾分鐘。少了這一行，使用者
+        // 按完取消看到畫面毫無變化，就會以為沒成功而重按或來信。
+        //
+        // 不動 status：三家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
+        $subscription->fill(['cancellation_date' => now()])->save();
 
         return response()->make(self::RESPONSE_OK);
     }

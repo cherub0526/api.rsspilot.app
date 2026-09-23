@@ -517,6 +517,54 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * 方案管理區塊要的三個欄位。
+     *
+     * 前端靠它們畫出「目前方案 / 下次續費日 / 取消按鈕」，其中 subscription_id
+     * 特別容易搞錯——回傳裡另一個 `id` 是**方案**的，拿它去打 DELETE 會找錯對象。
+     */
+    public function testIndexExposesTheFieldsThePlanManagementSectionNeeds()
+    {
+        $uri = route('api.v1.subscriptions.index');
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // 免費方案沒有訂閱，三個欄位都該是 null 而不是缺欄位。
+        $this->json('GET', $uri)
+            ->assertStatus(200)
+            ->assertJsonPath('subscription_id', null)
+            ->assertJsonPath('next_date', null)
+            ->assertJsonPath('cancellation_date', null);
+
+        $nextDate = now()->addMonth();
+
+        $subscription = Subscription::factory()->create([
+            'user_id'    => $user->id,
+            'plan_id'    => $this->basicPlan->id,
+            'price_id'   => $this->basicMonthlyPrice->id,
+            'status'     => Subscription::STATUS_ACTIVE,
+            'start_date' => now(),
+            'next_date'  => $nextDate,
+        ]);
+
+        $response = $this->json('GET', $uri)->assertStatus(200);
+
+        // subscription_id 必須是訂閱的 id，不能是方案的。
+        $response->assertJsonPath('subscription_id', $subscription->id)
+            ->assertJsonPath('id', $this->basicPlan->id)
+            ->assertJsonPath('cancellation_date', null);
+
+        $this->assertNotNull($response->json('next_date'));
+
+        // 取消之後 cancellation_date 要有值，next_date 則變成「權限到什麼時候」。
+        $subscription->update(['cancellation_date' => now()]);
+
+        $this->assertNotNull(
+            $this->json('GET', $uri)->assertStatus(200)->json('cancellation_date')
+        );
+    }
+
+    /**
      * Only the reachable-without-a-live-payment-gateway-call surface is
      * covered here. StripeSubscriptionService::cancel() and
      * PaddleSubscriptionService::cancel() both always construct a real SDK
