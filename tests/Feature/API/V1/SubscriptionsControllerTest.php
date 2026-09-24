@@ -593,7 +593,7 @@ class SubscriptionsControllerTest extends TestCase
      */
     public function testSubscriptionErrorMessagesAreTranslated()
     {
-        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found'];
+        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable'];
 
         foreach (['en', 'zh-TW', 'zh-CN'] as $locale) {
             app()->setLocale($locale);

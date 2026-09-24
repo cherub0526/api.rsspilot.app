@@ -56,13 +56,15 @@ return [
             'channel_limit_reached' => 'You have reached the channel subscription limit for your plan.',
         ],
         'subscription' => [
-            'plan_not_found'      => 'Plan not found.',
-            'price_not_found'     => 'Price not found.',
-            'price_not_in_plan'   => 'Price not found in plan.',
-            'not_found'           => 'Subscription not found.',
-            'session_id_required' => 'session_id is required.',
-            'already_subscribed'  => 'You already have an active subscription. To change plans, please contact support.',
-            'cancel_unavailable'  => 'We could not find this subscription with the payment provider. Please contact support.',
+            'plan_not_found'           => 'Plan not found.',
+            'price_not_found'          => 'Price not found.',
+            'price_not_in_plan'        => 'Price not found in plan.',
+            'not_found'                => 'Subscription not found.',
+            'session_id_required'      => 'session_id is required.',
+            'checkout_id_required'     => 'checkout_id is required.',
+            'checkout_not_confirmable' => 'We could not confirm this checkout yet. If you completed payment, your plan will update shortly.',
+            'already_subscribed'       => 'You already have an active subscription. To change plans, please contact support.',
+            'cancel_unavailable'       => 'We could not find this subscription with the payment provider. Please contact support.',
         ],
         'webhook' => [
             'paddle' => [

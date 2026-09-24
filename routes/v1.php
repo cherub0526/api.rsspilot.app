@@ -24,16 +24,17 @@ use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Users\ApiKeysController;
+use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
 use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
-use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
+use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
@@ -442,6 +443,12 @@ Route::group('/subscriptions', function () {
     Route::get('/checkout-session', [
         'as'         => 'checkout-session.index',
         'uses'       => CheckoutSessionController::class . '@index',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::post('/creem/confirm', [
+        'as'         => 'creem.confirm.store',
+        'uses'       => CreemConfirmController::class . '@store',
         'middleware' => ['auth'],
     ]);
 

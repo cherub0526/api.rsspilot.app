@@ -56,13 +56,15 @@ return [
             'channel_limit_reached' => '已達到方案允許的頻道訂閱上限。',
         ],
         'subscription' => [
-            'plan_not_found'      => '找不到指定的方案。',
-            'price_not_found'     => '找不到指定的價格。',
-            'price_not_in_plan'   => '方案中找不到指定的價格。',
-            'not_found'           => '找不到指定的訂閱。',
-            'session_id_required' => 'session_id 為必填。',
-            'already_subscribed'  => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
-            'cancel_unavailable'  => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
+            'plan_not_found'           => '找不到指定的方案。',
+            'price_not_found'          => '找不到指定的價格。',
+            'price_not_in_plan'        => '方案中找不到指定的價格。',
+            'not_found'                => '找不到指定的訂閱。',
+            'session_id_required'      => 'session_id 為必填。',
+            'checkout_id_required'     => 'checkout_id 為必填。',
+            'checkout_not_confirmable' => '目前無法確認這筆結帳。若已完成付款，方案稍後會自動更新。',
+            'already_subscribed'       => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
+            'cancel_unavailable'       => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
         ],
         'webhook' => [
             'paddle' => [

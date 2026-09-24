@@ -56,13 +56,15 @@ return [
             'channel_limit_reached' => '已达到方案允许的频道订阅上限。',
         ],
         'subscription' => [
-            'plan_not_found'      => '找不到指定的方案。',
-            'price_not_found'     => '找不到指定的价格。',
-            'price_not_in_plan'   => '方案中找不到指定的价格。',
-            'not_found'           => '找不到指定的订阅。',
-            'session_id_required' => 'session_id 为必填。',
-            'already_subscribed'  => '你已经有订阅中的方案。如需更换方案，请联系客服。',
-            'cancel_unavailable'  => '找不到此订阅在支付服务商的记录，请联系客服处理。',
+            'plan_not_found'           => '找不到指定的方案。',
+            'price_not_found'          => '找不到指定的价格。',
+            'price_not_in_plan'        => '方案中找不到指定的价格。',
+            'not_found'                => '找不到指定的订阅。',
+            'session_id_required'      => 'session_id 为必填。',
+            'checkout_id_required'     => 'checkout_id 为必填。',
+            'checkout_not_confirmable' => '目前无法确认这笔结账。若已完成付款，方案稍后会自动更新。',
+            'already_subscribed'       => '你已经有订阅中的方案。如需更换方案，请联系客服。',
+            'cancel_unavailable'       => '找不到此订阅在支付服务商的记录，请联系客服处理。',
         ],
         'webhook' => [
             'paddle' => [
