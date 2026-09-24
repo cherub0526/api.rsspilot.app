@@ -341,6 +341,9 @@ export default defineRailway((ctx) => {
     // videotranscriber.archive 跟 smart-summary 同放這裡是因為 timeout：它一趟
     // 要抓七個檔案，其中 mp3 動輒十幾 MB，120 秒那組裝不下。job 內另有 180 秒
     // 的預算上限，確保單次執行不會逼近 --timeout=300。
+    //
+    // media.custom-summary（使用者自訂 AI 摘要）也是一趟 LLM 推論，長度跟
+    // smart-summary 同級，放 fast 那組會被 120 秒截斷。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -348,7 +351,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary,videotranscriber.archive' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",
