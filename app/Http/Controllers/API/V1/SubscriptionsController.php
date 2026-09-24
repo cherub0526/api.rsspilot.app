@@ -362,8 +362,10 @@ class SubscriptionsController extends AbstractController
     {
         $link = match ($subscription->payment_method) {
             Subscription::PAYMENT_METHOD_STRIPE => $subscription->stripe()->first(),
-            Subscription::PAYMENT_METHOD_CREEM  => $subscription->creem()->first(),
-            default                             => $subscription->paddle()->first(),
+            // 只有 checkout id 時要回頭問 Creem 才知道有沒有訂閱，見
+            // CreemSubscriptionService::resolveCreemSubscriptionId()
+            Subscription::PAYMENT_METHOD_CREEM => (new CreemSubscriptionService())->resolveCreemSubscriptionId($subscription),
+            default                            => $subscription->paddle()->first(),
         };
 
         if ($link) {
