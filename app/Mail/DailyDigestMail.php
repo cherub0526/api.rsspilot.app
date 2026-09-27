@@ -77,7 +77,7 @@ class DailyDigestMail extends Mailable
                     ->locale($this->dateLocale())
                     ->isoFormat(__('mails.daily_digest.date_format')),
                 'videoCount'      => $this->videos->count(),
-                'videos'          => $this->buildVideoList(),
+                'videos'          => $this->buildVideoList($clientUrl),
                 'channelCount'    => $this->user->sources()->count(),
                 'totalMediaCount' => $this->user->media()->count(),
                 'dashboardUrl'    => $clientUrl . '/dashboard',
@@ -91,7 +91,7 @@ class DailyDigestMail extends Mailable
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function buildVideoList(): array
+    private function buildVideoList(string $clientUrl): array
     {
         $gradients = [
             'linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #7c3aed 100%)',
@@ -104,13 +104,11 @@ class DailyDigestMail extends Mailable
 
         $emojis = ['🤖', '📊', '📱', '🧠', '🎯', '💡', '🚀', '📚'];
 
-        return $this->videos->values()->map(function (Media $media, int $index) use ($gradients, $emojis): array {
+        return $this->videos->values()->map(function (Media $media, int $index) use ($clientUrl, $gradients, $emojis): array {
             // 與 /summaries、chat 取同一份摘要（見 Media::summaryFor()），只取
             // 已完成的——信裡直接顯示內容，撈到還沒填的空殼就是一封空信。
             /** @var null|Summary $summary */
             $summary = $media->summaryFor($this->user, true);
-            $videoDetail = (array) $media->getAttribute('video_detail');
-            $videoId = $videoDetail['yt:videoId'] ?? null;
             $rawDuration = (int) $media->getAttribute('duration');
             $duration = $rawDuration > 0
                 ? sprintf('%d:%02d', intdiv($rawDuration, 60), $rawDuration % 60)
@@ -121,6 +119,10 @@ class DailyDigestMail extends Mailable
             // yt3.ggpht.com 或 i.ytimg.com），不需要再接前綴。取不到時回空字串，
             // 由版型退回原本的漸層底色——寧可少一張圖，也不要送出破圖的 <img>。
             $channelThumbnail = (string) ($media->source?->getAttribute('thumbnail') ?? '');
+
+            // 「查看完整摘要」落在前端的播放器頁（PlayerView，路由 /player/:id），
+            // 而不是 YouTube 原片——摘要、心智圖與對話都在那一頁。
+            $playerUrl = $clientUrl . '/player/' . $media->getKey();
 
             return [
                 'title'            => (string) $media->getAttribute('title'),
@@ -134,9 +136,7 @@ class DailyDigestMail extends Mailable
                 'thumbnailEmoji'    => $emojis[$index % count($emojis)],
                 'tldr'              => (string) ($summary?->getAttribute('text')['short_summary'] ?? ''),
                 'keyPoints'         => (array) ($summary?->getAttribute('text')['long_summary']['key_points'] ?? []),
-                'url'               => $videoId
-                    ? 'https://www.youtube.com/watch?v=' . $videoId
-                    : '',
+                'url'               => $playerUrl,
             ];
         })->all();
     }
