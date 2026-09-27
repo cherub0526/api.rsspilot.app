@@ -19,7 +19,6 @@ return [
 
         'key_points' => '重点摘要',
         'video_cta'  => '查看完整摘要 →',
-        'views'      => ':count 次观看',
 
         'summary_title' => '前往 Dashboard 查看所有视频',
         'summary_text'  => '您的订阅共有 :channels 个频道・已累积 :media 部视频摘要',

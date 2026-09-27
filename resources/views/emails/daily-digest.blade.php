@@ -232,7 +232,6 @@
       text-decoration: none;
       letter-spacing: -0.01em;
     }
-    .cta-views { font-size: 0.8125rem; color: #a3a3a3; font-weight: 500; }
 
     .email-summary-bar {
       margin: 28px 0 0;
@@ -377,9 +376,6 @@
           </ul>
           <div class="cta-row">
             <a class="cta-btn" href="{{ $video['url'] }}">{{ __('mails.daily_digest.video_cta') }}</a>
-            <span class="cta-views">
-              {{ __('mails.daily_digest.views', ['count' => number_format($video['viewCount'])]) }}
-            </span>
           </div>
         </div>
       </div>

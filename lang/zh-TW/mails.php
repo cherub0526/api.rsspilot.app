@@ -21,7 +21,6 @@ return [
 
         'key_points' => '重點摘要',
         'video_cta'  => '查看完整摘要 →',
-        'views'      => ':count 次觀看',
 
         'summary_title' => '前往 Dashboard 查看所有影片',
         'summary_text'  => '您的訂閱共有 :channels 個頻道・已累積 :media 部影片摘要',

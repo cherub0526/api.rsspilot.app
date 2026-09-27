@@ -134,7 +134,6 @@ class DailyDigestMail extends Mailable
                 'thumbnailEmoji'    => $emojis[$index % count($emojis)],
                 'tldr'              => (string) ($summary?->getAttribute('text')['short_summary'] ?? ''),
                 'keyPoints'         => (array) ($summary?->getAttribute('text')['long_summary']['key_points'] ?? []),
-                'viewCount'         => (int) ($videoDetail['statistics']['viewCount'] ?? 0),
                 'url'               => $videoId
                     ? 'https://www.youtube.com/watch?v=' . $videoId
                     : '',
