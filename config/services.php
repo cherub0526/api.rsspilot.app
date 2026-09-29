@@ -19,10 +19,12 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
+    // SES 用獨立的一組金鑰，不能沿用 AWS_*：那一組在 Railway 上參照的是 Railway
+    // Bucket（S3 相容儲存），不是 AWS 帳號，拿去打 SES 只會認證失敗。
     'ses' => [
-        'key'    => env('AWS_ACCESS_KEY_ID'),
-        'secret' => env('AWS_SECRET_ACCESS_KEY'),
-        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+        'key'    => env('SES_KEY'),
+        'secret' => env('SES_SECRET'),
+        'region' => env('SES_REGION', 'us-east-1'),
     ],
 
     'resend' => [
