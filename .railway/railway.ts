@@ -130,6 +130,14 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 清單裡仍有作用：`AWS_USE_PATH_STYLE_ENDPOINT` 要靠它保住現值，兩個 worker 也
  * 要靠它從 api 鏡射過去。
  *
+ * `CREEM_*` 四個與 `PAYMENT_DEFAULT_PROVIDER` 是接上 Creem 時直接開在面板上的
+ * （2026-09-25 補），plan 提議把四個 service 上的它們全部刪掉，共 20 個破壞性
+ * 變更。`PAYMENT_DEFAULT_PROVIDER` 被刪的話 `Subscription::defaultPaymentMethod()`
+ * 會安靜地退回預設值（Paddle 開著時是 Paddle，`PADDLE_ENABLED=false` 時是
+ * Creem），新結帳可能改走別家金流而不是報錯。補進清單前已比對過 staging 四個
+ * service 的值完全相同（比 sha256），worker 與 scheduler 改成參照 api 不會變動
+ * 任何實際設定。
+ *
  * `SES_*` 三個是寄信改走 AWS SES 時補的（2026-09-30）。它們刻意不跟 AWS_* 共用：
  * AWS_* 已經參照 Railway Bucket，拿去打 SES 只會認證失敗。在面板上設值前就先
  * 登記進來，否則 plan 會把剛設好的它們刪掉，MAIL_MAILER=ses 的信全部寄不出去。
@@ -143,6 +151,7 @@ const ENV_KEYS = [
     "AWS_ACCESS_KEY_ID", "AWS_BUCKET", "AWS_DEFAULT_REGION", "AWS_ENDPOINT",
     "AWS_SECRET_ACCESS_KEY", "AWS_USE_PATH_STYLE_ENDPOINT",
     "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
+    "CREEM_API_KEY", "CREEM_SUCCESS_URL", "CREEM_TEST_MODE", "CREEM_WEBHOOK_SECRET",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
     "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
     "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
@@ -151,7 +160,8 @@ const ENV_KEYS = [
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
     "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_ENABLED", "PADDLE_SANDBOX",
     "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
-    "PADDLE_WEBHOOK_TRUSTED_PROXY", "QUEUE_CONNECTION", "RAPID_API_KEY",
+    "PADDLE_WEBHOOK_TRUSTED_PROXY", "PAYMENT_DEFAULT_PROVIDER",
+    "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
     "SERVER_WORKERS_NUMBER", "SES_KEY", "SES_REGION", "SES_SECRET",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
