@@ -129,6 +129,10 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 其中五個在 2026-09-22 之後由 `awsFrom()` 覆蓋成 bucket 的 reference，留在這份
  * 清單裡仍有作用：`AWS_USE_PATH_STYLE_ENDPOINT` 要靠它保住現值，兩個 worker 也
  * 要靠它從 api 鏡射過去。
+ *
+ * `SES_*` 三個是寄信改走 AWS SES 時補的（2026-09-30）。它們刻意不跟 AWS_* 共用：
+ * AWS_* 已經參照 Railway Bucket，拿去打 SES 只會認證失敗。在面板上設值前就先
+ * 登記進來，否則 plan 會把剛設好的它們刪掉，MAIL_MAILER=ses 的信全部寄不出去。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
@@ -146,7 +150,7 @@ const ENV_KEYS = [
     "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
     "PADDLE_WEBHOOK_TRUSTED_PROXY", "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
-    "SERVER_WORKERS_NUMBER",
+    "SERVER_WORKERS_NUMBER", "SES_KEY", "SES_REGION", "SES_SECRET",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
     "SESSION_PATH", "STRIPE_API_KEY", "STRIPE_PUBLISHABLE_KEY",
     "STRIPE_RETURN_URL", "STRIPE_WEBHOOK_SECRET", "VIDEOTRANSCRIBER_EMAIL",
