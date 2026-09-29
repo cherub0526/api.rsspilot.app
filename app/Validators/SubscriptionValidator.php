@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Validators;
 
+use App\Models\Subscription;
+
 class SubscriptionValidator extends BaseValidator
 {
     public function __construct($params)
@@ -24,7 +26,7 @@ class SubscriptionValidator extends BaseValidator
         $this->rules = [
             'planId'        => 'required|string',
             'priceId'       => 'required|string',
-            'paymentMethod' => 'sometimes|string|in:stripe,paddle,creem',
+            'paymentMethod' => 'sometimes|string|in:' . implode(',', Subscription::checkoutPaymentMethods()),
         ];
 
         return $this;

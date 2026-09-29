@@ -65,6 +65,7 @@ return [
             'checkout_not_confirmable' => '目前無法確認這筆結帳。若已完成付款，方案稍後會自動更新。',
             'already_subscribed'       => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
             'cancel_unavailable'       => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
+            'paddle_disabled'          => '目前暫停使用 Paddle 付款，請改用其他付款方式。',
         ],
         'webhook' => [
             'paddle' => [
@@ -223,7 +224,7 @@ return [
             'string'   => '價格 ID 必須是字串。',
         ],
         'paymentMethod' => [
-            'in' => '付款方式必須是 stripe、paddle 或 creem。',
+            'in' => '不支援此付款方式。',
         ],
     ],
     'user' => [

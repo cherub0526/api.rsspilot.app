@@ -231,7 +231,7 @@ class SubscriptionsController extends AbstractController
         //
         // 預設放在 env 而不是寫死，是為了讓「整站換金流」變成改一個環境變數＋重啟，
         // 不必動前端也不必重新部署——Paddle 退件那次的教訓是，這個開關遲早要用。
-        $paymentMethod = $params['paymentMethod'] ?? self::defaultPaymentMethod();
+        $paymentMethod = $params['paymentMethod'] ?? Subscription::defaultPaymentMethod();
 
         $subscription = $request->user()->subscriptions()->create([
             'plan_id'        => $plan->id,
@@ -284,6 +284,13 @@ class SubscriptionsController extends AbstractController
     )]
     public function update(Request $request, string $subscriptionId)
     {
+        // 這支只做 Paddle 結帳後的確認；Paddle 關閉時不會有新的 Paddle 結帳。
+        if (!Subscription::paddleEnabled()) {
+            throw new InvalidRequestException(
+                ['subscription' => [__('validators.controllers.subscription.paddle_disabled')]]
+            );
+        }
+
         if (!$subscription = $request->user()->subscriptions()->find($subscriptionId)) {
             throw new InvalidRequestException(
                 ['subscriptionId' => [__('validators.controllers.subscription.not_found')]]
@@ -409,23 +416,6 @@ class SubscriptionsController extends AbstractController
         throw new InvalidRequestException(
             ['subscription' => [__('validators.controllers.subscription.cancel_unavailable')]]
         );
-    }
-
-    /**
-     * 沒有指定 `paymentMethod` 時要用哪一家。
-     *
-     * 認不得的值退回 Paddle 而不是拋例外：這個變數打錯字的後果應該是「用回舊的」，
-     * 不是「所有人都結不了帳」。
-     */
-    private static function defaultPaymentMethod(): string
-    {
-        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', Subscription::PAYMENT_METHOD_PADDLE);
-
-        return in_array($configured, [
-            Subscription::PAYMENT_METHOD_PADDLE,
-            Subscription::PAYMENT_METHOD_STRIPE,
-            Subscription::PAYMENT_METHOD_CREEM,
-        ], true) ? $configured : Subscription::PAYMENT_METHOD_PADDLE;
     }
 
     /**

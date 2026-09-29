@@ -33,6 +33,12 @@ class Sync extends Command
 
     public function handle(): void
     {
+        if (!Subscription::paddleEnabled()) {
+            $this->error('Paddle 目前關閉（PADDLE_ENABLED=false），不執行同步。');
+
+            return;
+        }
+
         $paddle = new PaddleClient();
         $plans = Plan::with('prices')->get();
 

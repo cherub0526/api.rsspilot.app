@@ -92,6 +92,47 @@ class Subscription extends Model
         'note'              => 'string',
     ];
 
+    /**
+     * Paddle 是否開放新結帳。只管「新的」：webhook 與取消訂閱照常處理既有的
+     * Paddle 訂閱，見 config/services.php 的 `paddle.enabled`。
+     */
+    public static function paddleEnabled(): bool
+    {
+        return (bool) config('services.paddle.enabled');
+    }
+
+    /**
+     * 目前開放新結帳的金流。
+     *
+     * @return array<int, string>
+     */
+    public static function checkoutPaymentMethods(): array
+    {
+        return array_values(array_filter([
+            self::paddleEnabled() ? self::PAYMENT_METHOD_PADDLE : null,
+            self::PAYMENT_METHOD_STRIPE,
+            self::PAYMENT_METHOD_CREEM,
+        ]));
+    }
+
+    /**
+     * 結帳沒有指定 `paymentMethod` 時要用哪一家。
+     *
+     * 認不得的值不拋例外：這個變數打錯字的後果應該是「用回舊的」，不是「所有人
+     * 都結不了帳」。Paddle 開著時退回 Paddle（原本的行為）；關著時退回 Creem，
+     * 否則 PAYMENT_DEFAULT_PROVIDER 還寫著 paddle 的環境會整站結不了帳。
+     */
+    public static function defaultPaymentMethod(): string
+    {
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', self::PAYMENT_METHOD_PADDLE);
+
+        if (in_array($configured, self::checkoutPaymentMethods(), true)) {
+            return $configured;
+        }
+
+        return self::paddleEnabled() ? self::PAYMENT_METHOD_PADDLE : self::PAYMENT_METHOD_CREEM;
+    }
+
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class, 'plan_id', 'id');
