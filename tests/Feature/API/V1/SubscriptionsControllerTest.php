@@ -248,8 +248,12 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 沒帶 paymentMethod 時要落在 Paddle——這是 store() 的預設值，
-     * 改回 Stripe 的話前端拿到的 payload 形狀會整個換掉。
+     * 沒帶 paymentMethod 時要落在 `PAYMENT_DEFAULT_PROVIDER`，而 phpunit.xml.dist
+     * 把它釘成 paddle。
+     *
+     * 這一條同時守著兩件事：預設值真的有被讀到，以及回傳的 payload 形狀是
+     * Paddle 那一種——前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條
+     * 結帳流程換掉。
      */
     public function testStoreDefaultsToPaddle()
     {
@@ -513,6 +517,54 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * 方案管理區塊要的三個欄位。
+     *
+     * 前端靠它們畫出「目前方案 / 下次續費日 / 取消按鈕」，其中 subscription_id
+     * 特別容易搞錯——回傳裡另一個 `id` 是**方案**的，拿它去打 DELETE 會找錯對象。
+     */
+    public function testIndexExposesTheFieldsThePlanManagementSectionNeeds()
+    {
+        $uri = route('api.v1.subscriptions.index');
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        // 免費方案沒有訂閱，三個欄位都該是 null 而不是缺欄位。
+        $this->json('GET', $uri)
+            ->assertStatus(200)
+            ->assertJsonPath('subscription_id', null)
+            ->assertJsonPath('next_date', null)
+            ->assertJsonPath('cancellation_date', null);
+
+        $nextDate = now()->addMonth();
+
+        $subscription = Subscription::factory()->create([
+            'user_id'    => $user->id,
+            'plan_id'    => $this->basicPlan->id,
+            'price_id'   => $this->basicMonthlyPrice->id,
+            'status'     => Subscription::STATUS_ACTIVE,
+            'start_date' => now(),
+            'next_date'  => $nextDate,
+        ]);
+
+        $response = $this->json('GET', $uri)->assertStatus(200);
+
+        // subscription_id 必須是訂閱的 id，不能是方案的。
+        $response->assertJsonPath('subscription_id', $subscription->id)
+            ->assertJsonPath('id', $this->basicPlan->id)
+            ->assertJsonPath('cancellation_date', null);
+
+        $this->assertNotNull($response->json('next_date'));
+
+        // 取消之後 cancellation_date 要有值，next_date 則變成「權限到什麼時候」。
+        $subscription->update(['cancellation_date' => now()]);
+
+        $this->assertNotNull(
+            $this->json('GET', $uri)->assertStatus(200)->json('cancellation_date')
+        );
+    }
+
+    /**
      * Only the reachable-without-a-live-payment-gateway-call surface is
      * covered here. StripeSubscriptionService::cancel() and
      * PaddleSubscriptionService::cancel() both always construct a real SDK
@@ -529,6 +581,151 @@ class SubscriptionsControllerTest extends TestCase
         // No active subscription (defaults to the free plan) → 404
         $this->fakeLogin();
         $this->json('DELETE', $uri)->assertStatus(404);
+    }
+
+    /**
+     * 訂閱相關的錯誤訊息在三個語系都要真的有譯文。
+     *
+     * 其他測試用 `assertJsonPath(..., __('validators...'))` 比對訊息，但翻譯不存在時
+     * `__()` 會回傳 key 本身，兩邊一樣是那串 key，測試照樣綠燈——cancel_unavailable
+     * 與 already_subscribed 就是這樣被放錯群組、上線時只會顯示 key 原文而沒被發現。
+     * 這裡直接檢查「譯文不等於 key」。
+     */
+    public function testSubscriptionErrorMessagesAreTranslated()
+    {
+        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable'];
+
+        foreach (['en', 'zh-TW', 'zh-CN'] as $locale) {
+            app()->setLocale($locale);
+
+            foreach ($keys as $key) {
+                $full = "validators.controllers.subscription.{$key}";
+                $this->assertNotSame($full, __($full), "{$locale} 缺少 {$full} 的譯文");
+            }
+        }
+    }
+
+    /**
+     * 已有生效中的付費訂閱時不能再結帳——否則金流商那邊會多一筆、每期扣兩次錢。
+     * 已排定取消但還沒到期的也一樣擋，否則到期前會重疊計費。
+     */
+    public function testStoreRefusesWhenAPaidSubscriptionIsActive()
+    {
+        $user = $this->fakeLogin();
+
+        foreach ([null, now()] as $cancellationDate) {
+            Subscription::query()->where('user_id', $user->id)->forceDelete();
+
+            Subscription::factory()->create([
+                'user_id'           => $user->id,
+                'plan_id'           => $this->basicPlan->id,
+                'price_id'          => $this->basicMonthlyPrice->id,
+                'payment_method'    => Subscription::PAYMENT_METHOD_CREEM,
+                'status'            => Subscription::STATUS_ACTIVE,
+                'next_date'         => now()->addMonth(),
+                'cancellation_date' => $cancellationDate,
+            ]);
+
+            $before = Subscription::query()->where('user_id', $user->id)->count();
+
+            $this->json('POST', route('api.v1.subscriptions.store'), [
+                'planId'  => $this->basicPlan->id,
+                'priceId' => $this->basicMonthlyPrice->id,
+            ])
+                ->assertStatus(422)
+                ->assertJsonPath(
+                    'messages.subscription.0',
+                    __('validators.controllers.subscription.already_subscribed')
+                );
+
+            // 被擋下時連 paying 紀錄都不該建
+            $this->assertSame($before, Subscription::query()->where('user_id', $user->id)->count());
+        }
+    }
+
+    /**
+     * 系統贈送的試用不擋：那是送的不是買的，這些使用者本來就該能升級。
+     */
+    public function testStoreAllowsUpgradingFromAGiftedTrial()
+    {
+        $user = $this->fakeLogin();
+
+        Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'next_date'      => now()->addDays(7),
+        ]);
+
+        // 走到預設金流（phpunit 釘成 paddle）的結帳建立，不會被 already_subscribed 擋下
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'  => $this->basicPlan->id,
+            'priceId' => $this->basicMonthlyPrice->id,
+        ])->assertStatus(200);
+    }
+
+    /**
+     * 系統贈送的試用訂閱沒經過金流商，取消只在本地記錄。
+     *
+     * 修正前它會掉進 destroy() 的 match default 走 Paddle 分支，拋出
+     * "Attempt to read property paddle_id on null"。
+     */
+    public function testDestroyCancelsAGiftedTrialLocally()
+    {
+        $user = $this->fakeLogin();
+
+        $subscription = Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_TRIAL,
+            'status'         => Subscription::STATUS_TRIAL,
+            'next_date'      => now()->addDays(7),
+        ]);
+
+        $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+            ->assertStatus(200);
+
+        $this->assertNotNull($subscription->fresh()->cancellation_date);
+        // at_period_end：權限不能被提早收回
+        $this->assertSame(Subscription::STATUS_TRIAL, $subscription->fresh()->status);
+    }
+
+    /**
+     * 金流型訂閱卻連不到金流商的訂閱：回 422 而不是 500，也**不能**記成已取消——
+     * 金流商那邊若其實仍在扣款，顯示「已取消」就是之後才爆的客訴。
+     */
+    public function testDestroyRefusesAProviderSubscriptionWithoutAProviderLink()
+    {
+        $user = $this->fakeLogin();
+
+        foreach ([
+            Subscription::PAYMENT_METHOD_PADDLE,
+            Subscription::PAYMENT_METHOD_STRIPE,
+            Subscription::PAYMENT_METHOD_CREEM,
+        ] as $method) {
+            Subscription::query()->where('user_id', $user->id)->forceDelete();
+
+            $subscription = Subscription::factory()->create([
+                'user_id'        => $user->id,
+                'plan_id'        => $this->basicPlan->id,
+                'price_id'       => $this->basicMonthlyPrice->id,
+                'payment_method' => $method,
+                'status'         => Subscription::STATUS_ACTIVE,
+                'next_date'      => now()->addMonth(),
+            ]);
+
+            $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+                ->assertStatus(422)
+                ->assertJsonPath(
+                    'messages.subscription.0',
+                    __('validators.controllers.subscription.cancel_unavailable')
+                );
+
+            $this->assertNull($subscription->fresh()->cancellation_date, "{$method} 不該被記成已取消");
+        }
     }
 
     /**

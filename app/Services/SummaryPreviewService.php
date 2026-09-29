@@ -21,6 +21,23 @@ use App\Services\Prompts\TemplateCompletionManager;
 class SummaryPreviewService
 {
     /**
+     * 這條路徑自己的生成參數，不吃 TemplateCompletionManager 的全域預設（2000 tokens）。
+     *
+     * 預設模型是推理模型：實測它會把 2000 tokens **全部**花在思考上（reasoning_tokens
+     * = 2000、finish_reason = length），真正的回答 content 是 null——試跑與自訂摘要
+     * 因此一律「沒有結果」。
+     *
+     * - max_tokens 拉高：摘要本身加上推理要有空間
+     * - reasoning 壓到 low 且不回傳：摘要不需要深想，推理內容也用不到
+     *
+     * 不支援推理的模型 OpenRouter 會直接忽略 reasoning 參數。
+     */
+    private const COMPLETION_PARAMS = [
+        'max_tokens' => 8000,
+        'reasoning'  => ['effort' => 'low', 'exclude' => true],
+    ];
+
+    /**
      * @param string $providerModel 空字串代表依模板查系統預設（見 OpenRouterModels::for()）
      * @param null|User $user 沒指定模型時用來套用這個人方案的價格帶；試跑是 per-user
      *                        的路徑，不帶的話 Pro 使用者會跟 Free 用到同一個帶
@@ -43,7 +60,7 @@ class SummaryPreviewService
 
         try {
             $manager = new TemplateCompletionManager(Completion::make(), $template, $user);
-            $response = $manager->complete('', $providerModel);
+            $response = $manager->complete('', $providerModel, self::COMPLETION_PARAMS);
             $content = (string) ($response['choices'][0]['message']['content'] ?? '');
         } catch (Throwable) {
             // 連線失敗、逾時、供應商回錯——對使用者而言結果都是「這次試跑沒有結果」，

@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\API\V1\Webhook;
 
 use Throwable;
-use Carbon\Carbon;
 use Hypervel\Http\Request;
-use App\Models\Transaction;
 use App\Models\Subscription;
 use App\Services\PaddleClient;
 use OpenApi\Attributes as OAT;
@@ -27,6 +25,41 @@ use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 
 class PaddleController extends AbstractController
 {
+    /** 首購與續訂扣款成功。訂閱與交易兩邊的資料都由這一則補齊。 */
+    public const EVENT_TRANSACTION_COMPLETED = 'transaction.completed';
+
+    /**
+     * 扣款失敗。**只記錄、不改狀態**——這時 Paddle 才剛開始 dunning，真正的
+     * 狀態變化會由後續的 `subscription.past_due` / `subscription.canceled` 帶來。
+     * 在這裡就把人停權，等於卡片過期立刻失去服務。
+     */
+    public const EVENT_TRANSACTION_PAYMENT_FAILED = 'transaction.payment_failed';
+
+    /**
+     * 六種訂閱生命週期事件，全部走同一段處理（見
+     * PaddleSubscriptionService::handleSubscriptionEvent()）。
+     */
+    public const SUBSCRIPTION_EVENTS = [
+        'subscription.activated',
+        'subscription.updated',
+        'subscription.canceled',
+        'subscription.past_due',
+        'subscription.paused',
+        'subscription.resumed',
+    ];
+
+    /**
+     * 驗證層的白名單：沒列在這裡的事件一律擋在門外。
+     *
+     * 從 SUBSCRIPTION_EVENTS 展開而不是再抄一份——兩份清單遲早會漂移，而漂移的
+     * 症狀是「Paddle 那邊訂閱了，我們這邊在驗證層默默擋掉」，只有上線後才看得到。
+     */
+    public const HANDLED_EVENTS = [
+        self::EVENT_TRANSACTION_COMPLETED,
+        self::EVENT_TRANSACTION_PAYMENT_FAILED,
+        ...self::SUBSCRIPTION_EVENTS,
+    ];
+
     /** 簽章容許的時間差（秒）。SDK 預設 5 秒太緊，這裡對齊 Stripe 的 300 秒。 */
     private const SIGNATURE_TOLERANCE = 300;
 
@@ -43,7 +76,7 @@ class PaddleController extends AbstractController
                     new OAT\Property(
                         property: 'event_type',
                         type: 'string',
-                        enum: ['transaction.completed'],
+                        enum: PaddleController::HANDLED_EVENTS,
                         example: 'transaction.completed'
                     ),
                     new OAT\Property(
@@ -93,6 +126,98 @@ class PaddleController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
+        $eventType = (string) $params['event_type'];
+
+        if ($eventType === self::EVENT_TRANSACTION_PAYMENT_FAILED) {
+            // 狀態不動（見常數上的說明），但一定要留下痕跡：這是客人開始扣不到
+            // 錢的第一個訊號，之後要追「為什麼這個人掉了」就靠它。
+            Log::notice('Paddle reported a failed payment', [
+                'transaction_id' => $params['data']['id'],
+                'event_id'       => $params['event_id'],
+            ]);
+
+            return response()->make(self::RESPONSE_OK);
+        }
+
+        if (in_array($eventType, self::SUBSCRIPTION_EVENTS, true)) {
+            $this->handleSubscriptionEvent($params);
+
+            return response()->make(self::RESPONSE_OK);
+        }
+
+        $this->handleTransactionCompleted($params);
+
+        return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * `subscription.*`：找出是哪一筆訂閱，剩下的交給 service 跟 Paddle 對答案。
+     *
+     * @throws InvalidRequestException
+     */
+    private function handleSubscriptionEvent(array $params): void
+    {
+        $service = new PaddleSubscriptionService();
+
+        $subscription = $service->resolveSubscription(
+            (string) $params['data']['id'],
+            $this->customDataSubscriptionId($params)
+        );
+
+        if (!$subscription) {
+            // 對不到訂閱就不要吞掉。回 422 會讓 Paddle 重送，留下可以追的紀錄；
+            // 安靜回 200 的話，資料從此對不起來而且沒有人會知道。
+            Log::warning('Received a Paddle subscription event for an unknown subscription', [
+                'paddle_subscription_id' => $params['data']['id'],
+                'event_type'             => $params['event_type'],
+            ]);
+
+            throw new InvalidRequestException(
+                ['subscription' => [__('validators.controllers.subscription.not_found')]]
+            );
+        }
+
+        if (!$service->handleSubscriptionEvent($subscription, (string) $params['data']['id'])) {
+            // 跟 Paddle 對答案時失敗（多半是一時的網路或 5xx）。這時**不能**回 200：
+            // 這一則帶著的狀態變化就永遠不會再來，訂閱會停在舊狀態。回非 2xx 讓
+            // Paddle 走它自己的重送機制。
+            throw new InvalidRequestException(
+                ['subscription' => [__('validators.controllers.webhook.paddle.sync_failed')]]
+            );
+        }
+    }
+
+    /**
+     * 結帳時塞進去的 `customData.subscriptionId`，用來在 `paddles` 還沒有對應列
+     * 的時候找到訂閱。Paddle 對不同事件放的位置不一樣，兩個地方都看。
+     */
+    private function customDataSubscriptionId(array $params): ?string
+    {
+        $data = $params['data'] ?? [];
+
+        $customData = $data['custom_data']
+            ?? $data['subscription']['custom_data']
+            ?? null;
+
+        if (!is_array($customData)) {
+            return null;
+        }
+
+        $id = $customData['subscriptionId'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /**
+     * `transaction.completed`：確認交易真的完成，找出訂閱，其餘交給 service。
+     *
+     * 這裡仍然回頭跟 Paddle 查一次交易，而不是相信 payload——驗簽只證明「這則
+     * 通知確實來自 Paddle」，不證明「此刻這筆交易仍是完成狀態」。
+     *
+     * @throws InvalidRequestException
+     */
+    private function handleTransactionCompleted(array $params): void
+    {
         $paddleClient = new PaddleClient();
 
         try {
@@ -110,48 +235,7 @@ class PaddleController extends AbstractController
                 );
             }
 
-            // price 上帶著一個月的 trial_period，對每個結帳的人都一樣。首月免費
-            // 只送第一次這條規則 Paddle 不知道，沒有資格的人要在這裡當場啟用計費
-            // （見 PaddleSubscriptionService::applyFreeMonth()），再照 Paddle 回報
-            // 的狀態與日期寫入。
-            $service = new PaddleSubscriptionService();
-            $paddleSubscription = $service->applyFreeMonth(
-                $subscription,
-                $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
-            );
-
-            $service->syncFromPaddle($subscription, $paddleSubscription);
-
-            if (!$subscription->paddle()->where(['paddle_id' => $paddleTransaction->subscriptionId])->first()) {
-                $subscription->paddle()->create([
-                    'paddle_id'     => $paddleSubscription->id,
-                    'paddle_detail' => $paddleSubscription,
-                    'foreign_type'  => Subscription::class,
-                ]);
-            }
-
-            $transactionPaddle = $subscription->transactions()->whereHas(
-                'paddle',
-                function ($builder) use ($paddleTransaction) {
-                    $builder->where('paddle_id', $paddleTransaction->id);
-                }
-            )->first();
-
-            if (!$transactionPaddle) {
-                $transactionPaddle = $subscription->transactions()->create([
-                    'billing_date' => Carbon::parse($paddleTransaction->billedAt),
-                    'amount'       => floatval($paddleTransaction->details->totals->total) / 100,
-                    'status'       => TransactionStatus::Completed()->getValue(),
-                ]);
-
-                $transactionPaddle->paddle()->create([
-                    'paddle_id'     => $paddleTransaction->id,
-                    'paddle_detail' => $paddleTransaction,
-                    'foreign_type'  => Transaction::class,
-                ]);
-            }
-
-            return response()->make(self::RESPONSE_OK);
+            (new PaddleSubscriptionService())->handleTransactionCompleted($subscription, $paddleTransaction);
         } catch (ApiError $e) {
         } catch (MalformedResponse $e) {
         }

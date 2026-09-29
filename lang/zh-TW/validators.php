@@ -56,16 +56,24 @@ return [
             'channel_limit_reached' => '已達到方案允許的頻道訂閱上限。',
         ],
         'subscription' => [
-            'plan_not_found'      => '找不到指定的方案。',
-            'price_not_found'     => '找不到指定的價格。',
-            'price_not_in_plan'   => '方案中找不到指定的價格。',
-            'not_found'           => '找不到指定的訂閱。',
-            'session_id_required' => 'session_id 為必填。',
+            'plan_not_found'           => '找不到指定的方案。',
+            'price_not_found'          => '找不到指定的價格。',
+            'price_not_in_plan'        => '方案中找不到指定的價格。',
+            'not_found'                => '找不到指定的訂閱。',
+            'session_id_required'      => 'session_id 為必填。',
+            'checkout_id_required'     => 'checkout_id 為必填。',
+            'checkout_not_confirmable' => '目前無法確認這筆結帳。若已完成付款，方案稍後會自動更新。',
+            'already_subscribed'       => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
+            'cancel_unavailable'       => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
         ],
         'webhook' => [
             'paddle' => [
                 'transaction_not_completed' => '交易狀態未完成。',
+                'sync_failed'               => '與 Paddle 同步訂閱失敗。',
                 'ip_not_allowed'            => '來源 IP 不在允許清單內。',
+            ],
+            'creem' => [
+                'malformed_payload' => 'Creem webhook 內容格式錯誤。',
             ],
         ],
     ],
@@ -215,7 +223,7 @@ return [
             'string'   => '價格 ID 必須是字串。',
         ],
         'paymentMethod' => [
-            'in' => '付款方式必須是 stripe 或 paddle。',
+            'in' => '付款方式必須是 stripe、paddle 或 creem。',
         ],
     ],
     'user' => [

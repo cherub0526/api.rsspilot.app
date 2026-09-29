@@ -553,12 +553,33 @@ Plan: 2 to add, 6 to change, 102 to destroy
 
 ### 現行做法
 
-- **既有 service**（`api`、`scheduler`）用 `preserve()`：保留 Railway 上的
-  現值，值不進 repo。
-- **新建的 worker** 沒有現值可保留，改為參照 `api` 的同名變數
-  （`mirrorOf(api)`），兩個 worker 不必各自維護一份。
+- **只有 `api` 用 `preserve()`**：保留 Railway 上的現值，值不進 repo。它是
+  唯一一份來源。
+- **其餘三個（`worker-fast`、`worker-slow`、`scheduler`）用 `mirrorOf(api)`**，
+  全部參照 `api` 的同名變數，不各自維護一份。scheduler 是 2026-09-22 從
+  `preserve()` 改過來的；切換前在容器內逐一比過 sha256，66 個值裡 64 個相同，
+  另外兩個（`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`）在 scheduler 上原本
+  沒設，所以切換只是補上，沒有覆寫任何既有值。
 - `ENV_KEYS` 是那 51 個變數的名單。**在面板新增變數時要同步加進這份清單**，
   否則下一次 apply 會把它刪掉。
+- **S3 認證是例外**（2026-09-22）：`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、
+  `AWS_DEFAULT_REGION`、`AWS_BUCKET`、`AWS_ENDPOINT` 五個不再 `preserve()`，改由
+  `awsFrom(store)` 參照 Railway Bucket 本身（`bucket.ACCESS_KEY_ID` 等）。要輪替
+  金鑰時在 bucket 上 reset 即可，不必動這個檔案也不必動面板。
+  `AWS_USE_PATH_STYLE_ENDPOINT` 沒有對應的輸出，仍由 `preserve()` 保住；`AWS_URL`
+  與 `CDN_URL` 從來就不在 `ENV_KEYS` 裡，IaC 不管。
+- **Redis 連線參數同樣是例外**（2026-09-22）：`REDIS_HOST`、`REDIS_PORT`、
+  `REDIS_AUTH` 由 `redisFrom()` 指向 redis service 的 `REDISHOST` / `REDISPORT` /
+  `REDISPASSWORD`。應用讀的是 `REDIS_AUTH`，對面叫 `REDISPASSWORD`，而 redis 自己
+  另有一個 `REDIS_PASSWORD`——接錯那個是 no-op，症狀跟「沒設密碼」一模一樣。
+  `REDIS_DB` 是應用自己選第幾號資料庫，沒有對應輸出，維持 `preserve()`。
+
+  這三個用的是**字面值** `${{redis.REDISHOST}}` 而不是 `ref()`。`ref()` 會產生
+  一條指向該資源的 edge，validateGraph 對指向未宣告資源的 edge 直接報錯，等於
+  逼你把 redis 也宣告進來；而 IaC 的 `redis()` helper 預設是 `railwayapp/redis:8.2`
+  + 掛載 `/bitnami`，Railway 上這顆實際是 `redis:8.2` + 掛載 `/data`，還帶自訂的
+  `--requirepass` startCommand，宣告下去 plan 會提議改掉 image 與掛載點，等於清空
+  資料。字面值跟面板上填參照存下來的是同一種東西，不必宣告那顆資源。
 
 這也是為什麼把共用變數搬到專案層 Shared Variables 值得做——名單只要維護
 一份，而且 `ctx.shared.NAME` 可以直接參照。目前是 service 層各存一份。

@@ -19,8 +19,8 @@
  * 同理不宣告 source 與資料庫資源：service 已經接好 repo，Postgres / Redis
  * 也已存在，讓 IaC 只管理 build 與 deploy 設定是風險最低的起點。
  */
-import {defineRailway, github, preserve, project, service} from "railway/iac";
-import type {VariableValue} from "railway/iac";
+import {bucket, defineRailway, github, preserve, project, ref, service} from "railway/iac";
+import type {BucketNode, VariableValue} from "railway/iac";
 
 /**
  * 限縮 omit=delete 的作用域，只涵蓋本檔宣告的資源。
@@ -105,6 +105,13 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
  * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
  *
+ * `PADDLE_WEBHOOK_IP_ALLOWLIST` 與 `PADDLE_WEBHOOK_TRUSTED_PROXY` 是 2026-09-22
+ * 切 live 時補的，同樣直接開在面板上，所以也要登記進來才不會被 plan 刪掉。它們
+ * **必須成對存在**：這個服務跑在 Railway 的反向代理後面，`remote_addr` 看到的是
+ * 代理而不是 Paddle，只留下 IP_ALLOWLIST 會把每一則 webhook 都擋掉，症狀是「付款
+ * 成功但訂閱沒生效」。兩個都被刪掉則是靜靜地退回「不檢查來源 IP」，見
+ * `PaddleController::assertAllowedIp()`。
+ *
  * `DB_QUEUE_RETRY_AFTER` 同樣是後來補的（2026-09-18）。它決定佇列多久之後判定
  * 「這個 job 沒人在跑」並重新發給別人，必須大於所有 worker 的 `--timeout`
  * （目前最大 300，所以設 360）。沒設過的那段期間它是 config 的預設值 90，比兩支
@@ -118,6 +125,10 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * 而且症狀會是「S3 認證失敗」，看起來像金鑰過期而不是設定被刪。
  * 補進清單前已比對過四個 service 的值完全相同（逐一比 sha256），所以 worker 從
  * 自己的值改成參照 api 的同名變數不會變動任何實際設定。
+ *
+ * 其中五個在 2026-09-22 之後由 `awsFrom()` 覆蓋成 bucket 的 reference，留在這份
+ * 清單裡仍有作用：`AWS_USE_PATH_STYLE_ENDPOINT` 要靠它保住現值，兩個 worker 也
+ * 要靠它從 api 鏡射過去。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
@@ -132,7 +143,8 @@ const ENV_KEYS = [
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
     "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_SANDBOX",
-    "PADDLE_WEBHOOK_SECRET_KEY", "QUEUE_CONNECTION", "RAPID_API_KEY",
+    "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
+    "PADDLE_WEBHOOK_TRUSTED_PROXY", "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
     "SERVER_WORKERS_NUMBER",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
@@ -147,13 +159,87 @@ const preserved = (): Record<string, VariableValue> =>
     Object.fromEntries(ENV_KEYS.map((k) => [k, preserve()]));
 
 /**
- * 新建的 worker 用：沒有現值可保留，改為參照 api service 的同名變數。
- * 這樣兩個 worker 不必各自維護一份，也不必把值寫進 repo。
+ * 兩個 worker 與 scheduler 用：全部參照 api service 的同名變數，不各自存一份。
+ *
+ * worker 是新建的、本來就沒有現值可保留；scheduler 2026-09-22 從 `preserved()`
+ * 改過來——手貼四份必然漂移，而漂移的症狀是「只有某一個 service 壞掉」，最難查。
+ *
+ * 切換前逐一比對過 api 與 scheduler 的 66 個值（在容器內比 sha256，不印出值）：
+ * 64 個完全相同，只有 `GOOGLE_CLIENT_ID` 與 `GOOGLE_CLIENT_SECRET` 在 scheduler
+ * 上根本沒設。也就是說這次切換沒有覆寫掉任何既有值，只補上那兩個。
+ *
+ * AWS_* 因此是兩層參照：worker/scheduler → api → bucket。Railway 會遞迴解析。
  */
 const mirrorOf = (
     from: { env: Record<string, VariableValue> },
 ): Record<string, VariableValue> =>
     Object.fromEntries(ENV_KEYS.map((k) => [k, from.env[k]]));
+
+/**
+ * S3 認證改為直接參照 Railway Bucket，不再在面板上另存一份（2026-09-22）。
+ *
+ * 這五個值原本是從 `railway bucket credentials` 複製出來、手動貼進 Shared
+ * Variables 的。複製出來的那一刻它就跟來源脫鉤了：在面板上按下 reset
+ * credentials、或把 bucket 換成另一個，面板上的舊金鑰不會跟著變，只會開始回
+ * 403——而 `config/filesystems.php` 的 s3 disk 設了 `'throw' => true`，症狀是
+ * 上傳直接拋例外，看起來像金鑰過期而不是設定沒同步。
+ *
+ * 改成 reference 之後 Railway 在部署時才解析，輪替金鑰不必再動這個檔案，也
+ * 不必動面板。
+ *
+ * 左邊是 Laravel 在 `config/filesystems.php` 讀的名字，右邊是 bucket 對外輸出
+ * 的名字，兩邊不同名所以不能省略這張對照表。
+ *
+ * **`AWS_USE_PATH_STYLE_ENDPOINT` 不在這裡**：bucket 沒有對應的輸出，它仍然由
+ * `preserved()` 保住面板上的現值。`AWS_URL` 與 `CDN_URL` 同理，而且它們從一開始
+ * 就不在 ENV_KEYS 裡，IaC 不管。
+ */
+const AWS_FROM_BUCKET: Record<string, string> = {
+    AWS_ACCESS_KEY_ID: "ACCESS_KEY_ID",
+    AWS_SECRET_ACCESS_KEY: "SECRET_ACCESS_KEY",
+    AWS_DEFAULT_REGION: "REGION",
+    AWS_BUCKET: "BUCKET",
+    AWS_ENDPOINT: "ENDPOINT",
+};
+
+/** 展開在 `preserved()` 之後，覆蓋掉同名的那幾個 preserve()。 */
+const awsFrom = (store: BucketNode): Record<string, VariableValue> =>
+    Object.fromEntries(
+        Object.entries(AWS_FROM_BUCKET).map(([key, output]) => [key, ref(store, output)]),
+    );
+
+/**
+ * Redis 連線參數同樣改為參照 redis service，不再各存一份（2026-09-22）。
+ *
+ * 左邊是 `config/database.php` 讀的名字，右邊是 Railway 的 redis 對外輸出的
+ * 名字。**密碼那一列特別容易寫錯**：應用讀的是 `REDIS_AUTH`，redis 那邊叫
+ * `REDISPASSWORD`，而 redis 自己另外還有一個 `REDIS_PASSWORD`——設成後者是
+ * no-op，連線會以「密碼錯誤」失敗，但訊息跟「沒設密碼」長得一樣。
+ *
+ * **`REDIS_DB` 不在這裡**：那是要用第幾號資料庫，屬於應用自己的選擇，redis
+ * 沒有對應的輸出，仍由 `preserved()` 保住現值（目前是 0）。
+ *
+ * 為什麼是字面值而不是 `ref()`：`ref()` 會在 graph 裡產生一條指向該資源的
+ * edge，而 validateGraph 對「指向未宣告資源的 edge」直接報錯，所以用 ref 就
+ * 必須把 redis 一起宣告進來。但 IaC 的 `redis()` helper 預設是
+ * `railwayapp/redis:8.2` + 掛載 `/bitnami`，Railway 上這顆實際是 `redis:8.2`
+ * + 掛載 `/data`，還帶一段自訂的 `--requirepass` startCommand；宣告下去 plan
+ * 會提議把 image 與掛載點一起改掉，等於把資料清空。字面值是面板上填參照時
+ * 存下來的同一種東西，Railway 在部署時才解析，不需要宣告那顆資源。
+ */
+const REDIS_FROM_SERVICE: Record<string, string> = {
+    REDIS_HOST: "REDISHOST",
+    REDIS_PORT: "REDISPORT",
+    REDIS_AUTH: "REDISPASSWORD",
+};
+
+/** 同樣展開在 `preserved()` 之後。 */
+const redisFrom = (): Record<string, VariableValue> =>
+    Object.fromEntries(
+        Object.entries(REDIS_FROM_SERVICE).map(
+            ([key, output]) => [key, {type: "literal", value: `\${{redis.${output}}}`}],
+        ),
+    );
 
 export default defineRailway((ctx) => {
     // 同一份檔案會被套用到每個 environment，plan 是對「當下 link 的那個」
@@ -170,9 +256,24 @@ export default defineRailway((ctx) => {
     const source = github("cherub0526/api.rsspilot.app", {
         branch: isProduction ? "main" : "develop",
     });
+    /**
+     * bucket 早就存在（staging 實測 42 個物件 / 133.9 MB），這裡只是把它納入宣告，
+     * 好讓下面的 ref() 有東西可以指——plan 顯示 0 to add，沒有要新建。
+     *
+     * 套用到新環境前先確認那邊也有同名 bucket：沒有的話 apply 會照這份宣告建一個
+     * 空的，然後把 AWS_* 指過去，症狀是「檔案全部不見了」而不是錯誤訊息。
+     *
+     * 名稱必須跟 Railway 上的一致（`bucket`）——資源是以名稱配對的，改名等同於
+     * 「刪掉舊的、建一個新的」，而 bucket 一旦刪掉，裡面的物件跟著沒了。
+     *
+     * region 顯式寫成建立當時的 `sin`。它在建立後不可變更，寫對的值是為了讓
+     * plan 不要把它當成待修改的欄位；寫錯或省略都只會讓 plan 噪音變多。
+     */
+    const store = bucket("bucket", {region: "sin"});
+
     const api = service("api", {
         source,
-        env: preserved(),
+        env: {...preserved(), ...awsFrom(store), ...redisFrom()},
         build,
         deploy: {
             startCommand: `${ARTISAN} start`,
@@ -240,6 +341,9 @@ export default defineRailway((ctx) => {
     // videotranscriber.archive 跟 smart-summary 同放這裡是因為 timeout：它一趟
     // 要抓七個檔案，其中 mp3 動輒十幾 MB，120 秒那組裝不下。job 內另有 180 秒
     // 的預算上限，確保單次執行不會逼近 --timeout=300。
+    //
+    // media.custom-summary（使用者自訂 AI 摘要）也是一趟 LLM 推論，長度跟
+    // smart-summary 同級，放 fast 那組會被 120 秒截斷。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -247,7 +351,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary,videotranscriber.archive' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",
@@ -262,7 +366,7 @@ export default defineRailway((ctx) => {
     // 改名等同於「刪掉舊的、建一個新的」。
     const scheduler = service("scheduler", {
         source,
-        env: preserved(),
+        env: mirrorOf(api),
         build,
         deploy: {
             startCommand: `${ARTISAN} schedule:run`,
@@ -275,6 +379,6 @@ export default defineRailway((ctx) => {
     // ctx.projectName 的型別是 string | undefined，必須給 fallback。
     // plan 是對「已 link 的環境」做 diff，名稱不會用來配對既有專案。
     return project(ctx.projectName ?? "api.rsspilot.app", {
-        resources: [api, workerFast, workerSlow, scheduler],
+        resources: [store, api, workerFast, workerSlow, scheduler],
     });
 });

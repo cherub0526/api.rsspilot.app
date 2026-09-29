@@ -77,6 +77,26 @@ class DailyDigestMailImagesTest extends TestCase
         $this->assertStringContainsString('linear-gradient', $html);
     }
 
+    public function testVideoCtaLinksToThePlayerPage(): void
+    {
+        $previous = getenv('CLIENT_URL');
+        putenv('CLIENT_URL=https://app.example.com/');
+        $_ENV['CLIENT_URL'] = $_SERVER['CLIENT_URL'] = 'https://app.example.com/';
+
+        try {
+            $html = $this->render($this->sourceWithThumbnail());
+        } finally {
+            putenv($previous === false ? 'CLIENT_URL' : 'CLIENT_URL=' . $previous);
+            unset($_ENV['CLIENT_URL'], $_SERVER['CLIENT_URL']);
+        }
+
+        $mediaId = Media::query()->value('id');
+
+        // 落點是前端播放器頁（/player/:id），不是 YouTube 原片。
+        $this->assertStringContainsString('href="https://app.example.com/player/' . $mediaId . '"', $html);
+        $this->assertStringNotContainsString('youtube.com/watch', $html);
+    }
+
     private function sourceWithThumbnail(): Source
     {
         return Source::factory()->create(['thumbnail' => self::CHANNEL_THUMBNAIL]);

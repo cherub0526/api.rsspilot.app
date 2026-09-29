@@ -24,6 +24,7 @@ use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Users\ApiKeysController;
+use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
+use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
@@ -444,6 +446,12 @@ Route::group('/subscriptions', function () {
         'middleware' => ['auth'],
     ]);
 
+    Route::post('/creem/confirm', [
+        'as'         => 'creem.confirm.store',
+        'uses'       => CreemConfirmController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
     Route::get('/usage', [
         'as'         => 'usage.index',
         'uses'       => SubscriptionUsageController::class . '@index',
@@ -486,6 +494,14 @@ Route::group('/webhook', function () {
         [
             'as'   => 'stripe.store',
             'uses' => StripeController::class . '@store',
+        ]
+    );
+
+    Route::post(
+        '/creem',
+        [
+            'as'   => 'creem.store',
+            'uses' => CreemController::class . '@store',
         ]
     );
 

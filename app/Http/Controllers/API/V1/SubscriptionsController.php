@@ -9,6 +9,7 @@ use App\Models\Price;
 use Hypervel\Http\Request;
 use App\Models\Subscription;
 use OpenApi\Attributes as OAT;
+use Hypervel\Support\Facades\Log;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\Http\Resources\PlanResource;
@@ -16,6 +17,7 @@ use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
+use App\Services\CreemSubscriptionService;
 use App\Exceptions\InvalidRequestException;
 use App\Services\PaddleSubscriptionService;
 use App\Services\StripeSubscriptionService;
@@ -61,6 +63,29 @@ class SubscriptionsController extends AbstractController
                                     example: true,
                                     description: 'true = this account has not used its one-off free first month yet'
                                 ),
+                                new OAT\Property(
+                                    property: 'subscription_id',
+                                    type: 'string',
+                                    nullable: true,
+                                    example: '01JCXYZ123456789ABCDEFGHIJ',
+                                    description: 'Subscription ULID; null on the free plan'
+                                ),
+                                new OAT\Property(
+                                    property: 'next_date',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    nullable: true,
+                                    example: '2026-10-14T00:00:00+00:00',
+                                    description: 'Next renewal date, or the end of paid access once canceled'
+                                ),
+                                new OAT\Property(
+                                    property: 'cancellation_date',
+                                    type: 'string',
+                                    format: 'date-time',
+                                    nullable: true,
+                                    example: null,
+                                    description: 'Set once the subscription is canceled; access runs until next_date'
+                                ),
                             ]
                         ),
                         new OAT\Schema(ref: PlanSchema::class),
@@ -91,9 +116,19 @@ class SubscriptionsController extends AbstractController
             : null;
 
         return response()->json([
-            'status'           => $status,
-            'trial_ends_at'    => $trialEndsAt,
-            'first_month_free' => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
+            'status'        => $status,
+            'trial_ends_at' => $trialEndsAt,
+            // 方案管理區塊要的三個欄位。
+            //
+            // subscription_id 必須單獨給：底下展開的 PlanResource 也有 `id`，
+            // 但那是**方案**的 id，不是訂閱的——前端要用它打 DELETE。
+            //
+            // next_date 在已取消時就是「權限到什麼時候」，沒取消時是下次續費日，
+            // 同一個欄位兩種讀法，由 cancellation_date 決定要怎麼講。
+            'subscription_id'   => $subscription?->getKey(),
+            'next_date'         => $subscription?->next_date?->toIso8601String(),
+            'cancellation_date' => $subscription?->cancellation_date?->toIso8601String(),
+            'first_month_free'  => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
             ...(new PlanResource($plan))->toArray(),
         ]);
     }
@@ -125,9 +160,9 @@ class SubscriptionsController extends AbstractController
                     ),
                     new OAT\Property(
                         property: 'paymentMethod',
-                        description: 'Payment gateway (stripe or paddle, defaults to paddle)',
+                        description: 'Payment gateway. Defaults to PAYMENT_DEFAULT_PROVIDER.',
                         type: 'string',
-                        enum: ['stripe', 'paddle'],
+                        enum: ['stripe', 'paddle', 'creem'],
                         example: 'paddle'
                     ),
                 ]
@@ -187,9 +222,16 @@ class SubscriptionsController extends AbstractController
             );
         }
 
-        // 預設走 Paddle。Stripe 仍然收：既有訂閱的取消與 webhook 都還依
-        // subscription.payment_method 分流，只是新的結帳不再導向它。
-        $paymentMethod = $params['paymentMethod'] ?? Subscription::PAYMENT_METHOD_PADDLE;
+        $this->assertNoPaidSubscription((string) $request->user()->id);
+
+        // 三條金流並存，用參數切換：
+        //
+        // 1. 請求帶 `paymentMethod` → 用它（前端可針對特定使用者或 A/B 指定）
+        // 2. 沒帶 → 用 env 的 PAYMENT_DEFAULT_PROVIDER
+        //
+        // 預設放在 env 而不是寫死，是為了讓「整站換金流」變成改一個環境變數＋重啟，
+        // 不必動前端也不必重新部署——Paddle 退件那次的教訓是，這個開關遲早要用。
+        $paymentMethod = $params['paymentMethod'] ?? self::defaultPaymentMethod();
 
         $subscription = $request->user()->subscriptions()->create([
             'plan_id'        => $plan->id,
@@ -198,21 +240,12 @@ class SubscriptionsController extends AbstractController
             'status'         => Subscription::STATUS_PAYING,
         ]);
 
-        if ($paymentMethod === Subscription::PAYMENT_METHOD_STRIPE) {
-            $data = (new StripeSubscriptionService())->createCheckout(
-                $request->user(),
-                $plan,
-                $price,
-                $subscription
-            );
-        } else {
-            $data = (new PaddleSubscriptionService())->createCheckout(
-                $request->user(),
-                $plan,
-                $price,
-                $subscription
-            );
-        }
+        $data = $this->checkoutServiceFor($paymentMethod)->createCheckout(
+            $request->user(),
+            $plan,
+            $price,
+            $subscription
+        );
 
         return response()->json($data);
     }
@@ -291,12 +324,121 @@ class SubscriptionsController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        if ($subscription->payment_method === Subscription::PAYMENT_METHOD_STRIPE) {
-            (new StripeSubscriptionService())->cancel($subscription);
-        } else {
-            (new PaddleSubscriptionService())->cancel($subscription);
+        // 系統贈送的試用訂閱（2026-09 前註冊即送）從來沒經過任何金流商，沒有帳單可停，
+        // 只要在本地記下取消即可。少了這個分支它會掉進下面 match 的 default，被當成
+        // Paddle 訂閱去讀一個不存在的對應列。
+        if ($subscription->payment_method !== Subscription::PAYMENT_METHOD_TRIAL) {
+            $this->assertHasProviderLink($subscription);
+
+            // 依這筆訂閱**當初建立時**的金流分流，不是依現在的預設值——換了預設供應商
+            // 之後，既有訂閱仍然要回到原本那家去取消。
+            match ($subscription->payment_method) {
+                Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
+                Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
+                default                             => (new PaddleSubscriptionService())->cancel($subscription),
+            };
         }
 
+        // 就地記下取消時間，讓畫面立刻反映。
+        //
+        // 權威來源仍然是金流商送回來的 webhook（syncFromPaddle / syncFromCreem 會用
+        // 它們回報的 canceled_at 覆寫），但那可能要幾秒到幾分鐘。少了這一行，使用者
+        // 按完取消看到畫面毫無變化，就會以為沒成功而重按或來信。
+        //
+        // 不動 status：三家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
+        $subscription->fill(['cancellation_date' => now()])->save();
+
         return response()->make(self::RESPONSE_OK);
+    }
+
+    /**
+     * 已經有生效中的付費訂閱就不能再開一筆結帳。
+     *
+     * 少了這道檢查，使用者多按一次升級（或 Pro 想換 Advance）就會在金流商那邊
+     * 多出一筆訂閱、每期被扣兩次錢——實測時就真的發生過。換方案要走金流商的
+     * 升級流程，不是再訂一次。
+     *
+     * 已排定取消但還沒到期的也算：這時再訂一筆，到期前的那段會重疊計費。
+     *
+     * 系統贈送的試用（payment_method = trial）不算——那是送的不是買的，這些使用者
+     * 本來就該能升級成付費方案。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertNoPaidSubscription(string $userId): void
+    {
+        $existing = (new SubscriptionService())->getUserSubscription($userId);
+
+        if (!$existing || $existing->payment_method === Subscription::PAYMENT_METHOD_TRIAL) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['subscription' => [__('validators.controllers.subscription.already_subscribed')]]
+        );
+    }
+
+    /**
+     * 金流型訂閱必須連得到金流商那邊的訂閱，否則沒有東西可以取消。
+     *
+     * 遇到這種資料**不能假裝取消成功**：如果金流商那邊其實還在扣款，我們卻顯示
+     * 「已取消」，就是一筆之後才爆的客訴。所以回 422 讓前端顯示「請聯絡客服」，
+     * 並留 log 讓我們知道有一筆對不起來的訂閱。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertHasProviderLink(Subscription $subscription): void
+    {
+        $link = match ($subscription->payment_method) {
+            Subscription::PAYMENT_METHOD_STRIPE => $subscription->stripe()->first(),
+            // 只有 checkout id 時要回頭問 Creem 才知道有沒有訂閱，見
+            // CreemSubscriptionService::resolveCreemSubscriptionId()
+            Subscription::PAYMENT_METHOD_CREEM => (new CreemSubscriptionService())->resolveCreemSubscriptionId($subscription),
+            default                            => $subscription->paddle()->first(),
+        };
+
+        if ($link) {
+            return;
+        }
+
+        Log::warning('Cannot cancel a subscription that has no payment provider link', [
+            'subscription_id' => (string) $subscription->getKey(),
+            'payment_method'  => $subscription->payment_method,
+        ]);
+
+        throw new InvalidRequestException(
+            ['subscription' => [__('validators.controllers.subscription.cancel_unavailable')]]
+        );
+    }
+
+    /**
+     * 沒有指定 `paymentMethod` 時要用哪一家。
+     *
+     * 認不得的值退回 Paddle 而不是拋例外：這個變數打錯字的後果應該是「用回舊的」，
+     * 不是「所有人都結不了帳」。
+     */
+    private static function defaultPaymentMethod(): string
+    {
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', Subscription::PAYMENT_METHOD_PADDLE);
+
+        return in_array($configured, [
+            Subscription::PAYMENT_METHOD_PADDLE,
+            Subscription::PAYMENT_METHOD_STRIPE,
+            Subscription::PAYMENT_METHOD_CREEM,
+        ], true) ? $configured : Subscription::PAYMENT_METHOD_PADDLE;
+    }
+
+    /**
+     * 建立結帳用的 service。三家的 createCheckout() 簽章刻意一致，
+     * 所以這裡只挑物件，不做分支邏輯。
+     */
+    private function checkoutServiceFor(
+        string $paymentMethod
+    ): CreemSubscriptionService|PaddleSubscriptionService|StripeSubscriptionService {
+        return match ($paymentMethod) {
+            Subscription::PAYMENT_METHOD_STRIPE => new StripeSubscriptionService(),
+            Subscription::PAYMENT_METHOD_CREEM  => new CreemSubscriptionService(),
+            default                             => new PaddleSubscriptionService(),
+        };
     }
 }

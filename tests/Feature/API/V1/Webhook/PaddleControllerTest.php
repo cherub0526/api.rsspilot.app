@@ -6,6 +6,7 @@ namespace Tests\Feature\API\V1\Webhook;
 
 use Tests\TestCase;
 use Hypervel\Foundation\Testing\RefreshDatabase;
+use App\Http\Controllers\API\V1\Webhook\PaddleController;
 
 /**
  * @internal
@@ -145,6 +146,10 @@ class PaddleControllerTest extends TestCase
             ->assertJsonStructure(['messages' => ['event_id', 'event_type', 'occurred_at', 'notification_id', 'data']]);
     }
 
+    /**
+     * 沒訂閱的事件仍要擋下。`subscription.created` 是刻意挑的——它存在於 Paddle，
+     * 但不在我們的白名單裡，所以擋下來的理由是「沒處理」而不是「不認得」。
+     */
     public function testStoreValidatesEventType(): void
     {
         $payload = $this->payload(['event_type' => 'subscription.created']);
@@ -152,6 +157,62 @@ class PaddleControllerTest extends TestCase
         $this->send($payload, $this->signatureFor($payload))
             ->assertStatus(422)
             ->assertJsonPath('messages.event_type.0', __('validators.paddle.event_type.in'));
+    }
+
+    // ---- 訂閱生命週期事件 ----
+
+    /**
+     * 六種 subscription.* 事件都要通過驗證層。
+     *
+     * 通過之後會停在「找不到這筆訂閱」——這正是我們要的斷言：證明事件被收下並
+     * 走到了 resolveSubscription()，而不是在驗證層就被 event_type 擋掉。再往下
+     * 就會真的打 Paddle API，那條路測不了（見 class docblock）。
+     */
+    public function testStoreAcceptsEverySubscriptionLifecycleEvent(): void
+    {
+        foreach (PaddleController::SUBSCRIPTION_EVENTS as $eventType) {
+            $payload = $this->payload([
+                'event_type' => $eventType,
+                'data'       => ['id' => 'sub_01h8bzakzx3nhsf0rr6jh6vj6g'],
+            ]);
+
+            $this->send($payload, $this->signatureFor($payload))
+                ->assertStatus(422)
+                ->assertJsonStructure(['messages' => ['subscription']]);
+        }
+    }
+
+    /**
+     * 對不到訂閱時要回 422 讓 Paddle 重送，不能安靜地回 200——後者會讓資料從此
+     * 對不起來而且沒有人知道。
+     */
+    public function testStoreRejectsASubscriptionEventForAnUnknownSubscription(): void
+    {
+        $payload = $this->payload([
+            'event_type' => 'subscription.canceled',
+            'data'       => ['id' => 'sub_does_not_exist'],
+        ]);
+
+        $this->send($payload, $this->signatureFor($payload))
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.not_found'));
+    }
+
+    /**
+     * 扣款失敗只記錄、不改狀態，所以它是唯一一則不碰 Paddle API 也不碰資料庫
+     * 就能一路走完回 200 的事件——整條路徑（驗簽 → 驗證 → 分派）都測得到。
+     *
+     * 這裡的 200 本身就是斷言：如果哪天有人把它接到「立刻停權」，這個測試會因為
+     * 找不到訂閱而變成 422 而失敗。
+     */
+    public function testStoreAcknowledgesAFailedPaymentWithoutChangingState(): void
+    {
+        $payload = $this->payload([
+            'event_type' => 'transaction.payment_failed',
+            'data'       => ['id' => 'txn_01h8bzakzx3nhsf0rr6jh6vj6g'],
+        ]);
+
+        $this->send($payload, $this->signatureFor($payload))->assertStatus(200);
     }
 
     public function testStoreValidatesDataIdRequired(): void

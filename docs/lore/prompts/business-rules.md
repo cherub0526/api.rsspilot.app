@@ -70,35 +70,75 @@ reasoning 的代價，不該轉嫁到使用者的每日額度上。
 
 ## 上網查資料是方案權益，而且成本結構跟提問次數不一樣
 
-`code:` `app/Utils/AI/NeuronChatStreamer.php` → `webSearchTool()`、`app/Http/Controllers/API/V1/Media/ChatController.php` → `webSearchEnabled()` · `updated:` `2026-09-21` · `status:` `active`
+`code:` `app/Utils/AI/NeuronChatStreamer.php` → `webSearchParameters()`、`app/Http/Controllers/API/V1/Media/ChatController.php` · `updated:` `2026-09-22` · `status:` `active`
 
-對話可以讓模型自己上網查（Tavily，NeuronAI 內建的 `TavilySearchTool`），但**只開給
-`plans.agent_enabled` 的方案**（目前只有 Advance）。判準用資料不用方案名稱，與
-`custom_summary_enabled` / `download_enabled` / `screenshot_enabled` 同一套做法。
+對話可以讓模型自己上網查，但**只開給 `plans.agent_enabled` 的方案**（目前只有
+Advance）。判準用資料不用方案名稱，與 `custom_summary_enabled` /
+`download_enabled` / `screenshot_enabled` 同一套做法。
 
 沒開通的人**不會被擋下請求**——這是一個能力，不是一道閘門。他照常對話，只是模型
-答不出摘要以外的東西時只能說不知道。所以 `webSearchEnabled()` 回 false 而不是拋例外。
+答不出摘要以外的東西時只能說不知道。所以關閉時是「不送 `tools`」而不是拋例外。
 
-為什麼要卡方案，用數字講比較清楚（Tavily 一次搜尋約 $0.007）：
+### 走 OpenRouter 的 server tool，不是自己掛搜尋工具
 
-| 方案 | chat_limit | 每題都搜的月上限 | 該價位的 AI 預算 |
-|---|---|---|---|
-| Free | 3 | ~$0.63 | ~$0（免費） |
-| Pro | 20 | ~$4.2 | $2.23（$9.99 價位） |
-| Advance | 50 | ~$10.5 | $6.03（$24.99 價位） |
+2026-09-22 之前是 Tavily 的 client-side 工具（NeuronAI 的 `TavilySearchTool`），
+現在送的是 OpenRouter 的 `openrouter:web_search` **server tool**：搜尋在 OpenRouter
+那一側跑完才把結果交回模型，client 完全不參與，也不需要任何搜尋供應商的 key。
 
-**光搜尋就能吃掉 Pro 整個 AI 預算的兩倍**，而且這還沒算搜尋真正貴的地方：每次工具
-呼叫都要把摘要與完整歷史**重送一遍**給模型，input token 是雙倍起跳，延遲也跟著漲。
-`ai.chat.web_search.max_runs` 擋的就是這個，不是 Tavily 那幾毫分。
+`webSearchParameters()` 回的是 **request body 的兩個頂層欄位**（`tools` 與
+`max_tool_calls`），不是 NeuronAI 的工具物件。**不能改用 `$agent->addTool()`**，
+兩個原因都會安靜地壞掉：
 
-兩個踩過的地雷：
+1. NeuronAI 的 `HandleStream` 是 `$body = [..., ...$this->parameters]`，之後才在
+   `$this->tools` 非空時寫入 `$body['tools']`。只要掛了任何一個 NeuronAI 工具，
+   我們從 parameters 送的 tools 就會被**整個覆蓋掉**——不報錯，畫面上只是沒有
+   搜尋。這也是為什麼 Tavily 必須移除而不是並存。
+2. NeuronAI 自己的 `ProviderTool` 抽象在這條路上是死的：
+   `Providers/OpenAI/ToolMapper.php` 對 `ProviderToolInterface` 直接拋
+   「OpenAI completions API does not support built-in Tools」。
 
-- **`withOptions()` 是整組覆蓋不是合併**，而且 `include_answer` 不能省——
-  `TavilySearchTool::__invoke()` 直接讀 `$result['answer']`，Tavily 沒被要求產生摘要
-  時不會有這個鍵，每次搜尋都會炸在那一行。
-- **`ChatChunk` 的型別名稱與 `chat_messages.parts` 不完全相同**：串流那側沿用上游
-  詞彙（`reasoning`），儲存與前端那側是 `thinking`。`ChatChunk::toPart()` 負責換這一
-  次；照抄不換的話會寫進一個前端不認得的片段型別，畫面上就是整段內容消失。
+### 不要改用 `plugins: [{id: "web"}]`
+
+OpenRouter 有兩個長得很像的東西，差別在**誰決定要不要搜**：
+
+| | `plugins: [{id:"web"}]` | `openrouter:web_search` server tool |
+|---|---|---|
+| 觸發 | 每次請求都搜 | 模型自己決定，0..N 次 |
+| 實際觸發率 | 100% | 約三成題目 |
+
+兩個都支援 `openrouter/auto`。但實際會需要搜尋的題目大約三成，換成 plugin 等於把
+這一項的成本乘上三倍——Advance 重度使用者的月成本會從 1.70x 變成 2.56x 售價。
+
+### 三個旋鈕都是成本決定
+
+`config/ai.php` 的 `ai.chat.web_search`，單位成本以 Advance 重度使用者（每天 50 題、
+三成觸發搜尋）的月成本計：
+
+| 旋鈕 | 值 | 為什麼 |
+|---|---|---|
+| `engine` / `mode` | `parallel` / `turbo` | 約 $0.001/次；不指定時上游走 Exa 的 $0.007。這一項從 $3.15 降到 $0.45 |
+| `max_results` | 3 | 每筆結果約 2,000–4,000 字元，整段變成 input token |
+| `max_tool_calls` | 2 | **上游預設是 30**，不壓住的話單次對話可以搜 30 輪 |
+
+`max_tool_calls` 是這三個裡最危險的一個，理由跟舊版的 `max_runs` 一樣、而且更嚴重：
+每多一次工具步驟，模型就要把摘要、歷史與**已累積的搜尋結果**整個重跑一遍。貴的是
+這個，不是搜尋本身那幾毫分——拆開來看，重跑脈絡是 $6.04/月、搜尋費只有 $0.45。
+
+自架 SearXNG 評估過，結論是不划算：邊際成本雖然是 0，但 Railway 上 $16/月的固定
+成本要 36 位重度 Advance 使用者才打平 parallel turbo，而且資料中心 IP 會被上游搜尋
+引擎擋、回傳的是 snippet 不是抽取內容、壞掉時安靜回空結果——那是付費權益上最糟的
+失敗模式。完整試算見 rsspilot.app repo 的 `docs/pricing-cost-model.md`。
+
+### 權益與成本設定仍然分開
+
+`plans.agent_enabled` 決定**能不能用**（定價頁讀它），`ai.chat.web_search` 決定
+**怎麼搜**。`webSearchParameters()` 疊在 `plans.ai_routing` 之上而不是寫進它，就是
+為了維持這條界線——`ai_routing` 是成本設定，不該變成第二個決定權益的地方，否則
+定價頁讀的欄位跟實際生效的開關會變成兩個真相來源。
+
+（原本這裡記的 Tavily 地雷——`withOptions()` 是整組覆蓋、`include_answer` 不能省
+——隨著 Tavily 移除一起失效了。`ChatChunk` 的型別名稱與 `chat_messages.parts` 不同
+那一條仍然成立，見〈思考過程是分開的一條流〉。）
 
 ## AI 回應語言取自使用者設定，缺漏時退回 en
 
@@ -217,3 +257,32 @@ Auto Router 的 `low` 帶。
 送進推論、落庫成 `parts`、前端氣泡渲染，三處的順序一致：截圖在前、文字在後。
 
 提問幾乎都在指涉圖片（「這一格在講什麼」「比較這兩格」），先給畫面再給問題，指涉對象才會在問題出現之前就已經進入脈絡。反過來排，模型讀到問題時還不知道「這一格」是什麼。
+
+## 送進推論的歷史有視窗上限，因為成本是隨輪數平方成長的
+
+`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `historyOf()`、`config/ai.php` → `chat.history_window` · `updated:` `2026-09-22` · `status:` `active`
+
+OpenRouter 不替我們保存對話，所以每一輪都要把系統提示、摘要與**整段歷史**重送一遍。
+同一段 session 裡第 i 題的 input 是 i 的線性函數，累積下來就是平方成長：
+
+| 50 題/天怎麼分配 | 對話月成本（Advance） |
+|---|---|
+| 分成 5 段，每段 10 題 | $36.50 |
+| 全部集中在 1 段 | $94.10 |
+
+同樣的題數、同樣的模型，差別只在對話有沒有分段——**而分段與否完全由使用者決定**，
+我們這一側唯一能控制的就是視窗。`ai.chat.history_window` 目前是 20 則（約 10 輪），
+`0` 代表不設限。
+
+三件實作上要記住的事：
+
+- **倒著查再翻回來**，不是查出全部再切。session 可以有上千則訊息，`limit` 讓資料庫
+  只回我們要的那幾列；先 `get()` 再 `slice()` 等於把省下的 token 成本換成記憶體。
+- **倒查時兩個排序都要一起反向。** 同一輪的提問與回應常落在同一秒，`created_at`
+  之外還要拿 ULID 當 tiebreaker，只反向其中一個會讓同秒內的先後錯亂。
+- **截斷是從舊的那端砍，所以歷史可能以一則 assistant 訊息開頭。** OpenAI 相容的 API
+  接受這種開頭，不必為了湊成對再多砍一則。
+
+視窗失效不會報錯，只會在帳單上出現，所以 `ChatControllerTest` 有兩支測試釘住它
+（視窗生效、以及 `0` 時回到不設限）。完整試算見 rsspilot.app repo 的
+`docs/pricing-cost-model.md`。

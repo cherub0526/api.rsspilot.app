@@ -20,7 +20,6 @@ return [
 
         'key_points' => 'Key points',
         'video_cta'  => 'Read the full summary →',
-        'views'      => ':count views',
 
         'summary_title' => 'Open the dashboard to see every video',
         'summary_text'  => ':channels channels subscribed · :media summaries so far',

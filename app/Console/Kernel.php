@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Console;
 
-use App\Console\Commands\Users\PurgeUnverified;
 use App\Console\Commands\Media\Notify;
 use App\Console\Commands\Sources\Sync;
 use Hypervel\Console\Scheduling\Schedule;
+use App\Console\Commands\Media\CustomSummaries;
+use App\Console\Commands\Users\PurgeUnverified;
 use App\Console\Commands\VideoTranscriber\Fetch;
 use App\Console\Commands\VideoTranscriber\Start;
 use App\Console\Commands\VideoTranscriber\Summarize;
@@ -36,6 +37,11 @@ class Kernel extends ConsoleKernel
         // 結束時是 summarized 或 summarize_failed，都不再落入這支指令的查詢條件。
         $schedule->command(Summarize::class)->everyMinute()
             ->name('videotranscriber.summary')->onOneServer()->withoutOverlapping(5);
+
+        // 自訂 AI 摘要：與上面的共用摘要流程分開派工，不共用狀態也不共用 queue。
+        // 指令內會跳過已有摘要列的 (影片, 使用者)，所以每分鐘跑不會重複派。
+        $schedule->command(CustomSummaries::class)->everyMinute()
+            ->name('media.custom-summaries')->onOneServer()->withoutOverlapping(5);
 
         // 每日摘要信。時間是應用程式時區（APP_TIMEZONE），跟指令內判斷「今天」
         // 用的是同一個時區，所以 09:00 跑到的一定是前一個完整的日界線之後、
