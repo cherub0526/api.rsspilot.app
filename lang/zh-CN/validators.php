@@ -65,6 +65,7 @@ return [
             'checkout_not_confirmable' => '目前无法确认这笔结账。若已完成付款，方案稍后会自动更新。',
             'already_subscribed'       => '你已经有订阅中的方案。如需更换方案，请联系客服。',
             'cancel_unavailable'       => '找不到此订阅在支付服务商的记录，请联系客服处理。',
+            'paddle_disabled'          => '目前暂停使用 Paddle 付款，请改用其他付款方式。',
         ],
         'webhook' => [
             'paddle' => [
@@ -223,7 +224,7 @@ return [
             'string'   => '价格 ID 必须是字符串。',
         ],
         'paymentMethod' => [
-            'in' => '付款方式必须是 stripe、paddle 或 creem。',
+            'in' => '不支持此付款方式。',
         ],
     ],
     'user' => [

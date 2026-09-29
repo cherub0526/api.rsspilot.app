@@ -133,6 +133,9 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * `SES_*` 三個是寄信改走 AWS SES 時補的（2026-09-30）。它們刻意不跟 AWS_* 共用：
  * AWS_* 已經參照 Railway Bucket，拿去打 SES 只會認證失敗。在面板上設值前就先
  * 登記進來，否則 plan 會把剛設好的它們刪掉，MAIL_MAILER=ses 的信全部寄不出去。
+ *
+ * `PADDLE_ENABLED` 是暫時關閉 Paddle 時補的（2026-09-30）。沒設或被刪掉等於
+ * false——要重新開放 Paddle 結帳時才需要在面板上設成 true。
  */
 const ENV_KEYS = [
     "AI_DEFAULT_MODEL", "APP_DEBUG", "APP_ENV", "APP_FALLBACK_LOCALE",
@@ -146,7 +149,7 @@ const ENV_KEYS = [
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "OPENROUTER_API_KEY",
-    "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_SANDBOX",
+    "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_ENABLED", "PADDLE_SANDBOX",
     "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
     "PADDLE_WEBHOOK_TRUSTED_PROXY", "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",

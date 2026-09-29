@@ -65,6 +65,7 @@ return [
             'checkout_not_confirmable' => 'We could not confirm this checkout yet. If you completed payment, your plan will update shortly.',
             'already_subscribed'       => 'You already have an active subscription. To change plans, please contact support.',
             'cancel_unavailable'       => 'We could not find this subscription with the payment provider. Please contact support.',
+            'paddle_disabled'          => 'Paddle checkout is currently unavailable. Please choose another payment method.',
         ],
         'webhook' => [
             'paddle' => [
@@ -223,7 +224,7 @@ return [
             'string'   => 'Price ID must be a string.',
         ],
         'paymentMethod' => [
-            'in' => 'Payment method must be stripe, paddle or creem.',
+            'in' => 'This payment method is not available.',
         ],
     ],
     'user' => [

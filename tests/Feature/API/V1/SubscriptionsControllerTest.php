@@ -12,6 +12,7 @@ use App\Models\Paddle;
 use App\Models\Stripe;
 use Stripe\ApiRequestor;
 use App\Models\Subscription;
+use Hypervel\Support\Facades\Config;
 use Tests\Support\FakeStripeHttpClient;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -517,6 +518,82 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
+     * Paddle 關閉時，明確指定 paddle 的結帳要被驗證擋下，也不能留下一筆
+     * paying 的訂閱。
+     */
+    public function testStoreRejectsPaddleWhenPaddleIsDisabled(): void
+    {
+        Config::set('services.paddle.enabled', false);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'paddle',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.paymentMethod.0', __('validators.subscription.paymentMethod.in'));
+
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    /**
+     * PAYMENT_DEFAULT_PROVIDER 還寫著 paddle（phpunit 釘的就是 paddle）但 Paddle
+     * 已關閉時，預設要退到 Creem，而不是讓沒帶 paymentMethod 的結帳走進 Paddle。
+     */
+    public function testDefaultPaymentMethodFallsBackToCreemWhenPaddleIsDisabled(): void
+    {
+        $this->assertSame(Subscription::PAYMENT_METHOD_PADDLE, Subscription::defaultPaymentMethod());
+
+        Config::set('services.paddle.enabled', false);
+
+        $this->assertSame(Subscription::PAYMENT_METHOD_CREEM, Subscription::defaultPaymentMethod());
+        $this->assertNotContains(Subscription::PAYMENT_METHOD_PADDLE, Subscription::checkoutPaymentMethods());
+    }
+
+    public function testUpdateRefusesWhenPaddleIsDisabled(): void
+    {
+        Config::set('services.paddle.enabled', false);
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $subscription = Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'status'         => Subscription::STATUS_PAYING,
+        ]);
+
+        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => $subscription->id]), ['transaction_id' => 'txn_123'])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.paddle_disabled'));
+    }
+
+    /**
+     * Paddle 關閉時，更新已綁 Paddle customer 的使用者不能再打 Paddle API。
+     * PaddleClient 不經容器、測試裡的金鑰是假的——真的打出去就會拋例外。
+     */
+    public function testUpdatingAUserDoesNotCallPaddleWhenPaddleIsDisabled(): void
+    {
+        Config::set('services.paddle.enabled', false);
+
+        $user = User::factory()->create();
+        Paddle::factory()->create([
+            'foreign_type' => User::class,
+            'foreign_id'   => $user->id,
+            'paddle_id'    => 'ctm_test',
+        ]);
+
+        $user->update(['name' => 'Renamed']);
+
+        $this->assertSame('Renamed', $user->fresh()->name);
+    }
+
+    /**
      * 方案管理區塊要的三個欄位。
      *
      * 前端靠它們畫出「目前方案 / 下次續費日 / 取消按鈕」，其中 subscription_id
@@ -593,7 +670,7 @@ class SubscriptionsControllerTest extends TestCase
      */
     public function testSubscriptionErrorMessagesAreTranslated()
     {
-        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable'];
+        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable', 'paddle_disabled'];
 
         foreach (['en', 'zh-TW', 'zh-CN'] as $locale) {
             app()->setLocale($locale);
