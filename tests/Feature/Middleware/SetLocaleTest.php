@@ -29,7 +29,7 @@ class SetLocaleTest extends TestCase
     {
         /** @var User $user */
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['locale' => 'zh-TW']]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['locale' => 'zh-TW']]);
 
         $this->assertEquals(self::MESSAGE_ZH_TW, $this->invalidLocaleMessage());
     }
@@ -48,7 +48,7 @@ class SetLocaleTest extends TestCase
     {
         /** @var User $user */
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['locale' => 'zh-TW']]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['locale' => 'zh-TW']]);
 
         $this->assertEquals(
             self::MESSAGE_ZH_TW,
@@ -60,7 +60,7 @@ class SetLocaleTest extends TestCase
     {
         /** @var User $user */
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['locale' => 'ja']]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['locale' => 'ja']]);
 
         $this->assertEquals(
             self::MESSAGE_ZH_CN,

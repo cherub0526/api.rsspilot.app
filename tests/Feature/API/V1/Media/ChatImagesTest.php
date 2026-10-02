@@ -78,7 +78,7 @@ class ChatImagesTest extends TestCase
 
     private function createUserSetting(User $user): void
     {
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => 'en']],
         ]);

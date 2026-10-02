@@ -108,7 +108,7 @@ class MediaControllerTest extends TestCase
     {
         /** @var User $user */
         $user = $this->fakeLogin();
-        $user->setting()->create(['data' => ['locale' => 'zh-TW']]);
+        $user->setting()->updateOrCreate([], ['data' => ['locale' => 'zh-TW']]);
 
         $media = Media::factory()->create();
         $user->media()->attach($media->id);

@@ -41,7 +41,7 @@ class UsersControllerTest extends TestCase
         /** @var User $user */
         $user = $this->fakeLogin();
 
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => 'en']],
         ]);

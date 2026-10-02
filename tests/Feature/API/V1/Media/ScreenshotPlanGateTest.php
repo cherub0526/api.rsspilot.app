@@ -161,7 +161,7 @@ class ScreenshotPlanGateTest extends TestCase
         $streamer = $this->fakeStreamer();
 
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
         $media = $this->media();
         $checksum = $this->sum();
 
@@ -183,7 +183,7 @@ class ScreenshotPlanGateTest extends TestCase
         $streamer = $this->fakeStreamer();
 
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
         $media = $this->media();
         $checksum = $this->sum();
 
@@ -201,7 +201,7 @@ class ScreenshotPlanGateTest extends TestCase
         $streamer = $this->fakeStreamer();
 
         $user = $this->fakeLogin();
-        Setting::create(['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
+        Setting::query()->updateOrCreate(['user_id' => $user->id], ['user_id' => $user->id, 'data' => ['ai' => ['language' => 'en']]]);
         $media = $this->media();
 
         $this->json('POST', route('api.v1.media.chat.store', ['mediaId' => $media->id]), [

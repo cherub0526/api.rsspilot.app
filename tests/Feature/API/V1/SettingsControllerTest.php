@@ -103,7 +103,7 @@ class SettingsControllerTest extends TestCase
         /** @var User $user */
         $user = $this->fakeLogin();
 
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['locale' => 'en', 'ai' => ['language' => 'ja']],
         ]);
@@ -121,7 +121,7 @@ class SettingsControllerTest extends TestCase
         /** @var User $user */
         $user = $this->fakeLogin();
 
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => 'en'], 'other' => ['flag' => true]],
         ]);

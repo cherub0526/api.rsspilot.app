@@ -209,7 +209,7 @@ class ChatFollowUpsTest extends TestCase
         $session = $this->createSession($user, $media);
         $this->addMessage($session, ChatMessage::ROLE_AI, '回應');
 
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => 'zh-TW']],
         ]);
@@ -252,7 +252,7 @@ class ChatFollowUpsTest extends TestCase
         $session = $this->createSession($user, $media);
         $this->addSummary($media, '這是中文摘要');
 
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => 'ja']],
         ]);
