@@ -108,11 +108,15 @@ service，因為一個 `queue:work` 只能有一個 `--timeout`。新 queue 要�
 
 ## 公開字幕閘門：只收 YouTube 上已有公開字幕的影片
 
-`code:` `app/Services/PublicCaptionGate.php` · `code:` `app/Http/Controllers/API/V1/MediaController.php` → `store()` · `code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `passesCaptionGate()` · `updated:` `2026-10-02` · `status:` `active`
+`code:` `app/Services/PublicCaptionGate.php` · `code:` `app/Http/Controllers/API/V1/MediaController.php` → `store()` · `code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `passesCaptionGate()` · `code:` `app/Services/YoutubeService.php` → `hasCaptionTracks()` · `updated:` `2026-10-03` · `status:` `active`
 
 `MEDIA_REQUIRE_PUBLIC_CAPTIONS=true`（`services.youtube.require_public_captions`）時，影片必須在
-YouTube 上已經有任何一條字幕軌（作者上傳的 standard 或自動產生的 asr 都算）才會進入轉錄。
-預設關閉，關閉時行為與以前完全一樣。
+YouTube 上已經有字幕軌才會進入轉錄：作者上傳的 `standard` 或自動產生的 `asr` 都算，只有
+`forced`（只翻片中外語片段）或處理失敗（`status = failed`）的軌道不算。預設關閉，關閉時行為與
+以前完全一樣。
+
+- **自動字幕查得到**：2026-10-03 實測，`captions.list` 對別人的公開影片也會列出 `asr` 軌——
+  `9bZkp7q19f0` 只有一條 `asr ko`，會被判為有字幕。
 
 - **手動新增**：沒有字幕回 422 `no_public_captions`、不建 media；查不到（配額、網路）回 422
   `captions_check_failed`，**不放行**——閘門的意義就是確定有字幕才收。檢查排在額度檢查之後，

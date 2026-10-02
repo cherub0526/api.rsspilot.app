@@ -12,6 +12,12 @@ use Google\Service\YouTube\Caption;
 
 class YoutubeService
 {
+    /**
+     * 只有這兩種字幕軌算「有字幕」：作者上傳的 standard 與自動產生的 asr。
+     * forced 只翻片中的外語片段，不是整支影片的字幕。
+     */
+    private const array CAPTION_TRACK_KINDS = ['standard', 'asr'];
+
     protected YouTube $youtube;
 
     public function __construct()
@@ -110,7 +116,10 @@ class YoutubeService
     }
 
     /**
-     * 這支影片在 YouTube 上有沒有任何字幕軌（作者上傳的 standard 或自動產生的 asr 都算）。
+     * 這支影片在 YouTube 上有沒有可看的字幕軌（作者上傳的 standard 或自動產生的 asr 都算）。
+     *
+     * 2026-10-03 實測：captions.list 對別人的公開影片也會列出 asr 軌，例如 9bZkp7q19f0
+     * 只有一條 `asr ko`。處理失敗（status = failed）的軌道沒有內容，不算。
      *
      * 與 getVideoCaptions() 不同的是**查不到不等於沒有**：那支把錯誤吞成空陣列，這裡
      * 回 null，讓呼叫端分得出「確定沒有字幕」和「配額用盡／網路錯誤，晚點再查」。
@@ -124,7 +133,18 @@ class YoutubeService
             return null;
         }
 
-        return count($items) > 0;
+        foreach ($items as $caption) {
+            $snippet = $caption->getSnippet();
+
+            if (
+                in_array($snippet?->getTrackKind(), self::CAPTION_TRACK_KINDS, true)
+                && $snippet->getStatus() !== 'failed'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
