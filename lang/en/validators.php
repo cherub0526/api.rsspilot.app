@@ -31,6 +31,8 @@ return [
             'caption_not_found'   => 'Caption not found.',
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
+            'no_public_captions'    => 'This video has no public captions on YouTube, so it cannot be added yet.',
+            'captions_check_failed' => 'We could not check whether this video has public captions. Please try again later.',
         ],
         'download' => [
             'plan_required'  => 'Downloading summaries and transcripts requires a paid plan.',

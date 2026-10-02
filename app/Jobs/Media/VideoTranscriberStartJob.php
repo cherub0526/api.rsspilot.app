@@ -6,6 +6,7 @@ namespace App\Jobs\Media;
 
 use Exception;
 use App\Models\Media;
+use App\Services\PublicCaptionGate;
 use Hypervel\Queue\Queueable;
 use App\Models\VideoTranscription;
 use Hypervel\Queue\Contracts\ShouldQueue;
@@ -31,6 +32,13 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
      * 通常幾分鐘內就會空出名額。
      */
     protected const int BUSY_RETRY_DELAY_SECONDS = 60;
+
+    /**
+     * 公開字幕查不到（Data API 配額用盡、網路錯誤）時的重試間隔。配額是每日重置，
+     * 短間隔重試只會一直撞牆；job 用完 retryUntil 後 media 仍留在 created，
+     * 下一輪 videotranscriber:start 會再派。
+     */
+    protected const int CAPTION_CHECK_RETRY_DELAY_SECONDS = 600;
 
     /**
      * 塞車重試的總時限。刻意壓在 uniqueFor（3600）之內：超過的話唯一鎖會先
@@ -87,8 +95,16 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
     /**
      * Execute the job.
      */
-    public function handle(VideoTranscriberClient $client): void
+    public function handle(VideoTranscriberClient $client, ?PublicCaptionGate $captionGate = null): void
     {
+        $captionGate ??= app(PublicCaptionGate::class);
+
+        // 公開字幕閘門排在名額閘門之前：滿載時這支 job 會被 release 很多次，
+        // 檢查結果記在 video_detail 裡，重試時就不會每次都再花 50 單位配額。
+        if ($captionGate->enabled() && !$this->passesCaptionGate($captionGate)) {
+            return;
+        }
+
         // 主動閘門：名額滿了就別浪費 getUrlInfo 與 startTranscription 兩趟
         // 呼叫。下面仍然保留對 busy code 的處理，因為這個計數是本地推估的，
         // 會跟遠端漂移（media 被刪、fetch 沒跑成功都會讓計數卡住）。
@@ -239,6 +255,32 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         );
 
         return in_array((int) $code, $busyCodes, true);
+    }
+
+    /**
+     * 回 false 代表這支 job 到此為止（已標成 no_captions，或已 release 等待重查）。
+     */
+    private function passesCaptionGate(PublicCaptionGate $captionGate): bool
+    {
+        $detail = $this->media->getAttribute('video_detail') ?? [];
+
+        if (($detail['public_captions'] ?? null) === true) {
+            return true;
+        }
+
+        $hasCaptions = $captionGate->hasPublicCaptions((string) $detail['yt:videoId']);
+
+        if ($hasCaptions === null) {
+            $this->release(self::CAPTION_CHECK_RETRY_DELAY_SECONDS);
+            return false;
+        }
+
+        $this->media->fill([
+            'video_detail' => [...$detail, 'public_captions' => $hasCaptions],
+            ...($hasCaptions ? [] : ['status' => Media::STATUS_NO_CAPTIONS]),
+        ])->save();
+
+        return $hasCaptions;
     }
 
     private function markTranscribeFailed(): void

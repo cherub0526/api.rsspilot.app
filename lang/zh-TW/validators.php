@@ -31,6 +31,8 @@ return [
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '無效的 YouTube 影片網址。',
             'video_limit_reached' => '已達到方案允許的影片數量上限。',
+            'no_public_captions'    => '這支影片在 YouTube 上沒有公開字幕，暫時無法加入。',
+            'captions_check_failed' => '目前無法確認這支影片是否有公開字幕，請稍後再試。',
         ],
         'download' => [
             'plan_required'  => '下載摘要與字幕需要付費方案。',

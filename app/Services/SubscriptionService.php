@@ -85,6 +85,7 @@ class SubscriptionService
         $plan = $this->getUserSubscriptionPlan($this->getUserSubscription($user->id));
 
         $usedCount = $user->media()
+            ->countsTowardQuota()
             ->whereBetween('userables.created_at', $betweenDays)
             ->count();
 

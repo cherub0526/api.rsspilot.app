@@ -7,6 +7,7 @@ namespace Tests\Feature\API\V1;
 use Tests\TestCase;
 use App\Models\Plan;
 use App\Models\User;
+use App\Models\Media;
 use App\Models\Price;
 use App\Models\Paddle;
 use App\Models\Stripe;
@@ -860,5 +861,21 @@ class SubscriptionsControllerTest extends TestCase
                     ],
                 ],
             ]);
+    }
+
+    /**
+     * 沒有公開字幕的影片不轉錄、看不到內容，所以不算進影片額度用量。
+     */
+    public function testUsageExcludesMediaWithoutPublicCaptions()
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->media()->attach(Media::factory()->create(['status' => Media::STATUS_READY])->id);
+        $user->media()->attach(Media::factory()->create(['status' => Media::STATUS_NO_CAPTIONS])->id);
+
+        $this->json('GET', route('api.v1.subscriptions.usage.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('data.usage.media', 1);
     }
 }

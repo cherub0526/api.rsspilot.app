@@ -11,6 +11,7 @@ use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Services\SourceService;
+use App\Services\PublicCaptionGate;
 use App\OpenApi\Parameters\Path;
 use App\Services\YoutubeService;
 use App\OpenApi\Parameters\Query;
@@ -152,7 +153,8 @@ class MediaController extends AbstractController
         YoutubeService $youtubeService,
         VideoTranscriberClient $client,
         SubscriptionService $subscriptionService,
-        SourceService $sourceService
+        SourceService $sourceService,
+        PublicCaptionGate $captionGate
     ): ResponseInterface {
         $params = $request->only(['url']);
 
@@ -178,6 +180,11 @@ class MediaController extends AbstractController
         $alreadyOwned = $media !== null
             && $user->media()->where('media.id', $media->getKey())->exists();
 
+        // 公開字幕閘門：已知沒有字幕的直接拒絕，不必再花配額查一次。
+        if ($captionGate->enabled() && $media?->getAttribute('status') === Media::STATUS_NO_CAPTIONS) {
+            throw new InvalidRequestException(['url' => [__('validators.controllers.media.no_public_captions')]]);
+        }
+
         // 已經在自己的影片庫裡就不佔額度——後面的 syncWithoutDetaching 不會新增 userables。
         if (!$alreadyOwned) {
             $this->assertVideoQuota($user, $subscriptionService);
@@ -186,7 +193,19 @@ class MediaController extends AbstractController
         $created = false;
 
         if ($media === null) {
-            $media = $this->createMediaFromUrl($videoId, $resourceId, $youtubeService, $client, $sourceService);
+            // 放在額度檢查之後：captions.list 一次 50 單位配額，額度已滿的請求不值得花。
+            if ($captionGate->enabled()) {
+                $this->assertPublicCaptions($captionGate, $videoId);
+            }
+
+            $media = $this->createMediaFromUrl(
+                $videoId,
+                $resourceId,
+                $youtubeService,
+                $client,
+                $sourceService,
+                $captionGate->enabled()
+            );
             $created = true;
         }
 
@@ -258,6 +277,7 @@ class MediaController extends AbstractController
         // 所以 29 天前到今天剛好是 30 個日期。用 30 會變成 31 天，與定價頁寫的
         // 「每 30 天」對不上。
         $used = $user->media()
+            ->countsTowardQuota()
             ->whereBetween('userables.created_at', [now()->subDays(29)->startOfDay(), now()->endOfDay()])
             ->count();
 
@@ -265,6 +285,27 @@ class MediaController extends AbstractController
             throw new InvalidRequestException(
                 ['url' => [__('validators.controllers.media.video_limit_reached')]]
             );
+        }
+    }
+
+    /**
+     * 公開字幕閘門開啟時，影片在 YouTube 上必須已經有公開字幕才收。
+     *
+     * 查不到（配額用盡、API 錯誤）一樣拒絕而不是放行——閘門存在的意義就是
+     * 「確定有字幕才收」，放行的話這支影片會照舊被送去轉錄。
+     *
+     * @throws InvalidRequestException
+     */
+    private function assertPublicCaptions(PublicCaptionGate $captionGate, string $videoId): void
+    {
+        $hasCaptions = $captionGate->hasPublicCaptions($videoId);
+
+        if ($hasCaptions === null) {
+            throw new InvalidRequestException(['url' => [__('validators.controllers.media.captions_check_failed')]]);
+        }
+
+        if (!$hasCaptions) {
+            throw new InvalidRequestException(['url' => [__('validators.controllers.media.no_public_captions')]]);
         }
     }
 
@@ -288,7 +329,8 @@ class MediaController extends AbstractController
         string $resourceId,
         YoutubeService $youtubeService,
         VideoTranscriberClient $client,
-        SourceService $sourceService
+        SourceService $sourceService,
+        bool $publicCaptionsConfirmed = false
     ): Media {
         // 一律用正規化過的網址，不把使用者原本帶的追蹤參數送到外部服務。
         $url = 'https://www.youtube.com/watch?v=' . $videoId;
@@ -366,6 +408,8 @@ class MediaController extends AbstractController
                     'thumbnail'   => ['url' => $thumbnail],
                     'content'     => ['url' => ''],
                 ],
+                // 閘門已經確認過有字幕就記下來，VideoTranscriberStartJob 不必再花一次配額查
+                ...($publicCaptionsConfirmed ? ['public_captions' => true] : []),
             ],
             'audio_detail' => [],
         ]);

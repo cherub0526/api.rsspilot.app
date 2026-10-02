@@ -45,6 +45,13 @@ class Media extends Model
 
     public const STATUS_FAILED = 'failed';
 
+    /**
+     * 公開字幕閘門開啟時，YouTube 上沒有任何公開字幕的影片。終點狀態：不轉錄、不摘要，
+     * 也不算進影片額度（見 scopeCountsTowardQuota）。作者事後補上字幕不會自動回來，
+     * 要用 `videotranscriber:start --id=` 手動重送。
+     */
+    public const STATUS_NO_CAPTIONS = 'no_captions';
+
     public const TYPE_YOUTUBE = 'youtube';
 
     public const TYPE_SPOTIFY = 'spotify';
@@ -61,6 +68,7 @@ class Media extends Model
         self::STATUS_READY             => '完成',
         self::STATUS_CANCELLED         => '取消',
         self::STATUS_FAILED            => '失敗',
+        self::STATUS_NO_CAPTIONS       => '無公開字幕',
     ];
 
     public static array $typeMaps = [
@@ -189,5 +197,14 @@ class Media extends Model
         return $query()->where('user_id', $user->getKey())->where('locale', $locale)->first()
             ?? $query()->whereNull('user_id')->where('locale', $locale)->first()
             ?? $query()->whereNull('user_id')->first();
+    }
+
+    /**
+     * 影片額度只算真的會被處理的影片：no_captions 的不轉錄、看不到內容，不該佔名額。
+     * 手動新增、RSS 同步、用量端點三處算法必須一致，所以收在這裡。
+     */
+    public function scopeCountsTowardQuota($query)
+    {
+        return $query->where('media.status', '!=', self::STATUS_NO_CAPTIONS);
     }
 }
