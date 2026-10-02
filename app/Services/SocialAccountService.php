@@ -20,13 +20,20 @@ class SocialAccountService
      *   - `oauths`：provider 的 access token / refresh token。日後要代表使用者呼叫
      *     Google API 時只有這裡有料，登入本身用不到。
      *
+     * `$locale` 是登入當下的介面語系（見 SetLocale::preferredLocale），只用在新建的帳號。
+     *
      * 包在同一個 transaction 裡：建了 user 卻沒存到憑證，下次登入不會補寫（user 已存在），
      * 那筆憑證就永遠缺席了。
      */
-    public function resolveUser(string $provider, SocialiteUser $socialUser): User
+    public function resolveUser(string $provider, SocialiteUser $socialUser, ?string $locale = null): User
     {
-        return DB::transaction(function () use ($provider, $socialUser) {
+        return DB::transaction(function () use ($provider, $socialUser, $locale) {
             $user = $this->firstOrCreateUser($provider, $socialUser);
+
+            // 只有這次才建立的帳號要記下語系；既有帳號的語系是使用者選過的，不覆寫。
+            if ($user->wasRecentlyCreated) {
+                $user->seedLocale($locale);
+            }
 
             $this->storeCredentials($provider, $user, $socialUser);
 

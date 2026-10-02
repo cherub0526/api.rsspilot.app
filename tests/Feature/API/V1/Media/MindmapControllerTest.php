@@ -64,7 +64,7 @@ class MindmapControllerTest extends TestCase
 
     private function setAiLanguage(User $user, string $code): void
     {
-        Setting::create([
+        Setting::query()->updateOrCreate(['user_id' => $user->id], [
             'user_id' => $user->id,
             'data'    => ['ai' => ['language' => $code]],
         ]);

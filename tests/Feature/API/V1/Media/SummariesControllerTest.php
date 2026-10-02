@@ -244,7 +244,7 @@ class SummariesControllerTest extends TestCase
 
     private function givenUiLocale(User $user, string $locale): void
     {
-        $user->setting()->create(['data' => ['locale' => $locale]]);
+        $user->setting()->updateOrCreate([], ['data' => ['locale' => $locale]]);
     }
 
     /**

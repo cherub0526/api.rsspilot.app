@@ -22,9 +22,15 @@ class UserObserver
      * 免費月怎麼給：Paddle 是 price 上的 `trial_period`（`paddle:sync` 設定）、
      * Stripe 是結帳時的 `trial_end`；資格判定在
      * `SubscriptionService::isEligibleForFreeMonth()`，終生一次。
+     *
+     * 但**一定**建一筆空的 settings：每個使用者恰好一筆（settings.user_id 有唯一索引），
+     * 讀設定的地方不必再處理「還沒有資料列」。空的 data 代表「沒有偏好」——
+     * uiLocale() 仍回 null，SetLocale 照樣退回 Accept-Language。註冊當下的語系由
+     * 呼叫端接著用 User::seedLocale() 寫進來。
      */
     public function created(User $user): void
     {
+        $user->setting()->create(['data' => []]);
     }
 
     /**

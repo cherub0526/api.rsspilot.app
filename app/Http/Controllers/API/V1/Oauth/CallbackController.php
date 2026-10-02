@@ -7,6 +7,7 @@ namespace App\Http\Controllers\API\V1\Oauth;
 use Throwable;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
+use App\Http\Middleware\SetLocale;
 use App\OpenApi\Responses\Http422;
 use App\Validators\OauthValidator;
 use App\Services\SocialAccountService;
@@ -94,7 +95,11 @@ class CallbackController extends AbstractController
 
         $socialUser = $this->fetchProviderUser($provider, $params['redirect']);
 
-        $user = (new SocialAccountService())->resolveUser($provider, $socialUser);
+        $user = (new SocialAccountService())->resolveUser(
+            $provider,
+            $socialUser,
+            SetLocale::preferredLocale($request->getHeaderLine('Accept-Language'))
+        );
 
         return $this->responseAccessToken($this->guard()->login($user), 201);
     }

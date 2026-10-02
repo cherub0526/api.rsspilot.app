@@ -16,8 +16,10 @@ use Paddle\SDK\Entities\Shared\TransactionStatus;
 use Paddle\SDK\Entities\Subscription\SubscriptionStatus;
 use Paddle\SDK\Exceptions\SdkExceptions\MalformedResponse;
 use Paddle\SDK\Notifications\Entities\Payout\PayoutStatus;
+use Paddle\SDK\Entities\Subscription\SubscriptionEffectiveFrom;
 use Paddle\SDK\Entities\Transaction as PaddleTransactionEntity;
 use Paddle\SDK\Entities\Subscription as PaddleSubscriptionEntity;
+use Paddle\SDK\Resources\Subscriptions\Operations\CancelSubscription;
 
 class PaddleSubscriptionService
 {
@@ -29,6 +31,13 @@ class PaddleSubscriptionService
 
     /** 立刻啟用並計費——這個帳號的首月免費已經用掉了。 */
     public const FREE_MONTH_ACTION_ACTIVATE = 'activate';
+
+    /**
+     * 測試注入假的 client 用；正式流程不傳，每次呼叫照舊自己 new 一個。
+     */
+    public function __construct(private readonly ?PaddleClient $client = null)
+    {
+    }
 
     public function createCheckout(User $user, Plan $plan, Price $price, Subscription $subscription): array
     {
@@ -56,7 +65,7 @@ class PaddleSubscriptionService
 
     public function confirm(Subscription $subscription, string $transactionId): bool
     {
-        $paddle = new PaddleClient();
+        $paddle = $this->paddle();
 
         try {
             $paddleTransaction = $paddle->transactions()->get($transactionId);
@@ -141,7 +150,7 @@ class PaddleSubscriptionService
             return $paddleSubscription;
         }
 
-        $paddle = new PaddleClient();
+        $paddle = $this->paddle();
         $paddle->subscriptions()->activate($paddleSubscription->id);
 
         return $paddle->subscriptions()->get($paddleSubscription->id);
@@ -232,10 +241,17 @@ class PaddleSubscriptionService
         $subscription->fill($attributes)->save();
     }
 
+    /**
+     * 排在期末取消：使用者已付的這一期要用到滿，與 Creem 的 `mode=scheduled` 一致。
+     *
+     * SDK 的 cancel() 第二個參數是必填的，少傳會直接 ArgumentCountError。
+     */
     public function cancel(Subscription $subscription): void
     {
-        $paddle = new PaddleClient();
-        $paddle->subscriptions()->cancel($subscription->paddle->paddle_id);
+        $this->paddle()->subscriptions()->cancel(
+            $subscription->paddle->paddle_id,
+            new CancelSubscription(SubscriptionEffectiveFrom::NextBillingPeriod()),
+        );
     }
 
     /**
@@ -248,7 +264,7 @@ class PaddleSubscriptionService
         Subscription $subscription,
         PaddleTransactionEntity $paddleTransaction
     ): void {
-        $paddleClient = new PaddleClient();
+        $paddleClient = $this->paddle();
 
         try {
             $paddleSubscription = $this->applyFreeMonth(
@@ -302,7 +318,7 @@ class PaddleSubscriptionService
      */
     public function handleSubscriptionEvent(Subscription $subscription, string $paddleSubscriptionId): bool
     {
-        $paddleClient = new PaddleClient();
+        $paddleClient = $this->paddle();
 
         try {
             $paddleSubscription = $paddleClient->subscriptions()->get($paddleSubscriptionId);
@@ -372,5 +388,10 @@ class PaddleSubscriptionService
             'paddle_detail' => $paddleSubscription,
             'foreign_type'  => Subscription::class,
         ]);
+    }
+
+    private function paddle(): PaddleClient
+    {
+        return $this->client ?? new PaddleClient();
     }
 }

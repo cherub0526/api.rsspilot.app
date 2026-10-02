@@ -49,7 +49,7 @@ class DailyDigestJobTest extends TestCase
         Mail::fake();
 
         $user = User::factory()->create();
-        $user->setting()->create(['data' => ['locale' => Summary::LOCALE_ZH_TW]]);
+        $user->setting()->updateOrCreate([], ['data' => ['locale' => Summary::LOCALE_ZH_TW]]);
         $source = $this->subscribe($user, true);
         $media = $this->mediaFor($user, $source);
         $media->summaries()->whereNull('user_id')->update(['text' => ['short_summary' => 'shared summary']]);
@@ -83,7 +83,7 @@ class DailyDigestJobTest extends TestCase
         Mail::fake();
 
         $user = User::factory()->create();
-        $user->setting()->create(['data' => ['locale' => 'zh-TW']]);
+        $user->setting()->updateOrCreate([], ['data' => ['locale' => 'zh-TW']]);
         $source = $this->subscribe($user, true);
         $this->mediaFor($user, $source);
 
@@ -103,7 +103,7 @@ class DailyDigestJobTest extends TestCase
         Mail::fake();
 
         $user = User::factory()->create();
-        $user->setting()->create(['data' => ['locale' => 'en']]);
+        $user->setting()->updateOrCreate([], ['data' => ['locale' => 'en']]);
         $source = $this->subscribe($user, true);
         $this->mediaFor($user, $source);
 

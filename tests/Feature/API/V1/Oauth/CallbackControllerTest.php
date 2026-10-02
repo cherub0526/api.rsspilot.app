@@ -142,6 +142,37 @@ class CallbackControllerTest extends TestCase
         $this->assertNotNull($existing->fresh());
     }
 
+    public function testStoreStoresLocaleForANewUser(): void
+    {
+        $this->mockProvider($this->fakeProviderUser());
+
+        $this->json('POST', $this->uri(), $this->payload(), ['Accept-Language' => 'zh-TW'])
+            ->assertStatus(201);
+
+        $user = User::query()->where('provider_id', self::PROVIDER_ID)->firstOrFail();
+        $this->assertSame('zh-TW', $user->uiLocale());
+        $this->assertSame('zh-TW', $user->aiLanguageCode());
+    }
+
+    public function testStoreKeepsTheLocaleOfAnExistingUser(): void
+    {
+        // 既有帳號的語系是使用者自己選過的，換個瀏覽器用 Google 登入不該把它改掉。
+        $existing = User::factory()->create([
+            'social_type' => Oauth::PROVIDER_GOOGLE,
+            'provider_id' => self::PROVIDER_ID,
+        ]);
+        $existing->setting()->updateOrCreate([], ['data' => ['locale' => 'en', 'ai' => ['language' => 'ja']]]);
+
+        $this->mockProvider($this->fakeProviderUser());
+
+        $this->json('POST', $this->uri(), $this->payload(), ['Accept-Language' => 'zh-TW'])
+            ->assertStatus(201);
+
+        $this->assertSame('en', $existing->fresh()->uiLocale());
+        $this->assertSame('ja', $existing->fresh()->aiLanguageCode());
+        $this->assertSame(1, $existing->setting()->count());
+    }
+
     public function testStoreDoesNotRequireAuthentication(): void
     {
         // 登入流程的收尾，此時使用者當然還沒有我們的 token。
