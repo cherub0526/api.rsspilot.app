@@ -80,6 +80,7 @@ class UsageController extends AbstractController
                 'usage' => [
                     'channels' => $user->sources()->count(),
                     'media'    => $user->media()
+                        ->countsTowardQuota()
                         ->whereBetween('userables.created_at', $betweenDays)
                         ->count(),
                     'chat' => $chatQuota->used,

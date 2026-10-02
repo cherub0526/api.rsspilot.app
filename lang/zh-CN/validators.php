@@ -31,6 +31,8 @@ return [
             'caption_not_found'   => '找不到指定的字幕。',
             'invalid_url'         => '无效的 YouTube 影片网址。',
             'video_limit_reached' => '已达到方案允许的影片数量上限。',
+            'no_public_captions'    => '这个视频在 YouTube 上没有公开字幕，暂时无法添加。',
+            'captions_check_failed' => '目前无法确认这个视频是否有公开字幕，请稍后再试。',
         ],
         'download' => [
             'plan_required'  => '下载摘要与字幕需要付费方案。',

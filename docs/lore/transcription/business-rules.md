@@ -105,3 +105,31 @@ job 的 `$this->queue` 只是寫進 `jobs` 資料表的一個字串，沒有任�
 Railway 只有 `worker-fast`（`--timeout=120`）與 `worker-slow`（`--timeout=300`）兩個
 service，因為一個 `queue:work` 只能有一個 `--timeout`。新 queue 要放哪一個，取決於它
 單次執行的最壞耗時 —— 這個判斷必須做，超時的代價是整個 worker 自殺（見 pitfalls）。
+
+## 公開字幕閘門：只收 YouTube 上已有公開字幕的影片
+
+`code:` `app/Services/PublicCaptionGate.php` · `code:` `app/Http/Controllers/API/V1/MediaController.php` → `store()` · `code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `passesCaptionGate()` · `updated:` `2026-10-02` · `status:` `active`
+
+`MEDIA_REQUIRE_PUBLIC_CAPTIONS=true`（`services.youtube.require_public_captions`）時，影片必須在
+YouTube 上已經有任何一條字幕軌（作者上傳的 standard 或自動產生的 asr 都算）才會進入轉錄。
+預設關閉，關閉時行為與以前完全一樣。
+
+- **手動新增**：沒有字幕回 422 `no_public_captions`、不建 media；查不到（配額、網路）回 422
+  `captions_check_failed`，**不放行**——閘門的意義就是確定有字幕才收。檢查排在額度檢查之後，
+  額度已滿的請求不花配額。
+- **頻道同步**：`sources:sync` 照常建 media，由 `VideoTranscriberStartJob` 開工前檢查。沒有字幕
+  就改成 `no_captions`（終點狀態，不轉錄、不摘要）；查不到就 release 十分鐘後重查，media 留在
+  `created`。
+- **額度**：`no_captions` 的影片不算進影片額度（`Media::scopeCountsTowardQuota`），手動新增、
+  同步、用量端點三處都走這個 scope。
+- **配額**：判斷用官方 Data API `captions.list`，每次 50 單位，預設每日 10,000 單位約 200 支。
+  結果記在 `video_detail['public_captions']`，同一支影片只查一次；`MediaFactory` 隨機狀態刻意
+  排除 `no_captions`，否則額度測試會偶發失敗。
+
+**這只是「收不收」的閘門，字幕內容仍走 videotranscriber.ai。** 官方 API 拿得到「有沒有字幕」，
+拿不到字幕內容：`captions.download` 只限影片擁有者（OAuth），而舊的 `timedtext` 端點
+（`YoutubeDataCaptionJob`）現在要求 proof-of-origin token，2026-10-02 實測對有字幕的影片也回
+`200` 加 0 bytes。要改成真正用公開字幕當系統字幕，得另接第三方字幕 API。
+
+作者事後補上字幕不會自動回來：`no_captions` 不在任何排程的查詢條件裡，要用
+`videotranscriber:start --id=` 手動重送（`public_captions` 是 false 時會重新查）。

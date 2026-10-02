@@ -110,6 +110,24 @@ class YoutubeService
     }
 
     /**
+     * 這支影片在 YouTube 上有沒有任何字幕軌（作者上傳的 standard 或自動產生的 asr 都算）。
+     *
+     * 與 getVideoCaptions() 不同的是**查不到不等於沒有**：那支把錯誤吞成空陣列，這裡
+     * 回 null，讓呼叫端分得出「確定沒有字幕」和「配額用盡／網路錯誤，晚點再查」。
+     * captions.list 每次花 50 單位配額。
+     */
+    public function hasCaptionTracks(string $videoId): ?bool
+    {
+        try {
+            $items = $this->youtube->captions->listCaptions('snippet', $videoId)->getItems();
+        } catch (Exception) {
+            return null;
+        }
+
+        return count($items) > 0;
+    }
+
+    /**
      * Get caption download URL.
      */
     public function getCaptionDownloadUrl(string $captionId): string
