@@ -21,7 +21,7 @@ class SetLocale
      */
     public function handle(ServerRequestInterface $request, Closure $next)
     {
-        $locale = $this->getUserLocale() ?? $this->getPreferredLanguage(
+        $locale = $this->getUserLocale() ?? self::preferredLocale(
             $request->getHeaderLine('Accept-Language')
         );
 
@@ -52,7 +52,14 @@ class SetLocale
         return $user instanceof User ? $user->uiLocale() : null;
     }
 
-    private function getPreferredLanguage(string $acceptLanguage): ?string
+    /**
+     * 從 Accept-Language 挑出第一個在白名單內的語系，沒有相符的回 null。
+     *
+     * 公開出來給註冊流程用：新帳號要把這個值存成 `settings.data.locale`。
+     * 不能直接讀 App::getLocale()——沒有相符時那裡是 config('app.locale') 的預設值，
+     * 分不出「使用者選了 en」與「根本沒得選」。
+     */
+    public static function preferredLocale(string $acceptLanguage): ?string
     {
         if ($acceptLanguage === '') {
             return null;

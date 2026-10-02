@@ -6,11 +6,12 @@ namespace App\Http\Controllers\API\V1\Auth;
 
 use App\Models\User;
 use Hypervel\Http\Request;
-use App\Services\EmailVerificationService;
 use OpenApi\Attributes as OAT;
 use App\Validators\AuthValidator;
+use App\Http\Middleware\SetLocale;
 use App\OpenApi\Responses\Http400;
 use Psr\Http\Message\ResponseInterface;
+use App\Services\EmailVerificationService;
 use App\Exceptions\InvalidRequestException;
 use App\Http\Controllers\AbstractController;
 use App\Http\Controllers\Concerns\IssuesAccessToken;
@@ -87,6 +88,9 @@ class RegisterController extends AbstractController
             'password'    => bcrypt($params['password']),
             'social_type' => User::SOCIAL_TYPE_LOCAL,
         ]);
+
+        // 前端每個請求都帶著當下的介面語系，註冊時看到的語系就是使用者的選擇。
+        $user->seedUiLocale(SetLocale::preferredLocale($request->getHeaderLine('Accept-Language')));
 
         $this->verification->issueFor($user);
 

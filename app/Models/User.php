@@ -155,10 +155,9 @@ class User extends Authenticatable
     /**
      * AI 回應語言的名稱，供 prompt 直接引用。
      *
-     * settings 資料列要等使用者第一次更新設定才會建立（見 SettingsController::update），
-     * data 內也不保證有 ai.language，所以這裡兩層都不能假設存在——
-     * 直接讀取會觸發 warning，而 Hyperf 的 ErrorExceptionHandler 會把 warning 轉成
-     * ErrorException，讓整個請求變成 500。
+     * settings 資料列建帳號時就會建立（UserObserver::created），但 data 內不保證
+     * 有 ai.language，直接讀取會觸發 warning，而 Hyperf 的 ErrorExceptionHandler
+     * 會把 warning 轉成 ErrorException，讓整個請求變成 500。
      *
      * `ISO6391::getNameByCode()` 是 array_search，未登錄的代碼會回傳 false，
      * 此時以代碼本身頂替，避免 prompt 裡的語言指示變成空字串。
@@ -201,6 +200,25 @@ class User extends Authenticatable
         $locale = ($this->setting()->first()?->data ?? [])['locale'] ?? null;
 
         return in_array($locale, config('app.available_locales'), true) ? $locale : null;
+    }
+
+    /**
+     * 新帳號建立時，把註冊當下的介面語系寫進設定。
+     *
+     * 設定列由 UserObserver::created 建好（空的），這裡只合併 locale 進去。
+     * 少了這一步，新帳號的 uiLocale() 是 null，前端的設定頁與後端寄信都會落回
+     * 預設的 en——即使使用者是在繁中介面註冊的。
+     * 傳 null（請求沒帶可用的語系）時不動，保留「沒有偏好」的狀態。
+     */
+    public function seedUiLocale(?string $locale): void
+    {
+        if ($locale === null) {
+            return;
+        }
+
+        $setting = $this->setting()->firstOrCreate(['user_id' => $this->getKey()], ['data' => []]);
+
+        $setting->update(['data' => array_merge($setting->data ?? [], ['locale' => $locale])]);
     }
 
     public function avatars(): HasMany

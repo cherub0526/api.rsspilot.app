@@ -158,6 +158,37 @@ class AuthControllerTest extends TestCase
         Mail::assertSent(VerifyEmailMail::class);
     }
 
+    public function testRegisterStoresUiLocaleFromAcceptLanguage()
+    {
+        Mail::fake();
+
+        // 前端每個請求都把當下的介面語系放在 Accept-Language，註冊當下看到的語系
+        // 就是使用者的選擇，要存成帳號設定，而不是讓它落回預設的 en。
+        $this->json('POST', route('api.v1.auth.register.store'), [
+            'email'                 => 'zhtw@example.com',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
+        ], ['Accept-Language' => 'zh-TW'])->assertStatus(202);
+
+        $user = User::query()->where('email', 'zhtw@example.com')->firstOrFail();
+        $this->assertSame('zh-TW', $user->uiLocale());
+    }
+
+    public function testRegisterWithUnsupportedAcceptLanguageLeavesUiLocaleUnset()
+    {
+        Mail::fake();
+
+        // 沒有可用的語系時不存預設值——存了就會蓋過之後每個請求的 Accept-Language。
+        $this->json('POST', route('api.v1.auth.register.store'), [
+            'email'                 => 'ja@example.com',
+            'password'              => 'Password@123',
+            'password_confirmation' => 'Password@123',
+        ], ['Accept-Language' => 'ja'])->assertStatus(202);
+
+        $user = User::query()->where('email', 'ja@example.com')->firstOrFail();
+        $this->assertNull($user->uiLocale());
+    }
+
     public function testRegisterWithExistingEmail()
     {
         User::factory()->create(['email' => 'existing@example.com']);
