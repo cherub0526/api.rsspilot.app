@@ -142,7 +142,7 @@ class CallbackControllerTest extends TestCase
         $this->assertNotNull($existing->fresh());
     }
 
-    public function testStoreStoresUiLocaleForANewUser(): void
+    public function testStoreStoresLocaleForANewUser(): void
     {
         $this->mockProvider($this->fakeProviderUser());
 
@@ -151,6 +151,7 @@ class CallbackControllerTest extends TestCase
 
         $user = User::query()->where('provider_id', self::PROVIDER_ID)->firstOrFail();
         $this->assertSame('zh-TW', $user->uiLocale());
+        $this->assertSame('zh-TW', $user->aiLanguageCode());
     }
 
     public function testStoreKeepsTheLocaleOfAnExistingUser(): void
@@ -160,7 +161,7 @@ class CallbackControllerTest extends TestCase
             'social_type' => Oauth::PROVIDER_GOOGLE,
             'provider_id' => self::PROVIDER_ID,
         ]);
-        $existing->setting()->updateOrCreate([], ['data' => ['locale' => 'en']]);
+        $existing->setting()->updateOrCreate([], ['data' => ['locale' => 'en', 'ai' => ['language' => 'ja']]]);
 
         $this->mockProvider($this->fakeProviderUser());
 
@@ -168,6 +169,7 @@ class CallbackControllerTest extends TestCase
             ->assertStatus(201);
 
         $this->assertSame('en', $existing->fresh()->uiLocale());
+        $this->assertSame('ja', $existing->fresh()->aiLanguageCode());
         $this->assertSame(1, $existing->setting()->count());
     }
 

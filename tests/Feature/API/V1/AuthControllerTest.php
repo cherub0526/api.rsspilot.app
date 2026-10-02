@@ -158,7 +158,7 @@ class AuthControllerTest extends TestCase
         Mail::assertSent(VerifyEmailMail::class);
     }
 
-    public function testRegisterStoresUiLocaleFromAcceptLanguage()
+    public function testRegisterStoresLocaleFromAcceptLanguage()
     {
         Mail::fake();
 
@@ -172,9 +172,11 @@ class AuthControllerTest extends TestCase
 
         $user = User::query()->where('email', 'zhtw@example.com')->firstOrFail();
         $this->assertSame('zh-TW', $user->uiLocale());
+        // AI 回覆語言跟著註冊語系，與設定頁合併後的單一語言選項一致。
+        $this->assertSame('zh-TW', $user->aiLanguageCode());
     }
 
-    public function testRegisterWithUnsupportedAcceptLanguageLeavesUiLocaleUnset()
+    public function testRegisterWithUnsupportedAcceptLanguageLeavesLocaleUnset()
     {
         Mail::fake();
 
@@ -187,6 +189,7 @@ class AuthControllerTest extends TestCase
 
         $user = User::query()->where('email', 'ja@example.com')->firstOrFail();
         $this->assertNull($user->uiLocale());
+        $this->assertSame([], $user->setting()->first()->data);
     }
 
     public function testRegisterWithExistingEmail()

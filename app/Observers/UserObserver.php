@@ -26,7 +26,7 @@ class UserObserver
      * 但**一定**建一筆空的 settings：每個使用者恰好一筆（settings.user_id 有唯一索引），
      * 讀設定的地方不必再處理「還沒有資料列」。空的 data 代表「沒有偏好」——
      * uiLocale() 仍回 null，SetLocale 照樣退回 Accept-Language。註冊當下的語系由
-     * 呼叫端接著用 User::seedUiLocale() 寫進來。
+     * 呼叫端接著用 User::seedLocale() 寫進來。
      */
     public function created(User $user): void
     {

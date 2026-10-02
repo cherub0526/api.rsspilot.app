@@ -203,14 +203,17 @@ class User extends Authenticatable
     }
 
     /**
-     * 新帳號建立時，把註冊當下的介面語系寫進設定。
+     * 新帳號建立時，把註冊當下的語系寫進設定：介面語系與 AI 回覆語言都用它。
      *
-     * 設定列由 UserObserver::created 建好（空的），這裡只合併 locale 進去。
-     * 少了這一步，新帳號的 uiLocale() 是 null，前端的設定頁與後端寄信都會落回
-     * 預設的 en——即使使用者是在繁中介面註冊的。
+     * 設定列由 UserObserver::created 建好（空的），這裡只合併進去。少了這一步，
+     * 新帳號的 uiLocale() 是 null、AI 語言是 DEFAULT_AI_LANGUAGE，前端設定頁、
+     * 後端寄信與 AI 回覆都會落回 en——即使使用者是在繁中介面註冊的。
+     *
+     * 兩個欄位填同一個值，是因為前端設定頁把它們合併成單一語言選項；
+     * 介面語系白名單的每個代碼也都在 ISO6391::LANGUAGES 裡，AI 端收得下。
      * 傳 null（請求沒帶可用的語系）時不動，保留「沒有偏好」的狀態。
      */
-    public function seedUiLocale(?string $locale): void
+    public function seedLocale(?string $locale): void
     {
         if ($locale === null) {
             return;
@@ -218,7 +221,10 @@ class User extends Authenticatable
 
         $setting = $this->setting()->firstOrCreate(['user_id' => $this->getKey()], ['data' => []]);
 
-        $setting->update(['data' => array_merge($setting->data ?? [], ['locale' => $locale])]);
+        $setting->update(['data' => array_merge($setting->data ?? [], [
+            'locale' => $locale,
+            'ai'     => ['language' => $locale],
+        ])]);
     }
 
     public function avatars(): HasMany

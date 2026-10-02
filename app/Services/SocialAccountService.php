@@ -32,7 +32,7 @@ class SocialAccountService
 
             // 只有這次才建立的帳號要記下語系；既有帳號的語系是使用者選過的，不覆寫。
             if ($user->wasRecentlyCreated) {
-                $user->seedUiLocale($locale);
+                $user->seedLocale($locale);
             }
 
             $this->storeCredentials($provider, $user, $socialUser);

@@ -37,13 +37,14 @@ class UserSettingTest extends TestCase
         Setting::create(['user_id' => $user->id, 'data' => []]);
     }
 
-    public function testSeedUiLocaleKeepsTheSingleSetting(): void
+    public function testSeedLocaleSetsBothLanguagesOnTheSingleSetting(): void
     {
         $user = User::factory()->create();
 
-        $user->seedUiLocale('zh-TW');
+        $user->seedLocale('zh-TW');
 
         $this->assertSame(1, Setting::query()->where('user_id', $user->id)->count());
         $this->assertSame('zh-TW', $user->uiLocale());
+        $this->assertSame('zh-TW', $user->aiLanguageCode());
     }
 }

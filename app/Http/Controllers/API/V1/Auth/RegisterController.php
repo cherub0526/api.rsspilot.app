@@ -90,7 +90,7 @@ class RegisterController extends AbstractController
         ]);
 
         // 前端每個請求都帶著當下的介面語系，註冊時看到的語系就是使用者的選擇。
-        $user->seedUiLocale(SetLocale::preferredLocale($request->getHeaderLine('Accept-Language')));
+        $user->seedLocale(SetLocale::preferredLocale($request->getHeaderLine('Accept-Language')));
 
         $this->verification->issueFor($user);
 
