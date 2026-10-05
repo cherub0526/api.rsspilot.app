@@ -12,6 +12,7 @@ return [
             'code_expired'        => '驗證碼已失效，請重新寄送。',
             'resend_throttled'    => '請稍候再重新寄送驗證碼。',
             'verify_failed'       => '驗證失敗，請稍後再試。',
+            'reset_link_invalid'  => '重設密碼連結已失效，請重新申請。',
         ],
         'oauth' => [
             'provider_not_configured' => '該登入方式尚未設定。',

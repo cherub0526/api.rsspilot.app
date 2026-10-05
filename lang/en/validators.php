@@ -12,6 +12,7 @@ return [
             'code_expired'        => 'That verification code has expired. Please request a new one.',
             'resend_throttled'    => 'Please wait before requesting another code.',
             'verify_failed'       => 'Verification failed. Please try again.',
+            'reset_link_invalid'  => 'This password reset link is no longer valid. Please request a new one.',
         ],
         'oauth' => [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
