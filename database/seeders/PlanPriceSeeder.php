@@ -62,7 +62,10 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
-                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
+                    // 年繳的新客優惠是首年折價（$99），不是首月免費——理由與數字見
+                    // rsspilot.app repo 的 docs/pricing-cost-model.md「首年折價」一節。
+                    // 已部署的環境由 2026_10_13_100000 那支 migration 補上同一個值。
+                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 129, 'first_period_price' => 99],
                 ],
             ],
             [
@@ -90,6 +93,11 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],
+                    // Advance 年繳**沒有**首年折價。典型使用的成本（$15.52/月）就已經
+                    // 吃掉年繳實收的 78%，折到 $189 之後典型毛利是 −3%——不是極端
+                    // 使用者小虧，是平均每一位都虧。要折價得先動 pricing-cost-model
+                    // §5 那三個旋鈕。年繳取消首月免費的部分照做：現金提前 30 天、
+                    // 毛利不動。
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 249],
                 ],
             ],
@@ -106,8 +114,9 @@ class PlanPriceSeeder extends Seeder
 
             foreach ($prices as $price) {
                 $entity->prices()->create([
-                    'unit'  => $price['unit'],
-                    'price' => $price['price'],
+                    'unit'               => $price['unit'],
+                    'price'              => $price['price'],
+                    'first_period_price' => $price['first_period_price'] ?? null,
                 ]);
             }
         }

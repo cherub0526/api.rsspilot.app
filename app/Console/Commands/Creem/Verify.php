@@ -145,12 +145,72 @@ class Verify extends Command
                 continue;
             }
 
+            // 年繳的新客優惠是首年折價，不是免費月——年繳身上**不該**有 trial
+            // variant。有的話是 2026-10 之前跑過的舊 sync 留下來的，而它是一條
+            // 活的路徑：有資格的年繳客人會被送去那個含試用的 product，等於同時
+            // 白送一個月又把第一筆扣款推後 30 天。
+            if ($price->isAnnual() && $rows->contains('variant', Creem::VARIANT_TRIAL)) {
+                $this->error(sprintf(
+                    '  ✗ %s %s 還留著 trial variant（舊 sync 的殘留），請刪掉那一列 creems 對應',
+                    $price->plan->title,
+                    $price->unit
+                ));
+                $ok = false;
+            }
+
+            $ok = $this->checkIntroPrice($price) && $ok;
+
             foreach ($rows as $row) {
                 $ok = $this->checkOneProduct($client, $price, (string) $row->variant, (string) $row->creem_id) && $ok;
             }
         }
 
         return $ok;
+    }
+
+    /**
+     * 首年折價的資料本身合不合理。
+     *
+     * `first_period_price` 是手填的欄位，填錯不會讓任何東西報錯：
+     * `Price::firstPeriodPrice()` 遇到 >= 原價或 <= 0 就當作沒有優惠，於是定價頁
+     * 寫著首年折價、結帳卻照原價收——這是最難從現象反推回來的那種錯。
+     */
+    private function checkIntroPrice(Price $price): bool
+    {
+        $raw = $price->first_period_price;
+
+        if ($raw === null) {
+            return true;
+        }
+
+        $label = sprintf('%s %s', $price->plan->title, $price->unit);
+
+        if (!$price->isAnnual()) {
+            $this->error("  ✗ {$label} 設了 first_period_price，但只有年繳認這個欄位（月繳的優惠是首月免費）");
+
+            return false;
+        }
+
+        if ($price->firstPeriodPrice() === null) {
+            $this->error(sprintf(
+                '  ✗ %s 的 first_period_price（%s）不是有效的優惠價，必須 > 0 且 < %s',
+                $label,
+                (string) $raw,
+                (string) $price->price
+            ));
+
+            return false;
+        }
+
+        $this->line(sprintf(
+            '  ✓ %s 首年 $%s → 續約 $%s（折 %d 美分，結帳時發單次折扣碼）',
+            $label,
+            (string) $price->firstPeriodPrice(),
+            (string) $price->price,
+            (int) $price->introDiscountCents()
+        ));
+
+        return true;
     }
 
     private function checkOneProduct(CreemClient $client, Price $price, string $variant, string $productId): bool

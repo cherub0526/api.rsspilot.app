@@ -19,9 +19,14 @@ use Hypervel\Console\Command;
  *
  * 1. Creem 沒有 product → 多 price 的階層，價格直接綁在 product 上。所以這裡是
  *    **一個 price 對一個 product**，`plans` 只拿來組名稱，不會在 Creem 建東西。
- * 2. 每個付費 price 要建**兩個** product：含 30 天試用的、與不含的。原因見
+ * 2. **月繳**的付費 price 要建**兩個** product：含 30 天試用的、與不含的。原因見
  *    CreemSubscriptionService::productIdFor()——Creem 結帳時不能覆寫試用期，
  *    「首月免費只送第一次」只能用選 product 的方式守。
+ *
+ * **年繳只建 standard 一個**（2026-10，RSS-3）。年繳的新客優惠改成首年折價，
+ * 走折扣碼而不是試用期——理由是免費月會把年繳的第一筆扣款整整推後 30 天。
+ * 折扣碼是結帳時才建的（綁訂閱、單次使用），所以這個指令不碰它，見
+ * CreemSubscriptionService::introDiscountCodeFor()。
  *
  * 免費方案不會建 product：$0 不需要結帳。
  *
@@ -39,7 +44,7 @@ class Sync extends Command
 
     protected ?string $signature = 'creem:sync {--recreate : 捨棄現有對應並重建 product（product 屬性有變時用）}';
 
-    protected string $description = '依現有 Plan / Price 在 Creem 建立對應的 Product（含試用與不含試用兩個變體）';
+    protected string $description = '依現有 Plan / Price 在 Creem 建立對應的 Product（月繳含試用與不含試用兩個變體，年繳只建不含試用的）';
 
     public function handle(): void
     {
@@ -64,13 +69,29 @@ class Sync extends Command
                     continue;
                 }
 
-                foreach ([Creem::VARIANT_STANDARD, Creem::VARIANT_TRIAL] as $variant) {
+                foreach ($this->variantsFor($price) as $variant) {
                     $this->syncVariant($client, $plan, $price, $variant, $amount, $label);
                 }
             }
         }
 
         $this->info('完成。');
+    }
+
+    /**
+     * 這個 price 要建哪幾個 product 變體。
+     *
+     * 年繳**不建 trial variant**：它的新客優惠是首年折價（結帳時掛折扣碼），
+     * 不是免費月。建了只會多一個沒有任何路徑會選到的 product，而正式環境多一個
+     * 長得很像的年繳 product 是對帳時最容易拿錯的那種東西。
+     *
+     * @return list<string>
+     */
+    private function variantsFor(Price $price): array
+    {
+        return $price->isAnnual()
+            ? [Creem::VARIANT_STANDARD]
+            : [Creem::VARIANT_STANDARD, Creem::VARIANT_TRIAL];
     }
 
     /**

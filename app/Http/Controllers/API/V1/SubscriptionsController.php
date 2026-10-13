@@ -61,7 +61,10 @@ class SubscriptionsController extends AbstractController
                                     property: 'first_month_free',
                                     type: 'boolean',
                                     example: true,
-                                    description: 'true = this account has not used its one-off free first month yet'
+                                    description: 'true = this account has not used its one-off new-customer offer yet. '
+                                        . 'Monthly checkouts turn it into a free first month; annual checkouts turn it '
+                                        . 'into the discounted first year (prices[].first_period_price). One lifetime '
+                                        . 'gate for both, so a customer cannot collect each separately.'
                                 ),
                                 new OAT\Property(
                                     property: 'subscription_id',

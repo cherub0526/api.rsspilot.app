@@ -58,6 +58,43 @@ class CreemClient
     }
 
     /**
+     * 建立折扣碼。
+     *
+     * 我們只用 `duration: once`——它「只套用在第一筆付款」，年繳就剛好是首年折價，
+     * 續約自動回到 product 原價。Creem 的 product 建了就不能改價（見 Creem\Sync），
+     * 所以「首年便宜、之後原價」沒有別的做法。
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    public function createDiscount(array $payload): array
+    {
+        return $this->post('/discounts', $payload);
+    }
+
+    /**
+     * 用 code 查折扣碼，**查不到回 null 而不是拋例外**。
+     *
+     * 這支是用來做冪等的：同一筆訂閱重試結帳時要沿用上次那一張，不能重複建
+     * （code 唯一，重建會被 Creem 擋）。「還沒建過」是正常的查詢結果，所以 404
+     * 要能跟真正的錯誤分開——這也是它不走 get() 的原因，那支非 2xx 一律拋。
+     *
+     * @return null|array<string, mixed>
+     */
+    public function findDiscount(string $code): ?array
+    {
+        $response = Http::timeout(self::TIMEOUT)
+            ->withHeaders($this->headers())
+            ->get($this->baseUrl() . '/discounts?discount_code=' . rawurlencode($code));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        return $this->decode($response->status(), (string) $response->body(), 'GET /discounts');
+    }
+
+    /**
      * 建立結帳，回傳帶 checkout_url 的結果——Creem 是**轉址型**結帳，
      * 不像 Paddle 有 overlay SDK，所以前端拿到的是一個要跳過去的網址。
      *

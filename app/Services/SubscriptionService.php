@@ -57,6 +57,22 @@ class SubscriptionService
         return !$query->exists();
     }
 
+    /**
+     * 這個帳號還能不能領**新客優惠**。
+     *
+     * 月繳的新客優惠是首月免費，年繳的是首年折價——**兩者共用同一個終生一次的
+     * 閘門**，而且刻意只有這一個。分開算的話「月繳用掉首月免費 → 取消 → 改訂
+     * 年繳拿首年折價」就能一個人吃兩份。
+     *
+     * 這支只是 isEligibleForFreeMonth() 的別名，存在的理由是讓年繳那條路的呼叫端
+     * 讀起來不是在問一個跟它無關的問題（它不發「免費月」）。資格判斷只有一份
+     * 實作，見上面那支的註解。
+     */
+    public function isEligibleForIntroOffer(string $userId, ?string $excludeSubscriptionId = null): bool
+    {
+        return $this->isEligibleForFreeMonth($userId, $excludeSubscriptionId);
+    }
+
     public function getUserSubscriptionPlan(?Subscription $subscription)
     {
         if ($subscription) {
