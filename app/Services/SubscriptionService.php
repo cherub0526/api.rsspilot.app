@@ -77,25 +77,20 @@ class SubscriptionService
      * Write media from a source into a user's userables, respecting their
      * 30-day video quota. Only new entries are inserted — existing ones are
      * never removed — so unsubscribing a source cannot reduce usage count.
+     *
+     * 額度交給 VideoQuotaService 算——上限、窗口、新帳號加碼都在那裡。以前這裡
+     * 自己算窗口，而且用的是 subDays(30)，比 POST /v1/media 的 subDays(29) 多
+     * 一天，同一位使用者在「手動加入」與「RSS 同步」兩條路上的剩餘額度會差一支。
+     *
+     * 服務用 app() 取而不是建構子注入：VideoQuotaService 反過來要靠這個類別解析
+     * 方案，寫成建構子依賴就是循環依賴。
      */
     public function syncSourceMediaToUserables(User $user, Source $source): void
     {
-        $betweenDays = [now()->subDays(30)->startOfDay(), now()->endOfDay()];
+        $limit = app(VideoQuotaService::class)->snapshot($user)->remaining();
 
-        $plan = $this->getUserSubscriptionPlan($this->getUserSubscription($user->id));
-
-        $usedCount = $user->media()
-            ->countsTowardQuota()
-            ->whereBetween('userables.created_at', $betweenDays)
-            ->count();
-
-        $limit = null;
-        if ($plan !== null && $plan->video_limit > 0) {
-            $remaining = $plan->video_limit - $usedCount;
-            if ($remaining <= 0) {
-                return;
-            }
-            $limit = $remaining;
+        if ($limit !== null && $limit <= 0) {
+            return;
         }
 
         $query = $source->media()

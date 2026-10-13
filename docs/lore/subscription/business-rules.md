@@ -58,17 +58,19 @@ The rule, the reasoning, and edge cases.
 
 ## 方案的三種額度用的是三種不同週期
 
-`code:` `app/Services/ChatQuotaService.php`、`app/Services/SubscriptionService.php`、`app/Http/Controllers/API/V1/SourcesController.php` · `updated:` `2026-08-14` · `status:` `active`
+`code:` `app/Services/ChatQuotaService.php`、`app/Services/VideoQuotaService.php`、`app/Http/Controllers/API/V1/SourcesController.php` · `updated:` `2026-10-13` · `status:` `active`
 
 `plans` 上三個 limit 欄位長得很像，週期卻各自不同，看欄位名推不出來：
 
 | 欄位 | 週期 | 執行位置 |
 |---|---|---|
 | `channel_limit` | 總量（帳號生命週期內的訂閱來源數） | `SourcesController::store` |
-| `video_limit` | 滾動 30 天 | `SubscriptionService::syncSourceMediaToUserables` |
+| `video_limit` | 滾動 30 天（前 7 天有加碼） | `VideoQuotaService` |
 | `chat_limit` | **自然日**（每日重置） | `ChatQuotaService` |
 
 三者共通的是 **`0` 代表不限制**，不是「一次都不能用」。新增額度欄位時要沿用這個約定，否則同一張表上會出現兩種相反的失效方向。
+
+只有 `video_limit` 會被帳號年齡改寫：新帳號前 7 天上限墊高到 10 支，細節見 `docs/lore/media/business-rules.md`。別把這套時間窗邏輯複製到 `chat_limit` 上——那是自然日的池子，兩套週期混在一起算不出使用者看得懂的數字。
 
 ## 每日 AI 提問額度的日界是單一固定時區，不是使用者的時區
 

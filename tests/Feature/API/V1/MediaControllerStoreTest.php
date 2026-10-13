@@ -70,7 +70,7 @@ class MediaControllerStoreTest extends TestCase
     /**
      * @param null|array $urlInfo null 代表 getUrlInfo 會拋例外
      * @param null|bool|string $captionTracks 公開字幕檢查（hasCaptionTracks）的回傳；
-     *        'unset' 代表不預期被呼叫——閘門關閉時連查都不該查
+     *                                        'unset' 代表不預期被呼叫——閘門關閉時連查都不該查
      */
     private function fakeExternals(
         ?array $urlInfo = null,
@@ -140,6 +140,42 @@ class MediaControllerStoreTest extends TestCase
     private function addVideo(string $url = self::URL)
     {
         return $this->json('POST', route('api.v1.media.store'), ['url' => $url]);
+    }
+
+    /**
+     * 把帳號的建立時間推到新帳號加碼之外，讓測試對到方案本身的 video_limit。
+     *
+     * 測純方案額度的案例都要先呼叫它：factory 建出來的使用者是「剛註冊」，
+     * 影片上限會被加碼墊高到 config subscription.video_boost.limit。
+     */
+    private function agePastVideoBoost(User $user): void
+    {
+        $days = (int) config('subscription.video_boost.days', 0);
+
+        $user->forceFill(['created_at' => now()->subDays($days + 1)])->save();
+    }
+
+    /**
+     * 把某一筆已擁有影片的 userables.created_at 改掉，模擬過去的用量。
+     */
+    private function usedAt(User $user, string $mediaId, int $daysAgo): void
+    {
+        $user->media()->updateExistingPivot($mediaId, ['created_at' => now()->subDays($daysAgo)]);
+    }
+
+    /**
+     * @return string[] 建立並掛到使用者身上的 media id
+     */
+    private function fillQuota(User $user, int $count): array
+    {
+        $ids = [];
+
+        foreach (range(1, $count) as $ignored) {
+            $ids[] = $id = Media::factory()->create()->id;
+            $user->media()->attach($id);
+        }
+
+        return $ids;
     }
 
     // ================================================================
@@ -454,19 +490,158 @@ class MediaControllerStoreTest extends TestCase
 
         /** @var User $user */
         $user = $this->fakeLogin();
+        $this->agePastVideoBoost($user);
         $this->createFreePlan(2);
 
-        $user->media()->attach(Media::factory()->create()->id);
-        $user->media()->attach(Media::factory()->create()->id);
+        $this->fillQuota($user, 2);
 
         $this->fakeExternals($this->urlInfoResponse());
 
         $this->addVideo()
             ->assertStatus(422)
-            ->assertJsonPath('messages.url.0', __('validators.controllers.media.video_limit_reached'));
+            ->assertJsonPath('messages.url.0', __('validators.controllers.media.video_limit_reached'))
+            // 前端靠這個代碼決定要不要把錯誤換成升級按鈕，不是比對訊息文字。
+            ->assertJsonPath('code', 'video_quota_exceeded');
 
         $this->assertDatabaseMissing('media', ['resource_id' => self::RESOURCE_ID]);
         Queue::assertNotPushed(VideoTranscriberStartJob::class);
+    }
+
+    /**
+     * 新帳號加碼：方案只有 3 支，但前 7 天的上限是 10 支，所以第 10 支還過得去。
+     */
+    public function testStoreAllowsBoostedQuotaForNewAccount(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+
+        $this->fillQuota($user, 9);
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()->assertStatus(201);
+
+        $this->assertDatabaseHas('media', ['resource_id' => self::RESOURCE_ID]);
+    }
+
+    /**
+     * 加碼額度也是有牆的：第 11 支要被擋下來。
+     */
+    public function testStoreRejectsWhenBoostedQuotaReached(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+
+        $this->fillQuota($user, 10);
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'video_quota_exceeded');
+
+        $this->assertDatabaseMissing('media', ['resource_id' => self::RESOURCE_ID]);
+    }
+
+    /**
+     * 加碼期間用掉的額度不會被倒扣：第 8 天起上限回到 3 支，但前 7 天那 10 支
+     * 不再算進用量，所以人還是能繼續加——否則「先給再拿走」會讓他整整三週
+     * 一支都加不了。
+     */
+    public function testStoreDoesNotCountBoostWindowUsageAfterBoostEnds(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+
+        // 8 天前註冊 → 加碼在 1 天前結束，用量全部發生在加碼期間。
+        $user->forceFill(['created_at' => now()->subDays(8)])->save();
+
+        foreach ($this->fillQuota($user, 10) as $id) {
+            $this->usedAt($user, $id, 5);
+        }
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()->assertStatus(201);
+    }
+
+    /**
+     * 加碼結束之後的用量照方案算：3 支用完就擋。
+     */
+    public function testStoreRejectsAfterBoostWhenPlanLimitReached(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+
+        $user->forceFill(['created_at' => now()->subDays(8)])->save();
+
+        // 加碼期間用掉 10 支（不算）＋ 加碼結束後用掉 3 支（算）。
+        foreach ($this->fillQuota($user, 10) as $id) {
+            $this->usedAt($user, $id, 5);
+        }
+        $this->fillQuota($user, 3);
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'video_quota_exceeded');
+    }
+
+    /**
+     * 既有使用者（註冊超過加碼天數）的額度不因為這次改動而改變：
+     * 方案 3 支、30 天內用掉 3 支，照樣擋。
+     */
+    public function testStoreKeepsPlanLimitForExistingAccounts(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(3);
+
+        // 兩個月前註冊 → 加碼早就結束，窗口地板也早於 30 天前，等於純滾動窗口。
+        $user->forceFill(['created_at' => now()->subDays(60)])->save();
+
+        foreach ($this->fillQuota($user, 3) as $id) {
+            $this->usedAt($user, $id, 10);
+        }
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'video_quota_exceeded');
+    }
+
+    /**
+     * 加碼是下限而不是取代：首週就升級到 20 支方案的人不該被壓到 10 支。
+     */
+    public function testStoreDoesNotLowerPlanLimitDuringBoost(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(20);
+
+        $this->fillQuota($user, 12);
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()->assertStatus(201);
     }
 
     /**
@@ -479,6 +654,9 @@ class MediaControllerStoreTest extends TestCase
         /** @var User $user */
         $user = $this->fakeLogin();
         $this->createFreePlan(1);
+
+        // 60 天前註冊：加碼與它的窗口地板都早於 30 天前，這支測的是純滾動窗口。
+        $user->forceFill(['created_at' => now()->subDays(60)])->save();
 
         $old = Media::factory()->create();
         $user->media()->attach($old->id);

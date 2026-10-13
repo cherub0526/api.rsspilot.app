@@ -48,15 +48,30 @@ The rule, the reasoning, and edge cases.
 
 ## 影片額度是滾動 30 天，兩條加入路徑共用同一個池子
 
-`code:` `app/Http/Controllers/API/V1/MediaController.php` → `assertVideoQuota()`、`app/Services/SubscriptionService.php` → `syncSourceMediaToUserables()` · `updated:` `2026-08-15` · `status:` `active`
+`code:` `app/Services/VideoQuotaService.php` · `updated:` `2026-10-13` · `status:` `active`
 
 `plans.video_limit` 算的是「過去 30 天內加進 `userables` 的筆數」，`0` = 不限制。RSS 同步與手動貼網址數的是同一個數字——分開計算的話，手動加入就成了繞過 RSS 上限的後門。
+
+**上限與窗口只有一份實作**：`VideoQuotaService::snapshot()`。三個呼叫端都讀它——`MediaController::assertVideoQuota()`、`SubscriptionService::syncSourceMediaToUserables()`、`UsageController::index()`。2026-10-13 之前三邊各自算，窗口甚至差一天（擋閘 `subDays(29)`、同步與 usage `subDays(30)`），同一位使用者在兩條加入路徑上的剩餘額度會差一支，而側欄顯示的用量又是第三個數字。
 
 `userables` 只增不減（`syncWithoutDetaching`），所以「加了再刪」無法把額度洗回來。
 
 已經在自己影片庫裡的影片再貼一次是 no-op，不佔額度，額度就算滿了也放行——因為它不會新增 `userables` 資料列。
 
-額度滿了回 **422**（`validators.controllers.media.video_limit_reached`），跟 `channel_limit` 同型；不是 chat 那種每日重置的 429。兩者性質不同：這裡是容量滿了，不是速率超標。
+額度滿了回 **422**（`validators.controllers.media.video_limit_reached`，`code = video_quota_exceeded`），跟 `channel_limit` 同型；不是 chat 那種每日重置的 429。兩者性質不同：這裡是容量滿了，不是速率超標。前端靠 `code` 把錯誤換成升級按鈕，不比對訊息文字。
+
+## 新帳號前 7 天的影片額度加碼：是下限，而且不會被倒扣
+
+`code:` `config/subscription.php`、`app/Services/VideoQuotaService.php` · `updated:` `2026-10-13` · `status:` `active`
+
+帳號建立後 `subscription.video_boost.days`（7）天內，影片上限是 `max(方案額度, subscription.video_boost.limit)`（10）。理由是漏斗：免費方案每 30 天 3 支，目標客群一週就會看超過 3 支，等於在喜歡上產品之前就撞牆。
+
+兩個細節是刻意的，改動前先讀懂：
+
+- **取 max 而不是取代**：首週就升級到 Pro（20 支）的人不該被 10 壓低。方案額度為 `0`（不限制）時整個加碼不適用。
+- **加碼結束後，用量窗口的起點不早於加碼結束那一刻**。否則第 8 天的人會帶著前 7 天用掉的 10 支去對 3 支的上限，要等到那些用量滾出 30 天窗口（最久 23 天）才能再加一支——那是「先給再拿走」，不是「先有感再撞牆」。副作用是註冊 8～36 天的帳號窗口比 30 天短，方向是對使用者寬鬆，沒有人會因此少掉額度。
+
+`days` 或 `limit` 設為 0 就等於關閉加碼，行為回到純方案額度。對外說法（定價頁）讀 `GET /v1/plans` 的 `meta.new_account_video_boost`，不在前端寫死天數與支數。
 
 ## 手動加入的影片：驗證分兩段，補資料是 best-effort
 

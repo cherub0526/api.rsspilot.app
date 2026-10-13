@@ -31,7 +31,7 @@ return [
             'not_found'           => 'Media not found.',
             'caption_not_found'   => 'Caption not found.',
             'invalid_url'         => 'Invalid YouTube video URL.',
-            'video_limit_reached' => 'You have reached the video limit for your plan.',
+            'video_limit_reached' => 'You have used up your video allowance. Upgrade your plan to keep adding videos.',
             'no_public_captions'    => 'This video has no public captions on YouTube, so it cannot be added yet.',
             'captions_check_failed' => 'We could not check whether this video has public captions. Please try again later.',
         ],

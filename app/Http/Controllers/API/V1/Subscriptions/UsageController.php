@@ -8,6 +8,7 @@ use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\OpenApi\Responses\Http401;
 use App\Services\ChatQuotaService;
+use App\Services\VideoQuotaService;
 use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Http\Controllers\AbstractController;
@@ -45,6 +46,22 @@ class UsageController extends AbstractController
                                     ],
                                     type: 'object'
                                 ),
+                                new OAT\Property(
+                                    property: 'media_boost',
+                                    description: '新帳號影片額度加碼。plan.media 已經套用，這裡是給前端說明用的',
+                                    properties: [
+                                        new OAT\Property(property: 'active', type: 'boolean', example: true),
+                                        new OAT\Property(property: 'limit', type: 'integer', example: 10),
+                                        new OAT\Property(property: 'plan_limit', type: 'integer', example: 3),
+                                        new OAT\Property(
+                                            property: 'ends_at',
+                                            type: 'integer',
+                                            example: 1760000000,
+                                            nullable: true
+                                        ),
+                                    ],
+                                    type: 'object'
+                                ),
                             ],
                             type: 'object'
                         ),
@@ -57,35 +74,40 @@ class UsageController extends AbstractController
     public function index(
         Request $request,
         SubscriptionService $subscriptionService,
-        ChatQuotaService $chatQuotaService
+        ChatQuotaService $chatQuotaService,
+        VideoQuotaService $videoQuotaService
     ): ResponseInterface {
         $plan = $subscriptionService->getUserSubscriptionPlan(
             $subscriptionService->getUserSubscription($request->user()->id)
         );
 
         $user = $request->user();
-        $betweenDays = [now()->subDays(30)->startOfDay(), now()->endOfDay()];
 
         // chat 的週期跟 channels / media 不同：前兩者是總量與 30 天滾動窗口，
         // chat 是額度時區的自然日，所以額外附上重置時刻讓前端能講清楚。
         $chatQuota = $chatQuotaService->snapshot($user);
 
+        // 影片的上限與用量一律由 VideoQuotaService 給，不再自己算窗口：這裡以前
+        // 用 subDays(30)、擋閘用 subDays(29)，側欄因此會出現「4 / 3」這種畫面。
+        $videoQuota = $videoQuotaService->snapshot($user);
+
         return response()->json([
             'data' => [
                 'plan' => [
                     'channels' => $plan->channel_limit,
-                    'media'    => $plan->video_limit,
-                    'chat'     => $chatQuota->limit,
+                    // 生效上限，含新帳號加碼——前端的進度條與「還剩幾支」都讀這個
+                    // 數字，給方案原值會讓加碼期間顯示 10 / 3。加碼結束後會回到
+                    // plans.video_limit，差額在 media_boost 裡講清楚。
+                    'media' => $videoQuota->limit,
+                    'chat'  => $chatQuota->limit,
                 ],
                 'usage' => [
                     'channels' => $user->sources()->count(),
-                    'media'    => $user->media()
-                        ->countsTowardQuota()
-                        ->whereBetween('userables.created_at', $betweenDays)
-                        ->count(),
-                    'chat' => $chatQuota->used,
+                    'media'    => $videoQuota->used,
+                    'chat'     => $chatQuota->used,
                 ],
                 'chat_reset_at' => $chatQuota->resetAt->getTimestamp(),
+                'media_boost'   => $videoQuota->boostPayload(),
             ],
         ]);
     }

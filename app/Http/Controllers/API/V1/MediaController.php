@@ -11,7 +11,6 @@ use App\Models\Media;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
 use App\Services\SourceService;
-use App\Services\PublicCaptionGate;
 use App\OpenApi\Parameters\Path;
 use App\Services\YoutubeService;
 use App\OpenApi\Parameters\Query;
@@ -20,8 +19,9 @@ use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
 use App\Validators\MediaValidator;
 use App\OpenApi\Schemas\Paginators;
+use App\Services\PublicCaptionGate;
+use App\Services\VideoQuotaService;
 use App\Http\Resources\MediaResource;
-use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Exceptions\InvalidRequestException;
@@ -152,7 +152,7 @@ class MediaController extends AbstractController
         Request $request,
         YoutubeService $youtubeService,
         VideoTranscriberClient $client,
-        SubscriptionService $subscriptionService,
+        VideoQuotaService $videoQuota,
         SourceService $sourceService,
         PublicCaptionGate $captionGate
     ): ResponseInterface {
@@ -187,7 +187,7 @@ class MediaController extends AbstractController
 
         // 已經在自己的影片庫裡就不佔額度——後面的 syncWithoutDetaching 不會新增 userables。
         if (!$alreadyOwned) {
-            $this->assertVideoQuota($user, $subscriptionService);
+            $this->assertVideoQuota($user, $videoQuota);
         }
 
         $created = false;
@@ -259,33 +259,25 @@ class MediaController extends AbstractController
 
     /**
      * 影片額度與 RSS 同步共用同一個池子：滾動 30 天內加進 userables 的筆數。
-     * 分開計算的話，手動加入就成了繞過 RSS 上限的後門。
+     * 分開計算的話，手動加入就成了繞過 RSS 上限的後門。上限與窗口（含新帳號
+     * 加碼）全部由 VideoQuotaService 決定，這裡只負責把拒絕講成 422。
+     *
+     * errorCode 讓前端能分支到「直接給升級按鈕」而不是顯示一般欄位錯誤——訊息
+     * 是三語系化的，比對文字必然壞掉。
      *
      * @throws InvalidRequestException
      */
-    private function assertVideoQuota(User $user, SubscriptionService $subscriptionService): void
+    private function assertVideoQuota(User $user, VideoQuotaService $videoQuota): void
     {
-        $plan = $subscriptionService->getUserSubscriptionPlan(
-            $subscriptionService->getUserSubscription((string) $user->getKey())
-        );
-
-        if ($plan === null || $plan->video_limit <= 0) {
+        if (!$videoQuota->snapshot($user)->exhausted()) {
             return;
         }
 
-        // subDays(29) 而不是 30：下界取 startOfDay、上界取 endOfDay，兩端都含，
-        // 所以 29 天前到今天剛好是 30 個日期。用 30 會變成 31 天，與定價頁寫的
-        // 「每 30 天」對不上。
-        $used = $user->media()
-            ->countsTowardQuota()
-            ->whereBetween('userables.created_at', [now()->subDays(29)->startOfDay(), now()->endOfDay()])
-            ->count();
-
-        if ($used >= $plan->video_limit) {
-            throw new InvalidRequestException(
-                ['url' => [__('validators.controllers.media.video_limit_reached')]]
-            );
-        }
+        throw new InvalidRequestException(
+            ['url' => [__('validators.controllers.media.video_limit_reached')]],
+            422,
+            'video_quota_exceeded'
+        );
     }
 
     /**

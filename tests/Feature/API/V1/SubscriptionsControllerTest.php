@@ -843,8 +843,9 @@ class SubscriptionsControllerTest extends TestCase
             // migration 就會讓整個端點 500，而測試仍然是綠的。
             ->assertJsonStructure([
                 'data' => [
-                    'plan'  => ['channels', 'media', 'chat'],
-                    'usage' => ['channels', 'media', 'chat'],
+                    'plan'        => ['channels', 'media', 'chat'],
+                    'usage'       => ['channels', 'media', 'chat'],
+                    'media_boost' => ['active', 'limit', 'plan_limit', 'ends_at'],
                     'chat_reset_at',
                 ],
             ])
@@ -852,15 +853,59 @@ class SubscriptionsControllerTest extends TestCase
                 'data' => [
                     'plan' => [
                         'channels' => 1,
-                        'media'    => 5,
+                        // 剛註冊的帳號吃新帳號加碼：方案是 5 支，生效上限 10 支。
+                        'media' => 10,
                     ],
                     'usage' => [
                         'channels' => 0,
                         'media'    => 0,
                         'chat'     => 0,
                     ],
+                    'media_boost' => [
+                        'active'     => true,
+                        'limit'      => 10,
+                        'plan_limit' => 5,
+                    ],
                 ],
             ]);
+    }
+
+    /**
+     * 加碼結束後 usage 要說回方案本身的額度——側欄是使用者唯一看得到「還剩幾支」
+     * 的地方，這裡講錯等於騙人。
+     */
+    public function testUsageReportsPlanLimitAfterBoostEnds()
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->forceFill(['created_at' => now()->subDays(8)])->save();
+
+        $this->json('GET', route('api.v1.subscriptions.usage.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('data.plan.media', 5)
+            ->assertJsonPath('data.media_boost.active', false)
+            ->assertJsonPath('data.media_boost.plan_limit', 5);
+    }
+
+    /**
+     * 加碼期間用掉的額度不算進加碼結束後的窗口，usage 的 used 也要跟著，否則
+     * 畫面寫「3 / 3 已用完」而後端其實還讓他加。
+     */
+    public function testUsageExcludesBoostWindowUsageAfterBoostEnds()
+    {
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        $user->forceFill(['created_at' => now()->subDays(8)])->save();
+
+        $media = Media::factory()->create(['status' => Media::STATUS_READY]);
+        $user->media()->attach($media->id);
+        $user->media()->updateExistingPivot($media->id, ['created_at' => now()->subDays(5)]);
+
+        $this->json('GET', route('api.v1.subscriptions.usage.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('data.usage.media', 0);
     }
 
     /**

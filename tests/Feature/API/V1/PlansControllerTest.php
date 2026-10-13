@@ -63,4 +63,22 @@ class PlansControllerTest extends TestCase
         $ids = collect($response->json('data'))->pluck('id')->values();
         $this->assertEquals($first->id, $ids->first());
     }
+
+    /**
+     * 定價頁要寫「新帳號前 N 天有 M 支影片」，天數與支數只能從這裡來——前端寫死
+     * 的話，改了設定檔對外說法就跟實際行為不一樣。
+     */
+    public function testIndexExposesNewAccountVideoBoost(): void
+    {
+        $response = $this->json('GET', route('api.v1.plans.index'))->assertStatus(200);
+
+        $this->assertSame(
+            (int) config('subscription.video_boost.days'),
+            $response->json('meta.new_account_video_boost.days')
+        );
+        $this->assertSame(
+            (int) config('subscription.video_boost.limit'),
+            $response->json('meta.new_account_video_boost.limit')
+        );
+    }
 }
