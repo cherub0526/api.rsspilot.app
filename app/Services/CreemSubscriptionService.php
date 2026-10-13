@@ -65,9 +65,9 @@ class CreemSubscriptionService
         // - 月繳 → 首月免費（含 trial_period_days 的 product）
         // - 年繳 → 首年折價（standard product + 一張 duration=once 的折扣碼）
         //
-        // 年繳之所以不再給免費月：那會把第一筆扣款整整推後 30 天。折價是當天就
-        // 收到錢，客人省得還更多（Pro $129 → 首年 $99）。
-        $withTrial = $eligible && !$price->isAnnual();
+        // 年繳的折價是選用的：`first_period_price` 是 null 就只是照原價收，
+        // 但**免費月仍然不給**——取消免費月本身就已經把現金提前 30 天。
+        $withTrial = $this->grantsFreeMonth($price, $eligible);
         $discountCode = $eligible && $price->isAnnual()
             ? $this->introDiscountCodeFor($price, $subscription)
             : null;
@@ -111,6 +111,22 @@ class CreemSubscriptionService
             ],
             'customData' => ['subscriptionId' => (string) $subscription->getKey()],
         ];
+    }
+
+    /**
+     * 這筆結帳要不要送免費月。
+     *
+     * **年繳一律不送，即使使用者還有資格。** 免費月會把年繳的第一筆扣款整整推後
+     * 30 天，年繳的新客優惠改走首年折價（`introDiscountCodeFor()`），兩者不疊加。
+     * 折價金額未設定時年繳就是照原價收——仍然不送免費月，現金照樣提前 30 天。
+     *
+     * 這個判斷之所以是獨立的方法而不是 `createCheckout()` 裡的一行：那條路要有
+     * CREEM_SUCCESS_URL 跟一次 HTTP 往返才跑得到，而「年繳不送免費月」是這次改動
+     * 唯一的行為變更，值得能被直接測。
+     */
+    public function grantsFreeMonth(Price $price, bool $eligible): bool
+    {
+        return $eligible && !$price->isAnnual();
     }
 
     /**

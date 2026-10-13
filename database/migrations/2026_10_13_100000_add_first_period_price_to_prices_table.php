@@ -2,9 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Models\Price;
 use App\Utils\BaseMigration;
-use Hypervel\Support\Facades\DB;
 use Hyperf\Database\Schema\Schema;
 use Hyperf\Database\Schema\Blueprint;
 
@@ -17,13 +15,13 @@ use Hyperf\Database\Schema\Blueprint;
  * `first_period_price` 只填**首期**的價碼，`price` 仍然是續約價。null 代表這個
  * price 沒有首期優惠（月繳一律 null，它維持首月免費）。
  *
- * 金額要由 migration 管，不能只改 seeder：`docs/pricing-cost-model.md` §6 記著
- * 這個 drift 已經發生三次（seeder 改了、正式環境沒改，整張毛利表因此不成立）。
+ * 這支 migration 只開欄位、**不填任何金額**。折價數字還沒拍板（2026-10-13），
+ * 而全部 null 的行為是安全的那一邊：年繳照原價收，但已經不送免費月，現金仍然
+ * 提前 30 天。拍板後用另一支 migration 填值——金額不能只改 seeder，
+ * `docs/pricing-cost-model.md` §6 記著這個 drift 已經發生三次（seeder 改了、
+ * 正式環境沒改，整張毛利表因此不成立）。
  */
 return new class extends BaseMigration {
-    /** Pro 年繳首年價。毛利驗算見 docs/pricing-cost-model.mjs 的「首年折價」一節。 */
-    private const float PRO_FIRST_YEAR = 99.00;
-
     public function up(): void
     {
         Schema::table('prices', function (Blueprint $table) {
@@ -32,18 +30,6 @@ return new class extends BaseMigration {
                 ->after('price')
                 ->comment('首期優惠價（年繳首年），null = 無優惠，續約一律收 price');
         });
-
-        // Pro 年繳 $129 → 首年 $99。用 price 比對而不是 plan 名稱：方案可以改名，
-        // 但「現在掛著 129 的那筆年繳」是唯一要動的對象。
-        //
-        // Advance 年繳刻意**不填**。首年 $189 在 Advance 的典型情境（$15.52/月成本）
-        // 毛利是 −3%，不是極端使用者小虧而是平均每位都虧。要折價得先動
-        // docs/pricing-cost-model.md §5 那三個旋鈕，待 CEO 決定。
-        DB::table('prices')
-            ->where('unit', Price::UNIT_ANNUALLY)
-            ->where('price', 129.00)
-            ->whereNull('first_period_price')
-            ->update(['first_period_price' => self::PRO_FIRST_YEAR]);
     }
 
     public function down(): void

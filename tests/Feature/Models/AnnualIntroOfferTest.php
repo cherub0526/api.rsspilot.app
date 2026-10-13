@@ -7,6 +7,7 @@ namespace Tests\Feature\Models;
 use Tests\TestCase;
 use App\Models\Plan;
 use App\Models\User;
+use App\Models\Creem;
 use App\Models\Price;
 use App\Models\Subscription;
 use App\Services\SubscriptionService;
@@ -216,6 +217,82 @@ class AnnualIntroOfferTest extends TestCase
         $this->assertStringStartsWith('INTRO', $codeA);
         // 碼不能是訂閱 id 的明文：能列舉就等於能繞過資格閘門。
         $this->assertStringNotContainsString((string) $a->getKey(), $codeA);
+    }
+
+    /**
+     * 年繳**不送免費月**，即使使用者還有資格——這是這次改動唯一的行為變更。
+     *
+     * 一併守住「折價金額還沒設定」的那個狀態：`first_period_price` 是 null 時
+     * 年繳照原價收，但免費月仍然不給。不然把折價關掉就等於悄悄把免費月放回去，
+     * 第一筆扣款又被推後 30 天。
+     */
+    public function testAnnualNeverGrantsAFreeMonthEvenWhenEligible(): void
+    {
+        $service = new CreemSubscriptionService();
+
+        $this->assertFalse(
+            $service->grantsFreeMonth($this->annualPrice, true),
+            '年繳即使有資格也不該送免費月'
+        );
+        $this->assertTrue(
+            $service->grantsFreeMonth($this->monthlyPrice, true),
+            '月繳維持首月免費'
+        );
+        $this->assertFalse($service->grantsFreeMonth($this->monthlyPrice, false));
+
+        // 折價金額未設定（目前正式環境的狀態）也一樣不送免費月。
+        $this->annualPrice->fill(['first_period_price' => null])->save();
+
+        $this->assertFalse($service->grantsFreeMonth($this->annualPrice, true));
+    }
+
+    /**
+     * 年繳結帳挑的是 standard product，**而且舊的 trial variant 還躺在 `creems`
+     * 裡也不會被挑到**。
+     *
+     * 這不是假想的狀態：`creem:sync` 以前會為每個付費 price 都建兩個變體，所以已經
+     * 同步過的環境年繳一定有一列 trial。挑錯的後果是當場白送一個月。
+     */
+    public function testAnnualCheckoutPicksTheStandardProductDespiteAStaleTrialRow(): void
+    {
+        $this->annualPrice->creem()->create([
+            'foreign_type' => Price::class,
+            'creem_id'     => 'prod_annual_standard',
+            'variant'      => Creem::VARIANT_STANDARD,
+        ]);
+        // 舊版 creem:sync 留下來的殘留列。
+        $this->annualPrice->creem()->create([
+            'foreign_type' => Price::class,
+            'creem_id'     => 'prod_annual_trial',
+            'variant'      => Creem::VARIANT_TRIAL,
+        ]);
+
+        $service = new CreemSubscriptionService();
+        $withTrial = $service->grantsFreeMonth($this->annualPrice, true);
+
+        $this->assertSame(
+            'prod_annual_standard',
+            $service->productIdFor($this->annualPrice, $withTrial)
+        );
+    }
+
+    /**
+     * 折價金額未設定 → 不發折扣碼，也**不會對 Creem 發任何請求**。
+     *
+     * 這是目前要上線的狀態（金額待拍板）。沒這一關的話，null 會一路走到
+     * createDiscount 去建一張金額是 0 或負數的折扣碼。
+     */
+    public function testNoDiscountCodeIsIssuedWhenNoFirstPeriodPriceIsSet(): void
+    {
+        $this->annualPrice->fill(['first_period_price' => null])->save();
+
+        $user = User::factory()->create();
+        $subscription = $this->annualSubscriptionFor($user, Subscription::STATUS_PAYING);
+
+        $this->assertNull($this->annualPrice->introDiscountCents());
+        $this->assertNull(
+            (new CreemSubscriptionService())->introDiscountCodeFor($this->annualPrice, $subscription)
+        );
     }
 
     private function annualSubscriptionFor(User $user, string $status): Subscription

@@ -62,10 +62,12 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
-                    // 年繳的新客優惠是首年折價（$99），不是首月免費——理由與數字見
-                    // rsspilot.app repo 的 docs/pricing-cost-model.md「首年折價」一節。
-                    // 已部署的環境由 2026_10_13_100000 那支 migration 補上同一個值。
-                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 129, 'first_period_price' => 99],
+                    // 年繳的新客優惠是首年折價（填 first_period_price），不是首月免費。
+                    // 這裡刻意**先不填金額**：折多少還沒拍板（2026-10-13，見 RSS-3），
+                    // 而 null 的行為是安全的那一邊——沒有優惠、照 $129 收、年繳也已經
+                    // 不送免費月，所以現金還是提前 30 天。拍板後補一個值即可，
+                    // 已部署的環境要同時附一支 migration（理由見 pricing-cost-model §6）。
+                    ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
                 ],
             ],
             [
