@@ -14,7 +14,7 @@ class Creem extends Model
     /** 一般 product：沒有試用期，每個人第一期就計費。 */
     public const string VARIANT_STANDARD = 'standard';
 
-    /** 含 trial_period_days 的 product，只給還有首月免費資格的人。 */
+    /** 含 trial_period_days 的 product，只給還有新客優惠資格的人。 */
     public const string VARIANT_TRIAL = 'trial';
 
     protected ?string $table = 'creems';

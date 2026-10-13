@@ -58,13 +58,14 @@ class SubscriptionsController extends AbstractController
                                     description: 'First billing date; present only when status=trial'
                                 ),
                                 new OAT\Property(
-                                    property: 'first_month_free',
+                                    property: 'intro_eligible',
                                     type: 'boolean',
                                     example: true,
                                     description: 'true = this account has not used its one-off new-customer offer yet. '
-                                        . 'Monthly checkouts turn it into a free first month; annual checkouts turn it '
-                                        . 'into the discounted first year (prices[].first_period_price). One lifetime '
-                                        . 'gate for both, so a customer cannot collect each separately.'
+                                        . 'The offer is a free trial of prices[].trial_days, on both monthly and annual. '
+                                        . 'A price that sets prices[].first_period_price trades that trial for a '
+                                        . 'discounted first period instead. One lifetime gate for both, so a customer '
+                                        . 'cannot collect each separately.'
                                 ),
                                 new OAT\Property(
                                     property: 'subscription_id',
@@ -113,7 +114,7 @@ class SubscriptionsController extends AbstractController
 
         $status = $subscription?->status;
 
-        // 免費月期間 status 是 trial，next_date 就是第一次扣款的日子。
+        // 試用期間 status 是 trial，next_date 就是第一次扣款的日子。
         $trialEndsAt = ($status === Subscription::STATUS_TRIAL)
             ? $subscription->next_date?->toIso8601String()
             : null;
@@ -131,7 +132,15 @@ class SubscriptionsController extends AbstractController
             'subscription_id'   => $subscription?->getKey(),
             'next_date'         => $subscription?->next_date?->toIso8601String(),
             'cancellation_date' => $subscription?->cancellation_date?->toIso8601String(),
-            'first_month_free'  => $subscriptionService->isEligibleForFreeMonth($request->user()->id),
+            // 這個帳號還有沒有新客優惠（終生一次）。前端只用它決定要不要在定價頁
+            // 與結帳 modal 講那個優惠；優惠實際發不發仍然由結帳那條路再問一次同一
+            // 個閘門（見 CreemSubscriptionService::createCheckout()），前端說什麼
+            // 都影響不了。
+            //
+            // 欄位名在 2026-10 從 `first_month_free` 改成這個：優惠已經不是「一個
+            // 月」了（14 天試用，另有選用的年繳首期折價），舊名字會讓讀 API 的人
+            // 以為自己知道優惠內容。
+            'intro_eligible' => $subscriptionService->isEligibleForIntroOffer($request->user()->id),
             ...(new PlanResource($plan))->toArray(),
         ]);
     }

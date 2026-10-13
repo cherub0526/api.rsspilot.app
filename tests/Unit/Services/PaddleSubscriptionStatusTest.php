@@ -15,7 +15,7 @@ use App\Services\PaddleSubscriptionService;
  * `trial`，所以這個 match 寫錯的下場不是顯示問題，是「沒付錢的人有權限」或
  * 「還在付錢的人被停權」。
  *
- * 與 freeMonthAction() 同樣抽成純函式才測得到——PaddleClient 一律自己 new 出
+ * 與 trialAction() 同樣抽成純函式才測得到——PaddleClient 一律自己 new 出
  * Paddle\SDK\Client，不經容器解析（見 PaddleControllerTest 的說明）。
  *
  * @internal
@@ -32,7 +32,7 @@ class PaddleSubscriptionStatusTest extends TestCase
         $this->service = new PaddleSubscriptionService();
     }
 
-    /** 免費月期間。前端靠這個顯示 Trial 徽章。 */
+    /** 試用期間。前端靠這個顯示 Trial 徽章。 */
     public function testTrialingMapsToTrial(): void
     {
         $this->assertSame(Subscription::STATUS_TRIAL, $this->service->statusFor('trialing'));

@@ -19,13 +19,17 @@ use Hypervel\Console\Command;
  *
  * 1. Creem 沒有 product → 多 price 的階層，價格直接綁在 product 上。所以這裡是
  *    **一個 price 對一個 product**，`plans` 只拿來組名稱，不會在 Creem 建東西。
- * 2. **月繳**的付費 price 要建**兩個** product：含 30 天試用的、與不含的。原因見
+ * 2. 每個付費 price 要建**兩個** product：含試用的、與不含的。原因見
  *    CreemSubscriptionService::productIdFor()——Creem 結帳時不能覆寫試用期，
- *    「首月免費只送第一次」只能用選 product 的方式守。
+ *    「試用只送第一次」只能用選 product 的方式守。
  *
- * **年繳只建 standard 一個**（2026-10，RSS-3）。年繳的新客優惠改成首年折價，
- * 走折扣碼而不是試用期——理由是免費月會把年繳的第一筆扣款整整推後 30 天。
- * 折扣碼是結帳時才建的（綁訂閱、單次使用），所以這個指令不碰它，見
+ * **月繳與年繳都建這兩個變體**，試用長度一律 `Subscription::TRIAL_DAYS`（14 天）。
+ * 年繳在 2026-10 中間那一版曾改走首年折價、刻意不建 trial variant；owner 定案
+ * 不降價、兩邊都 14 天試用之後改回來，所以**既有環境需要再跑一次這個指令**才會
+ * 有年繳的 trial product（`creem:verify` 會先指出缺哪一個）。
+ *
+ * 首期折價那條路（`prices.first_period_price`）仍然留著，但折扣碼是結帳時才建的
+ * （綁訂閱、單次使用），所以這個指令不碰它，見
  * CreemSubscriptionService::introDiscountCodeFor()。
  *
  * 免費方案不會建 product：$0 不需要結帳。
@@ -42,9 +46,20 @@ class Sync extends Command
     /** 我們賣的是 SaaS 訂閱。Creem 接受 saas / digital-goods-service / ebooks。 */
     public const string TAX_CATEGORY = 'saas';
 
+    /**
+     * 每個付費 price 都要有的兩個 product 變體。
+     *
+     * 不分計費週期——月繳與年繳的新客優惠都是 `Subscription::TRIAL_DAYS` 天的
+     * 免費試用，而 Creem 的試用期綁在 product 上、結帳時不可覆寫，所以兩邊都
+     * 需要「含試用」與「不含試用」各一個，結帳時依資格挑。
+     *
+     * @var list<string>
+     */
+    public const array VARIANTS = [Creem::VARIANT_STANDARD, Creem::VARIANT_TRIAL];
+
     protected ?string $signature = 'creem:sync {--recreate : 捨棄現有對應並重建 product（product 屬性有變時用）}';
 
-    protected string $description = '依現有 Plan / Price 在 Creem 建立對應的 Product（月繳含試用與不含試用兩個變體，年繳只建不含試用的）';
+    protected string $description = '依現有 Plan / Price 在 Creem 建立對應的 Product（每個付費 price 都建含試用與不含試用兩個變體）';
 
     public function handle(): void
     {
@@ -69,29 +84,13 @@ class Sync extends Command
                     continue;
                 }
 
-                foreach ($this->variantsFor($price) as $variant) {
+                foreach (self::VARIANTS as $variant) {
                     $this->syncVariant($client, $plan, $price, $variant, $amount, $label);
                 }
             }
         }
 
         $this->info('完成。');
-    }
-
-    /**
-     * 這個 price 要建哪幾個 product 變體。
-     *
-     * 年繳**不建 trial variant**：它的新客優惠是首年折價（結帳時掛折扣碼），
-     * 不是免費月。建了只會多一個沒有任何路徑會選到的 product，而正式環境多一個
-     * 長得很像的年繳 product 是對帳時最容易拿錯的那種東西。
-     *
-     * @return list<string>
-     */
-    private function variantsFor(Price $price): array
-    {
-        return $price->isAnnual()
-            ? [Creem::VARIANT_STANDARD]
-            : [Creem::VARIANT_STANDARD, Creem::VARIANT_TRIAL];
     }
 
     /**
@@ -159,13 +158,13 @@ class Sync extends Command
         ];
 
         if ($variant === Creem::VARIANT_TRIAL) {
-            // 一個月免費。長度的單一事實來源是 Subscription::FREE_MONTHS，但 Creem
-            // 只吃「天數」，所以這裡換算成 30 天——與 Paddle 的 1 個月會有 0–1 天
-            // 誤差，那是 Creem 的 API 形狀造成的，不是我們選的。
+            // 試用長度的單一事實來源是 Subscription::TRIAL_DAYS，單位本來就是天，
+            // 所以這裡不需要任何換算（舊版是 FREE_MONTHS * 30，與 Paddle 的
+            // 「1 個月」會差 0–1 天）。
             //
             // 不傳 trial_price：API 規定它必須 ≥100 且小於 price，傳 0 是不合法的，
             // 而「省略」本來就代表免費試用。
-            $payload['trial_period_days'] = Subscription::FREE_MONTHS * 30;
+            $payload['trial_period_days'] = Subscription::TRIAL_DAYS;
         }
 
         try {
@@ -200,7 +199,12 @@ class Sync extends Command
      */
     private function nameFor(Plan $plan, Price $price, string $variant): string
     {
-        $suffix = $variant === Creem::VARIANT_TRIAL ? ' (first month free)' : '';
+        // 天數也寫進名稱，而且從常數帶出來：後台看到的名稱與 product 實際的
+        // trial_period_days 才不會各說各話（product 建了不能改，名稱錯了就
+        // 永遠錯）。
+        $suffix = $variant === Creem::VARIANT_TRIAL
+            ? sprintf(' (%d-day free trial)', Subscription::TRIAL_DAYS)
+            : '';
 
         return sprintf('%s – %s%s', $plan->title, $price->unit, $suffix);
     }

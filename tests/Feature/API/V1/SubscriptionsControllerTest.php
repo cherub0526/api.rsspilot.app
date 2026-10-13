@@ -146,7 +146,7 @@ class SubscriptionsControllerTest extends TestCase
             ->assertJsonPath('prices.0.id', $this->freeMonthlyPrice->id)
             ->assertJsonPath('status', null)
             ->assertJsonPath('trial_ends_at', null)
-            ->assertJsonPath('first_month_free', true);
+            ->assertJsonPath('intro_eligible', true);
 
         // User with an active paid subscription: status = 'active'
         $subscription = Subscription::factory()->create([
@@ -156,16 +156,16 @@ class SubscriptionsControllerTest extends TestCase
             'status'   => Subscription::STATUS_ACTIVE,
         ]);
 
-        // 訂閱成立的那一刻首月免費就用掉了，first_month_free 轉 false。
+        // 訂閱成立的那一刻新客優惠就用掉了，intro_eligible 轉 false。
         $this->json('GET', $uri)
             ->assertStatus(200)
             ->assertJsonPath('id', $this->basicPlan->id)
             ->assertJsonPath('prices.0.id', $this->basicMonthlyPrice->id)
             ->assertJsonPath('status', Subscription::STATUS_ACTIVE)
             ->assertJsonPath('trial_ends_at', null)
-            ->assertJsonPath('first_month_free', false);
+            ->assertJsonPath('intro_eligible', false);
 
-        // 免費月期間：status = 'trial'，trial_ends_at 就是第一次扣款的日子。
+        // 試用期間：status = 'trial'，trial_ends_at 就是第一次扣款的日子。
         $subscription->update(['status' => Subscription::STATUS_CANCELED]);
 
         $trialEndsAt = now()->addDays(14);
@@ -341,9 +341,12 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 第一次訂閱：首次扣款推到一個月後，付費週期也從那天起算。
+     * 第一次訂閱：首次扣款推到試用結束那天，付費週期也從那天起算。
+     *
+     * 期望值寫成 `Subscription::TRIAL_DAYS` 而不是字面上的 14：天數的單一事實
+     * 來源是那個常數（三家金流都讀它），這裡寫死數字只會變成第四個要同步的地方。
      */
-    public function testStoreGivesTheFirstMonthFree(): void
+    public function testStoreGivesTheTrialOnAFirstSubscription(): void
     {
         $http = $this->fakeStripeHttp();
 
@@ -358,17 +361,17 @@ class SubscriptionsControllerTest extends TestCase
         $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
 
         $this->assertSame(
-            now()->addMonth()->getTimestamp(),
+            now()->addDays(Subscription::TRIAL_DAYS)->getTimestamp(),
             $params['subscription_data']['trial_end'],
-            '首次扣款要落在一個月後'
+            '首次扣款要落在試用結束那天'
         );
     }
 
     /**
-     * 首月免費是終生一次。訂閱過（哪怕已經取消）的人再訂閱就當場計費——否則
+     * 新客優惠是終生一次。訂閱過（哪怕已經取消）的人再訂閱就當場計費——否則
      * 「訂閱 → 取消 → 再訂閱」等於無限續杯。
      */
-    public function testStoreSkipsTheFreeMonthWhenTheAccountAlreadyUsedIt(): void
+    public function testStoreSkipsTheTrialWhenTheAccountAlreadyUsedIt(): void
     {
         $http = $this->fakeStripeHttp();
 
@@ -396,10 +399,10 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 2026-09 之前註冊送的那批試用訂閱不吃掉首月免費——那是系統送的，不是
+     * 2026-09 之前註冊送的那批試用訂閱不吃掉新客優惠——那是系統送的，不是
      * 使用者買的。
      */
-    public function testStoreStillGivesTheFreeMonthToLegacyTrialUsers(): void
+    public function testStoreStillGivesTheTrialToLegacyTrialUsers(): void
     {
         $http = $this->fakeStripeHttp();
 
@@ -424,7 +427,7 @@ class SubscriptionsControllerTest extends TestCase
         $params = $http->requestsFor('post', '/v1/checkout/sessions')[0]['params'];
 
         $this->assertSame(
-            now()->addMonth()->getTimestamp(),
+            now()->addDays(Subscription::TRIAL_DAYS)->getTimestamp(),
             $params['subscription_data']['trial_end']
         );
     }

@@ -24,18 +24,23 @@ use Hypervel\Support\Facades\Log;
  * 2. **價格綁在 product 上**。Creem 沒有 product → 多 price 的階層，所以我們的
  *    「Pro 月繳」「Pro 年繳」在 Creem 是兩個獨立 product，對應表掛在 `Price` 上。
  * 3. **試用期也綁在 product 上，且結帳時不可覆寫**，而且 Creem 沒有 Paddle 那種
- *    activate 端點可以當場結束試用。「首月免費只送第一次」因此只能靠**同一個 price
+ *    activate 端點可以當場結束試用。「試用只送第一次」因此只能靠**同一個 price
  *    建兩個 product**（含試用 / 不含）來守，結帳時依資格挑一個——見 `productIdFor()`。
  *
- * **新客優惠分月繳與年繳兩條路**（2026-10，RSS-3）：
+ * **新客優惠是免費試用 14 天**（`Subscription::TRIAL_DAYS`，2026-10 RSS-3 由
+ * owner 定案），**月繳與年繳都適用**，走含 `trial_period_days` 的 product。
  *
- * - **月繳**維持首月免費，走含 `trial_period_days` 的 product
- * - **年繳**改成首年折價，走 standard product + 一張 `duration: once` 的折扣碼。
- *   product 的價格建了就不能改（見 Creem\Sync），所以「首年便宜、之後原價」
- *   只有折扣碼這條路——見 `introDiscountCodeFor()`
+ * 另有一條**選用**的年繳首年折價路：`prices.first_period_price` 填了值時，那個
+ * price 改走 standard product + 一張 `duration: once` 的折扣碼
+ * （`introDiscountCodeFor()`）。product 的價格建了就不能改（見 Creem\Sync），
+ * 所以「首年便宜、之後原價」只有折扣碼這條路。**目前每一筆 price 的
+ * `first_period_price` 都是 null**（owner 決定兩個方案都不降價），所以這條路
+ * 現在不會被走到；留著是因為它不需要任何決定就能運作，而機制本身是對的。
  *
- * 兩條路**共用同一個終生一次的資格閘門**（`SubscriptionService::isEligibleForIntroOffer()`），
- * 不然「月繳用掉免費月 → 取消 → 改訂年繳拿折價」就能一個人吃兩份。
+ * **試用與折價互斥**，而且是結構性的（見 `grantsTrial()`）——同一筆結帳不會
+ * 同時掛試用期與折扣碼。兩者也**共用同一個終生一次的資格閘門**
+ * （`SubscriptionService::isEligibleForIntroOffer()`），不然「用掉試用 → 取消 →
+ * 改訂年繳拿折價」就能一個人吃兩份。
  */
 class CreemSubscriptionService
 {
@@ -60,15 +65,18 @@ class CreemSubscriptionService
             (string) $subscription->getKey()
         );
 
-        // 新客優惠分兩條路，由計費週期決定，**而且不疊加**：
+        // 新客優惠有兩種形式，**同一筆結帳只會拿到其中一種**：
         //
-        // - 月繳 → 首月免費（含 trial_period_days 的 product）
-        // - 年繳 → 首年折價（standard product + 一張 duration=once 的折扣碼）
+        // - 預設（含現在的全部 price）→ 免費試用 14 天，走含 trial_period_days
+        //   的 product，月繳與年繳都一樣
+        // - 該 price 設了 `first_period_price` → 改走首期折價（standard product
+        //   + 一張 duration=once 的折扣碼），不再送試用
         //
-        // 年繳的折價是選用的：`first_period_price` 是 null 就只是照原價收，
-        // 但**免費月仍然不給**——取消免費月本身就已經把現金提前 30 天。
-        $withTrial = $this->grantsFreeMonth($price, $eligible);
-        $discountCode = $eligible && $price->isAnnual()
+        // 互斥是結構性的而不是靠這兩行的順序：`grantsTrial()` 為真的前提就是
+        // `introDiscountCents()` 為 null，而那也正是 `introDiscountCodeFor()`
+        // 回 null 的條件。兩邊問的是同一個欄位，不可能同時成立。
+        $withTrial = $this->grantsTrial($price, $eligible);
+        $discountCode = $eligible && !$withTrial
             ? $this->introDiscountCodeFor($price, $subscription)
             : null;
 
@@ -114,36 +122,40 @@ class CreemSubscriptionService
     }
 
     /**
-     * 這筆結帳要不要送免費月。
+     * 這筆結帳要不要送免費試用（14 天，`Subscription::TRIAL_DAYS`）。
      *
-     * **年繳一律不送，即使使用者還有資格。** 免費月會把年繳的第一筆扣款整整推後
-     * 30 天，年繳的新客優惠改走首年折價（`introDiscountCodeFor()`），兩者不疊加。
-     * 折價金額未設定時年繳就是照原價收——仍然不送免費月，現金照樣提前 30 天。
+     * **月繳與年繳都送**，只要這個帳號還有資格。年繳曾經一度不送（改走首年
+     * 折價），2026-10 owner 定案不降價、改成兩邊都 14 天試用之後回到這裡。
+     *
+     * 唯一的例外是**該 price 設了首期折價**：那時改走折扣碼那條路，不再送試用。
+     * 判斷條件刻意寫成 `introDiscountCents() === null` 而不是「是不是年繳」——
+     * 這讓「試用」與「折價」互斥變成一個欄位的兩面，不會因為日後有人改了其中
+     * 一邊的條件而讓同一筆結帳同時拿到兩份優惠。
      *
      * 這個判斷之所以是獨立的方法而不是 `createCheckout()` 裡的一行：那條路要有
-     * CREEM_SUCCESS_URL 跟一次 HTTP 往返才跑得到，而「年繳不送免費月」是這次改動
-     * 唯一的行為變更，值得能被直接測。
+     * CREEM_SUCCESS_URL 跟一次 HTTP 往返才跑得到，而這裡決定的是使用者實際被收
+     * 多少錢、什麼時候收，值得能被直接測。
      */
-    public function grantsFreeMonth(Price $price, bool $eligible): bool
+    public function grantsTrial(Price $price, bool $eligible): bool
     {
-        return $eligible && !$price->isAnnual();
+        return $eligible && $price->introDiscountCents() === null;
     }
 
     /**
      * 這個 price 該用哪一個 Creem product。
      *
-     * 還有首月免費資格 → 用含 `trial_period_days` 的那一個；沒有 → 用不含試用的。
-     * 兩個 product 都由 `creem:sync` 事先建好（見 App\Console\Commands\Creem\Sync）。
-     *
-     * **年繳只有 standard 一種**——它的新客優惠是折扣碼而不是試用期，所以
-     * `creem:sync` 根本不會為年繳建 trial variant。拿 `$withTrial = true` 來問
-     * 年繳的 product 會走到下面那個例外，那是對的：代表呼叫端把兩條優惠路線
-     * 搞混了，而靜靜退回 standard 會讓人以為自己領到了免費月。
+     * 要送試用 → 用含 `trial_period_days` 的那一個；不送 → 用不含試用的。
+     * **月繳與年繳都有這兩個變體**，都由 `creem:sync` 事先建好
+     * （見 App\Console\Commands\Creem\Sync）。
      *
      * 找不到對應的 product 一律拋例外，**不要默默退回另一個變體**：讓沒資格的人
      * 拿到含試用的 product，就是把「訂閱 → 取消 → 再訂閱」的無限續杯洞打開；
-     * 反過來讓有資格的人拿到不含試用的，則是當場多收他一個月的錢。兩種都寧可
+     * 反過來讓有資格的人拿到不含試用的，則是當場就把他的錢收走。兩種都寧可
      * 結帳失敗也不要靜靜發生。
+     *
+     * 年繳的 trial variant 是 2026-10 才加回來的（中間那一版改走折價，刻意不建）。
+     * 升級後第一次結帳年繳如果在這裡拋例外，代表那個環境的 `creems` 還缺年繳的
+     * trial 列——跑一次 `creem:sync` 補上，`creem:verify` 會先指出來。
      */
     public function productIdFor(Price $price, bool $withTrial): string
     {
@@ -177,9 +189,9 @@ class CreemSubscriptionService
      * 碼是由訂閱 id 推導的，所以同一筆訂閱重試結帳會沿用同一張（先查再建）——
      * code 在 Creem 是唯一的，重複建會被擋。
      *
-     * `applies_to_products` 一律指 standard product：年繳已經不建含試用的變體
-     * （見 Creem\Sync），把折扣碼綁死在實際要收費的那個 product 上，才不會因為
-     * 日後多出別的 product 而讓這張碼跑去折到不該折的東西。
+     * `applies_to_products` 一律指 standard product：走到折價這條路時就不送試用
+     * （見 `grantsTrial()`），把折扣碼綁死在實際要收費的那個 product 上，才不會
+     * 因為同一個 price 另有一個含試用的變體而讓這張碼跑去折到不該折的東西。
      */
     public function introDiscountCodeFor(Price $price, Subscription $subscription): ?string
     {

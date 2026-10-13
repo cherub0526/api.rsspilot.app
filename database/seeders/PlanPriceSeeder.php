@@ -62,10 +62,12 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
-                    // 年繳的新客優惠是首年折價（填 first_period_price），不是首月免費。
-                    // 這裡刻意**先不填金額**：折多少還沒拍板（2026-10-13，見 RSS-3），
-                    // 而 null 的行為是安全的那一邊——沒有優惠、照 $129 收、年繳也已經
-                    // 不送免費月，所以現金還是提前 30 天。拍板後補一個值即可，
+                    // **沒有首期折價**（`first_period_price` 不填 = null）。owner 在
+                    // 2026-10-13 決定兩個方案都不降價，新客優惠統一成
+                    // `Subscription::TRIAL_DAYS` 天免費試用，月繳與年繳都適用。
+                    //
+                    // 日後真要折價，填這個欄位會讓年繳從試用那條路切到折扣碼那條路
+                    // （兩者互斥，見 CreemSubscriptionService::grantsTrial()），而且
                     // 已部署的環境要同時附一支 migration（理由見 pricing-cost-model §6）。
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
                 ],
@@ -95,11 +97,10 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],
-                    // Advance 年繳**沒有**首年折價。典型使用的成本（$15.52/月）就已經
-                    // 吃掉年繳實收的 78%，折到 $189 之後典型毛利是 −3%——不是極端
-                    // 使用者小虧，是平均每一位都虧。要折價得先動 pricing-cost-model
-                    // §5 那三個旋鈕。年繳取消首月免費的部分照做：現金提前 30 天、
-                    // 毛利不動。
+                    // Advance 年繳**沒有**首年折價，而且比 Pro 更不該有：典型使用的
+                    // 成本（$15.52/月）就已經吃掉年繳實收的 78%，折到 $189 之後典型
+                    // 毛利是 −3%——不是極端使用者小虧，是平均每一位都虧。要折價得先
+                    // 動 pricing-cost-model §5 那三個旋鈕。
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 249],
                 ],
             ],

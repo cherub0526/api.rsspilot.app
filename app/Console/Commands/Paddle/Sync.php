@@ -112,7 +112,7 @@ class Sync extends Command
 
                         $price->paddle->fill(['paddle_detail' => $response])->save();
 
-                        $trialLabel = $this->trialPeriodFor($price) ? '、首月免費' : '';
+                        $trialLabel = $this->trialPeriodFor($price) ? sprintf('、免費試用 %d 天', Subscription::TRIAL_DAYS) : '';
                         $this->line("    ✓ Price [{$label}] 已存在：{$paddlePriceId}（tax_mode=external{$trialLabel}）");
                     } catch (Exception $e) {
                         $this->error("    ✗ 更新 Price [{$label}] 失敗：{$e->getMessage()}");
@@ -144,10 +144,10 @@ class Sync extends Command
                             // 而 Paddle 不指定時會落在 location 模式——那會讓歐盟等含稅慣例地區把
                             // 這個數字當成含稅價，VAT 變成從我們的收入裡扣。
                             taxMode: TaxMode::External(),
-                            // 首月免費就是靠這段 trial_period：帶著它結帳時 Paddle
-                            // 當下不扣款，next_billed_at 直接落在一個月後。它是綁在
-                            // price 上的固定值，對每個結帳的人都一樣——「只送第一次」
-                            // 由 PaddleSubscriptionService::applyFreeMonth() 把沒有
+                            // 免費試用就是靠這段 trial_period：帶著它結帳時 Paddle
+                            // 當下不扣款，next_billed_at 直接落在試用結束那天。它是綁
+                            // 在 price 上的固定值，對每個結帳的人都一樣——「只送第一次」
+                            // 由 PaddleSubscriptionService::applyTrial() 把沒有
                             // 資格的人當場 activate 來守住。
                             trialPeriod: $this->trialPeriodFor($price),
                             quantity: new PriceQuantity(1, 1)
@@ -171,10 +171,15 @@ class Sync extends Command
     }
 
     /**
-     * 這個 price 要帶多長的試用期——付費方案是首月免費，免費方案不帶。
+     * 這個 price 要帶多長的試用期——付費方案是 `Subscription::TRIAL_DAYS` 天的
+     * 免費試用，免費方案不帶。
      *
-     * 年繳也一樣送一個月（`trial_period` 與 `billing_cycle` 在 Paddle 是分開的
-     * 兩件事），所以年繳使用者是先免費用一個月，再扣一整年。
+     * **interval 用 day 而不是 month**：14 天用月表示不出來，而且以天為單位之後
+     * 這裡與 Creem 的 `trial_period_days`、Stripe 的 `trial_end` 拿到的是同一個
+     * 數字（舊版是 1 個月 vs. 30 天，差 0–1 天）。
+     *
+     * 年繳也一樣送 14 天（`trial_period` 與 `billing_cycle` 在 Paddle 是分開的
+     * 兩件事），所以年繳使用者是先免費試用 14 天，再扣一整年。
      *
      * 免費方案回 `null` 不是「不要動它」而是「明確清成沒有試用」——`UpdatePrice`
      * 的預設值是 `Undefined`（不送這個欄位），`null` 才會真的清掉。$0 的 price
@@ -187,8 +192,8 @@ class Sync extends Command
         }
 
         return new TimePeriod(
-            interval: new Interval(Interval::Month()),
-            frequency: Subscription::FREE_MONTHS
+            interval: new Interval(Interval::Day()),
+            frequency: Subscription::TRIAL_DAYS
         );
     }
 }

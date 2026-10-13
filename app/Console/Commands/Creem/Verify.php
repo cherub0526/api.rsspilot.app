@@ -145,15 +145,23 @@ class Verify extends Command
                 continue;
             }
 
-            // 年繳的新客優惠是首年折價，不是免費月——年繳身上**不該**有 trial
-            // variant。有的話是 2026-10 之前跑過的舊 sync 留下來的，而它是一條
-            // 活的路徑：有資格的年繳客人會被送去那個含試用的 product，等於同時
-            // 白送一個月又把第一筆扣款推後 30 天。
-            if ($price->isAnnual() && $rows->contains('variant', Creem::VARIANT_TRIAL)) {
+            // 每個付費 price 都要有兩個變體，月繳與年繳一樣。缺了哪一個都是一條
+            // 死路而不是退化：`productIdFor()` 找不到對應就拋例外，使用者看到的
+            // 是結帳失敗。
+            //
+            // 年繳的 trial variant 特別容易缺：2026-10 中間那一版年繳改走首年
+            // 折價、刻意不建它，所以在那段期間同步過的環境需要再跑一次
+            // `creem:sync` 才會有。
+            foreach (Sync::VARIANTS as $variant) {
+                if ($rows->contains('variant', $variant)) {
+                    continue;
+                }
+
                 $this->error(sprintf(
-                    '  ✗ %s %s 還留著 trial variant（舊 sync 的殘留），請刪掉那一列 creems 對應',
+                    '  ✗ %s %s 缺少 %s variant，請跑 creem:sync（缺了這個，走到它的結帳會直接失敗）',
                     $price->plan->title,
-                    $price->unit
+                    $price->unit,
+                    $variant
                 ));
                 $ok = false;
             }
@@ -186,7 +194,7 @@ class Verify extends Command
         $label = sprintf('%s %s', $price->plan->title, $price->unit);
 
         if (!$price->isAnnual()) {
-            $this->error("  ✗ {$label} 設了 first_period_price，但只有年繳認這個欄位（月繳的優惠是首月免費）");
+            $this->error("  ✗ {$label} 設了 first_period_price，但只有年繳認這個欄位（月繳的優惠只有免費試用）");
 
             return false;
         }
@@ -202,8 +210,11 @@ class Verify extends Command
             return false;
         }
 
+        // 提醒「不送試用」是刻意的：設了這個欄位就會把那個 price 從試用那條路
+        // 切到折價那條路（見 CreemSubscriptionService::grantsTrial()），而這是
+        // 從欄位本身看不出來的副作用。
         $this->line(sprintf(
-            '  ✓ %s 首年 $%s → 續約 $%s（折 %d 美分，結帳時發單次折扣碼）',
+            '  ✓ %s 首年 $%s → 續約 $%s（折 %d 美分，結帳時發單次折扣碼、不送免費試用）',
             $label,
             (string) $price->firstPeriodPrice(),
             (string) $price->price,
@@ -240,8 +251,20 @@ class Verify extends Command
             $problems[] = 'trial 變體但 Creem 上沒有 trial_period_days';
         }
 
+        // **天數也要比對，不能只看有沒有。** Creem 的 product 建了不能改價也不能改
+        // 試用期，而 `creem:sync` 是只新增不修改的——所以 2026-10 之前同步過的
+        // 環境，它的 trial product 仍然是 30 天，而程式與對外文案都已經是 14 天。
+        // 那個落差不會讓任何東西報錯，只會讓第一筆扣款比我們承諾的晚 16 天。
+        if ($wantsTrial && $trialDays && (int) $trialDays !== Subscription::TRIAL_DAYS) {
+            $problems[] = sprintf(
+                'Creem 上的試用是 %d 天，我們現在是 %d 天（product 不能改，要在 Creem 建新的再把 creems 對應列指過去）',
+                (int) $trialDays,
+                Subscription::TRIAL_DAYS
+            );
+        }
+
         if (!$wantsTrial && $trialDays) {
-            // 這個方向更危險：沒資格的人會拿到免費月。
+            // 這個方向更危險：沒資格的人會拿到試用期。
             $problems[] = sprintf('standard 變體但 Creem 上有 %s 天試用', (string) $trialDays);
         }
 
