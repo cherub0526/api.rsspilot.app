@@ -24,8 +24,23 @@ use Hypervel\Support\Facades\Log;
  * 2. **價格綁在 product 上**。Creem 沒有 product → 多 price 的階層，所以我們的
  *    「Pro 月繳」「Pro 年繳」在 Creem 是兩個獨立 product，對應表掛在 `Price` 上。
  * 3. **試用期也綁在 product 上，且結帳時不可覆寫**，而且 Creem 沒有 Paddle 那種
- *    activate 端點可以當場結束試用。「首月免費只送第一次」因此只能靠**同一個 price
+ *    activate 端點可以當場結束試用。「試用只送第一次」因此只能靠**同一個 price
  *    建兩個 product**（含試用 / 不含）來守，結帳時依資格挑一個——見 `productIdFor()`。
+ *
+ * **新客優惠是免費試用 14 天**（`Subscription::TRIAL_DAYS`，2026-10 RSS-3 由
+ * owner 定案），**月繳與年繳都適用**，走含 `trial_period_days` 的 product。
+ *
+ * 另有一條**選用**的年繳首年折價路：`prices.first_period_price` 填了值時，那個
+ * price 改走 standard product + 一張 `duration: once` 的折扣碼
+ * （`introDiscountCodeFor()`）。product 的價格建了就不能改（見 Creem\Sync），
+ * 所以「首年便宜、之後原價」只有折扣碼這條路。**目前每一筆 price 的
+ * `first_period_price` 都是 null**（owner 決定兩個方案都不降價），所以這條路
+ * 現在不會被走到；留著是因為它不需要任何決定就能運作，而機制本身是對的。
+ *
+ * **試用與折價互斥**，而且是結構性的（見 `grantsTrial()`）——同一筆結帳不會
+ * 同時掛試用期與折扣碼。兩者也**共用同一個終生一次的資格閘門**
+ * （`SubscriptionService::isEligibleForIntroOffer()`），不然「用掉試用 → 取消 →
+ * 改訂年繳拿折價」就能一個人吃兩份。
  */
 class CreemSubscriptionService
 {
@@ -45,10 +60,25 @@ class CreemSubscriptionService
             throw new RuntimeException('CREEM_SUCCESS_URL is not configured.');
         }
 
-        $withTrial = (new SubscriptionService())->isEligibleForFreeMonth(
+        $eligible = (new SubscriptionService())->isEligibleForIntroOffer(
             (string) $subscription->user_id,
             (string) $subscription->getKey()
         );
+
+        // 新客優惠有兩種形式，**同一筆結帳只會拿到其中一種**：
+        //
+        // - 預設（含現在的全部 price）→ 免費試用 14 天，走含 trial_period_days
+        //   的 product，月繳與年繳都一樣
+        // - 該 price 設了 `first_period_price` → 改走首期折價（standard product
+        //   + 一張 duration=once 的折扣碼），不再送試用
+        //
+        // 互斥是結構性的而不是靠這兩行的順序：`grantsTrial()` 為真的前提就是
+        // `introDiscountCents()` 為 null，而那也正是 `introDiscountCodeFor()`
+        // 回 null 的條件。兩邊問的是同一個欄位，不可能同時成立。
+        $withTrial = $this->grantsTrial($price, $eligible);
+        $discountCode = $eligible && !$withTrial
+            ? $this->introDiscountCodeFor($price, $subscription)
+            : null;
 
         $payload = [
             'product_id'  => $this->productIdFor($price, $withTrial),
@@ -60,6 +90,10 @@ class CreemSubscriptionService
             'request_id' => (string) $subscription->getKey(),
             'customer'   => ['email' => $user->email],
         ];
+
+        if ($discountCode !== null) {
+            $payload['discount_code'] = $discountCode;
+        }
 
         $checkout = (new CreemClient())->createCheckout($payload);
 
@@ -88,15 +122,40 @@ class CreemSubscriptionService
     }
 
     /**
+     * 這筆結帳要不要送免費試用（14 天，`Subscription::TRIAL_DAYS`）。
+     *
+     * **月繳與年繳都送**，只要這個帳號還有資格。年繳曾經一度不送（改走首年
+     * 折價），2026-10 owner 定案不降價、改成兩邊都 14 天試用之後回到這裡。
+     *
+     * 唯一的例外是**該 price 設了首期折價**：那時改走折扣碼那條路，不再送試用。
+     * 判斷條件刻意寫成 `introDiscountCents() === null` 而不是「是不是年繳」——
+     * 這讓「試用」與「折價」互斥變成一個欄位的兩面，不會因為日後有人改了其中
+     * 一邊的條件而讓同一筆結帳同時拿到兩份優惠。
+     *
+     * 這個判斷之所以是獨立的方法而不是 `createCheckout()` 裡的一行：那條路要有
+     * CREEM_SUCCESS_URL 跟一次 HTTP 往返才跑得到，而這裡決定的是使用者實際被收
+     * 多少錢、什麼時候收，值得能被直接測。
+     */
+    public function grantsTrial(Price $price, bool $eligible): bool
+    {
+        return $eligible && $price->introDiscountCents() === null;
+    }
+
+    /**
      * 這個 price 該用哪一個 Creem product。
      *
-     * 還有首月免費資格 → 用含 `trial_period_days` 的那一個；沒有 → 用不含試用的。
-     * 兩個 product 都由 `creem:sync` 事先建好（見 App\Console\Commands\Creem\Sync）。
+     * 要送試用 → 用含 `trial_period_days` 的那一個；不送 → 用不含試用的。
+     * **月繳與年繳都有這兩個變體**，都由 `creem:sync` 事先建好
+     * （見 App\Console\Commands\Creem\Sync）。
      *
      * 找不到對應的 product 一律拋例外，**不要默默退回另一個變體**：讓沒資格的人
      * 拿到含試用的 product，就是把「訂閱 → 取消 → 再訂閱」的無限續杯洞打開；
-     * 反過來讓有資格的人拿到不含試用的，則是當場多收他一個月的錢。兩種都寧可
+     * 反過來讓有資格的人拿到不含試用的，則是當場就把他的錢收走。兩種都寧可
      * 結帳失敗也不要靜靜發生。
+     *
+     * 年繳的 trial variant 是 2026-10 才加回來的（中間那一版改走折價，刻意不建）。
+     * 升級後第一次結帳年繳如果在這裡拋例外，代表那個環境的 `creems` 還缺年繳的
+     * trial 列——跑一次 `creem:sync` 補上，`creem:verify` 會先指出來。
      */
     public function productIdFor(Price $price, bool $withTrial): string
     {
@@ -113,6 +172,78 @@ class CreemSubscriptionService
         }
 
         return (string) $creem->creem_id;
+    }
+
+    /**
+     * 這筆年繳結帳要掛的首年折扣碼；這個 price 沒有設首年優惠時回 null。
+     *
+     * **為什麼是「每筆訂閱一張單次折扣碼」而不是一張公用碼。** 折扣碼在 Creem 的
+     * 結帳頁上是看得到、也可以手動輸入的。公用碼等於把「年繳折價終生一次」的
+     * 閘門交給使用者保管：一個已經用過優惠的人取消再訂閱，手打那組碼就又便宜一次。
+     * 所以這裡每筆訂閱發一張，並用兩道鎖把它釘死：
+     *
+     * - `max_redemptions: 1` —— 兌換過就死，任何人都不能再用第二次
+     * - `expiry_date` +24 小時 —— 擋「開一堆結帳只為了把碼存起來、日後再訂閱時
+     *   手動輸入」。碼本身沒被兌換時仍是活的，期限是唯一能收掉它的東西
+     *
+     * 碼是由訂閱 id 推導的，所以同一筆訂閱重試結帳會沿用同一張（先查再建）——
+     * code 在 Creem 是唯一的，重複建會被擋。
+     *
+     * `applies_to_products` 一律指 standard product：走到折價這條路時就不送試用
+     * （見 `grantsTrial()`），把折扣碼綁死在實際要收費的那個 product 上，才不會
+     * 因為同一個 price 另有一個含試用的變體而讓這張碼跑去折到不該折的東西。
+     */
+    public function introDiscountCodeFor(Price $price, Subscription $subscription): ?string
+    {
+        $discountCents = $price->introDiscountCents();
+
+        if ($discountCents === null || $discountCents <= 0) {
+            return null;
+        }
+
+        $code = self::introCodeFor($subscription);
+        $client = new CreemClient();
+
+        if ($client->findDiscount($code) !== null) {
+            return $code;
+        }
+
+        $client->createDiscount([
+            // 後台只看得到 name，把方案與訂閱 id 寫進去才查得出這張是誰的。
+            'name'     => sprintf('%s intro (%s)', $price->unit, (string) $subscription->getKey()),
+            'code'     => $code,
+            'type'     => 'fixed',
+            'amount'   => $discountCents,
+            'currency' => 'USD',
+            // 只折第一筆付款，續約自動回到 product 原價——這就是「首年折價」。
+            'duration'            => 'once',
+            'applies_to_products' => [$this->productIdFor($price, false)],
+            'max_redemptions'     => 1,
+            'expiry_date'         => Carbon::now()->addDay()->toIso8601String(),
+        ]);
+
+        return $code;
+    }
+
+    /**
+     * 這筆訂閱的首年折扣碼。
+     *
+     * 由訂閱 id 經 HMAC 推導而不是直接用 id：推導後是穩定的（重試結帳會拿到同一
+     * 張碼，不會每次都在 Creem 建新的），但猜不出下一個人的碼——折扣碼在結帳頁
+     * 可以手動輸入，能列舉就等於能繞過資格閘門。
+     *
+     * 長度取 12 個 hex 字元：Creem 後台與對帳單上要看得完，而 48 bits 的空間
+     * 在我們這個量級不會撞。
+     */
+    public static function introCodeFor(Subscription $subscription): string
+    {
+        $secret = (string) env('APP_KEY', '');
+
+        return 'INTRO' . mb_strtoupper(mb_substr(
+            hash_hmac('sha256', (string) $subscription->getKey(), $secret),
+            0,
+            12
+        ));
     }
 
     /**

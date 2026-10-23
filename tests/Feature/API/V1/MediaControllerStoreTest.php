@@ -69,12 +69,23 @@ class MediaControllerStoreTest extends TestCase
 
     /**
      * @param null|array $urlInfo null 代表 getUrlInfo 會拋例外
+     * @param null|bool|string $captionTracks 公開字幕檢查（hasCaptionTracks）的回傳；
+     *        'unset' 代表不預期被呼叫——閘門關閉時連查都不該查
      */
-    private function fakeExternals(?array $urlInfo = null, bool $withVideoDetails = true): void
-    {
-        $this->mock(YoutubeService::class, function (MockInterface $mock) use ($withVideoDetails) {
+    private function fakeExternals(
+        ?array $urlInfo = null,
+        bool $withVideoDetails = true,
+        bool|string|null $captionTracks = 'unset'
+    ): void {
+        $this->mock(YoutubeService::class, function (MockInterface $mock) use ($withVideoDetails, $captionTracks) {
             $mock->shouldReceive('getVideoIdFromUrl')->andReturn(self::VIDEO_ID);
             $mock->shouldReceive('getChannelThumbnail')->andReturn(self::CHANNEL_THUMBNAIL);
+
+            if ($captionTracks === 'unset') {
+                $mock->shouldNotReceive('hasCaptionTracks');
+            } else {
+                $mock->shouldReceive('hasCaptionTracks')->with(self::VIDEO_ID)->once()->andReturn($captionTracks);
+            }
 
             if (!$withVideoDetails) {
                 $mock->shouldReceive('getVideoDetails')->andReturn(null);
@@ -494,6 +505,129 @@ class MediaControllerStoreTest extends TestCase
         foreach (range(1, 3) as $ignored) {
             $user->media()->attach(Media::factory()->create()->id);
         }
+
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()->assertStatus(201);
+    }
+
+    // ================================================================
+    // 公開字幕閘門（MEDIA_REQUIRE_PUBLIC_CAPTIONS）
+
+    private function enableCaptionGate(): void
+    {
+        config(['services.youtube.require_public_captions' => true]);
+    }
+
+    /**
+     * 閘門關閉（預設）→ 完全不查字幕，行為與以前一樣。
+     */
+    public function testStoreSkipsCaptionCheckWhenGateDisabled(): void
+    {
+        Queue::fake();
+        $this->fakeLogin();
+        $this->fakeExternals($this->urlInfoResponse());
+
+        $this->addVideo()->assertStatus(201);
+
+        Queue::assertPushed(VideoTranscriberStartJob::class);
+    }
+
+    /**
+     * 閘門開啟、影片有公開字幕 → 照常建立，並記下檢查結果，轉錄 job 不必再查一次。
+     */
+    public function testStoreAcceptsVideoWithPublicCaptionsWhenGateEnabled(): void
+    {
+        Queue::fake();
+        $this->enableCaptionGate();
+        $this->fakeLogin();
+        $this->fakeExternals($this->urlInfoResponse(), captionTracks: true);
+
+        $mediaId = $this->addVideo()->assertStatus(201)->json('id');
+
+        $this->assertTrue(Media::find($mediaId)->video_detail['public_captions']);
+        Queue::assertPushed(VideoTranscriberStartJob::class);
+    }
+
+    /**
+     * 閘門開啟、影片沒有公開字幕 → 422，不建 media、不碰轉錄服務。
+     */
+    public function testStoreRejectsVideoWithoutPublicCaptionsWhenGateEnabled(): void
+    {
+        Queue::fake();
+        $this->enableCaptionGate();
+        $this->fakeLogin();
+        $this->fakeExternals(captionTracks: false);
+        $this->mock(VideoTranscriberClient::class, function (MockInterface $mock) {
+            $mock->shouldNotReceive('getUrlInfo');
+        });
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('messages.url.0', __('validators.controllers.media.no_public_captions'));
+
+        $this->assertDatabaseCount('media', 0);
+        Queue::assertNotPushed(VideoTranscriberStartJob::class);
+    }
+
+    /**
+     * 查不到（配額用盡、API 錯誤）→ 422，而不是放行：閘門的目的就是確定有字幕才收。
+     */
+    public function testStoreRejectsWhenCaptionCheckFailsWhenGateEnabled(): void
+    {
+        Queue::fake();
+        $this->enableCaptionGate();
+        $this->fakeLogin();
+        $this->fakeExternals(captionTracks: null);
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('messages.url.0', __('validators.controllers.media.captions_check_failed'));
+
+        $this->assertDatabaseCount('media', 0);
+    }
+
+    /**
+     * 已知沒有字幕的既有 media（例如頻道同步進來的）→ 不用再查，直接拒絕、不掛到使用者。
+     */
+    public function testStoreRejectsExistingNoCaptionsMediaWhenGateEnabled(): void
+    {
+        Queue::fake();
+        $this->enableCaptionGate();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+
+        Media::factory()->create([
+            'resource_id'  => self::RESOURCE_ID,
+            'status'       => Media::STATUS_NO_CAPTIONS,
+            'video_detail' => ['yt:videoId' => self::VIDEO_ID, 'public_captions' => false],
+        ]);
+
+        $this->mock(YoutubeService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('getVideoIdFromUrl')->andReturn(self::VIDEO_ID);
+            $mock->shouldNotReceive('hasCaptionTracks');
+        });
+
+        $this->addVideo()
+            ->assertStatus(422)
+            ->assertJsonPath('messages.url.0', __('validators.controllers.media.no_public_captions'));
+
+        $this->assertDatabaseMissing('userables', ['user_id' => $user->id]);
+    }
+
+    /**
+     * 沒有字幕的影片不佔影片額度：它不會被轉錄、也看不到內容。
+     */
+    public function testNoCaptionsMediaDoesNotCountTowardVideoQuota(): void
+    {
+        Queue::fake();
+
+        /** @var User $user */
+        $user = $this->fakeLogin();
+        $this->createFreePlan(1);
+
+        $user->media()->attach(Media::factory()->create(['status' => Media::STATUS_NO_CAPTIONS])->id);
 
         $this->fakeExternals($this->urlInfoResponse());
 

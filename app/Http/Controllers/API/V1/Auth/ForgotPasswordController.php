@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1\Auth;
 
+use Carbon\Carbon;
 use App\Models\User;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
@@ -19,6 +20,11 @@ use App\Http\Controllers\AbstractController;
 
 class ForgotPasswordController extends AbstractController
 {
+    private const RESET_ROUTE = 'api.v1.auth.forgot-password.update';
+
+    /** 重設連結的有效分鐘數，也是信裡寫給使用者看的數字。 */
+    private const RESET_LINK_MINUTES = 60;
+
     /**
      * @throws InvalidRequestException
      */
@@ -78,24 +84,17 @@ class ForgotPasswordController extends AbstractController
             throw new InvalidRequestException(['email' => [__('validators.controllers.auth.invalid_credentials')]]);
         }
 
-        $stringId = strval($user->id);
-
-        // 生成一個唯一且加密安全的 Token
-        $token = Hash::make($stringId);
-
-        $minutes = 60;
-
         $resetUrl = URL::temporarySignedRoute(
-            'api.v1.auth.forgot-password.update',
-            now()->addMinutes($minutes),
+            self::RESET_ROUTE,
+            now()->addMinutes(self::RESET_LINK_MINUTES),
             [
-                'token' => $token, // 使用生成的唯一 Token
-                'id'    => $stringId, // 傳遞 id 以便在重設頁面使用
+                'token' => $this->resetToken($user),
+                'id'    => strval($user->id),
             ],
             false
         );
 
-        Mail::to($user->email)->send(new ResetPasswordMail($resetUrl, $minutes));
+        Mail::to($user->email)->send(new ResetPasswordMail($resetUrl, self::RESET_LINK_MINUTES));
 
         return response()->json([
             'message' => __('passwords.sent'),
@@ -116,14 +115,62 @@ class ForgotPasswordController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        if (!Hash::check($params['id'], $params['token'])) {
-            throw new InvalidRequestException(['token' => 'Invalid token.']);
+        $user = User::query()
+            ->where('social_type', User::SOCIAL_TYPE_LOCAL)
+            ->find($params['id']);
+
+        if (!$user || !$this->isValidResetLink($user, $params)) {
+            // 一律回在 token 欄位：前端看到連結欄位被退件，就請使用者重新申請
+            throw new InvalidRequestException([
+                'token' => [__('validators.controllers.auth.reset_link_invalid')],
+            ]);
         }
 
-        $user = User::query()->find($params['id']);
         $user->fill(['password' => Hash::make(trim($params['password']))])->save();
 
         return $this->responseAccessToken(auth('jwt')->login($user));
+    }
+
+    /**
+     * 重設連結的 token：綁使用者 id 與**目前的密碼雜湊**，以 app key 做 HMAC。
+     *
+     * - 沒有 app key 就算不出來，不能像過去的 Hash::make(id) 那樣，知道 id 就自己造一個。
+     * - 密碼一改，雜湊就變，同一封信裡的連結隨即失效——連結只能用一次。
+     */
+    private function resetToken(User $user): string
+    {
+        return hash_hmac('sha256', $user->id . '|' . $user->password, (string) config('app.key'));
+    }
+
+    /**
+     * 連結要同時通過以下三項檢查。
+     *
+     * 1. 簽章——store() 用 temporarySignedRoute 簽了 expires / id / token，這裡用同樣的參數
+     *    重簽一次比對，任何一個被改過（包括把期限往後延）都對不上。前端是把網址上的參數
+     *    放進 PUT body 送回來，不在 query string 上，所以不能用 hasValidSignature()。
+     * 2. 期限——expires 已過就不收。
+     * 3. token——對應目前的密碼雜湊，見 resetToken()。
+     *
+     * @param array<string, mixed> $params
+     */
+    private function isValidResetLink(User $user, array $params): bool
+    {
+        $expires = (int) $params['expires'];
+
+        if (now()->getTimestamp() > $expires) {
+            return false;
+        }
+
+        $signed = URL::temporarySignedRoute(
+            self::RESET_ROUTE,
+            Carbon::createFromTimestamp($expires),
+            ['token' => (string) $params['token'], 'id' => (string) $params['id']],
+            false
+        );
+        parse_str((string) parse_url($signed, PHP_URL_QUERY), $query);
+
+        return hash_equals((string) ($query['signature'] ?? ''), (string) $params['signature'])
+            && hash_equals($this->resetToken($user), (string) $params['token']);
     }
 
     private function responseAccessToken(string $token): ResponseInterface

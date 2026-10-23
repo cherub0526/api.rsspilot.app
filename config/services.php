@@ -68,6 +68,13 @@ return [
         'key' => env('RAPID_API_KEY'),
     ],
 
+    'youtube' => [
+        // 公開字幕閘門：開啟時只收「YouTube 上已經有公開字幕（作者上傳或自動產生皆可）」的影片。
+        // 手動新增沒有字幕的影片會被拒絕；頻道同步進來的則標成 no_captions、不送轉錄。
+        // 判斷走官方 Data API 的 captions.list（每次 50 單位配額），見 PublicCaptionGate。
+        'require_public_captions' => (bool) env('MEDIA_REQUIRE_PUBLIC_CAPTIONS', false),
+    ],
+
     'videotranscriber' => [
         'secret_key' => env('VIDEOTRANSCRIBER_SECRET_KEY'),
         'email'      => env('VIDEOTRANSCRIBER_EMAIL'),

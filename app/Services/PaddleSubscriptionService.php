@@ -24,13 +24,13 @@ use Paddle\SDK\Resources\Subscriptions\Operations\CancelSubscription;
 class PaddleSubscriptionService
 {
     /** 什麼都不用做——Paddle 沒把這筆訂閱開成試用。 */
-    public const FREE_MONTH_ACTION_NONE = 'none';
+    public const TRIAL_ACTION_NONE = 'none';
 
-    /** 保留 Paddle 的免費月：首次扣款就是一個月後。 */
-    public const FREE_MONTH_ACTION_KEEP = 'keep';
+    /** 保留 Paddle 給的試用期：首次扣款就是試用結束那天。 */
+    public const TRIAL_ACTION_KEEP = 'keep';
 
-    /** 立刻啟用並計費——這個帳號的首月免費已經用掉了。 */
-    public const FREE_MONTH_ACTION_ACTIVATE = 'activate';
+    /** 立刻啟用並計費——這個帳號的新客優惠已經用掉了。 */
+    public const TRIAL_ACTION_ACTIVATE = 'activate';
 
     /**
      * 測試注入假的 client 用；正式流程不傳，每次呼叫照舊自己 new 一個。
@@ -80,7 +80,7 @@ class PaddleSubscriptionService
                 // 首次訂閱的結帳金額是 0（price 上帶著一個月的 trial_period），所以
                 // 日期不能從這筆交易推算——要問 Paddle 訂閱本身的 next_billed_at。
                 if ($paddleTransaction->subscriptionId) {
-                    $paddleSubscription = $this->applyFreeMonth(
+                    $paddleSubscription = $this->applyTrial(
                         $subscription,
                         $paddle->subscriptions()->get($paddleTransaction->subscriptionId)
                     );
@@ -119,34 +119,35 @@ class PaddleSubscriptionService
     }
 
     /**
-     * 決定這筆 Paddle 訂閱能不能留著那個免費月，並回傳處理完後的訂閱。
+     * 決定這筆 Paddle 訂閱能不能留著那個試用期，並回傳處理完後的訂閱。
      *
      * **為什麼需要這一步**：Paddle 的試用期是綁在 *price* 上的固定長度
-     * （`trial_period`，由 `paddle:sync` 設成一個月），每個結帳的人都一樣吃得到。
-     * 「首月免費只送第一次」這條規則 Paddle 不知道，只能由我們在訂閱建立之後補。
+     * （`trial_period`，由 `paddle:sync` 設成 `Subscription::TRIAL_DAYS` 天），
+     * 每個結帳的人都一樣吃得到。「試用只送第一次」這條規則 Paddle 不知道，
+     * 只能由我們在訂閱建立之後補。
      *
-     * 三條路（判斷本身在 `freeMonthAction()`，純函式、可測）：
+     * 三條路（判斷本身在 `trialAction()`，純函式、可測）：
      *
      * - 訂閱不是 trialing（price 沒設 trial_period）→ 什麼都不做，維持既有行為
-     * - 還有資格 → 保留 Paddle 給的免費月，連 API 都不用呼叫。首次扣款日就是
-     *   Paddle 自己算好的一個月後
+     * - 還有資格 → 保留 Paddle 給的試用期，連 API 都不用呼叫。首次扣款日就是
+     *   Paddle 自己算好的試用結束那天
      * - 沒有資格 → `POST /subscriptions/{id}/activate`，當場計費。**這條路不能
      *   省**：price 帶著 trial_period，不處理的話「訂閱 → 取消 → 再訂閱」就能
      *   無限續杯
      */
-    public function applyFreeMonth(
+    public function applyTrial(
         Subscription $subscription,
         PaddleSubscriptionEntity $paddleSubscription
     ): PaddleSubscriptionEntity {
-        $action = $this->freeMonthAction(
+        $action = $this->trialAction(
             (string) $paddleSubscription->status->getValue(),
-            (new SubscriptionService())->isEligibleForFreeMonth(
+            (new SubscriptionService())->isEligibleForIntroOffer(
                 (string) $subscription->user_id,
                 (string) $subscription->getKey()
             )
         );
 
-        if ($action !== self::FREE_MONTH_ACTION_ACTIVATE) {
+        if ($action !== self::TRIAL_ACTION_ACTIVATE) {
             return $paddleSubscription;
         }
 
@@ -161,26 +162,26 @@ class PaddleSubscriptionService
      * 在各處直接 new 的，沒辦法換成測試替身（見 PaddleControllerTest 的說明）。
      *
      * @param string $paddleStatus Paddle 訂閱的狀態
-     * @param bool $eligible 這個帳號還有沒有首月免費的資格
+     * @param bool $eligible 這個帳號還有沒有新客優惠的資格
      */
-    public function freeMonthAction(string $paddleStatus, bool $eligible): string
+    public function trialAction(string $paddleStatus, bool $eligible): string
     {
         if ($paddleStatus !== SubscriptionStatus::Trialing()->getValue()) {
-            return self::FREE_MONTH_ACTION_NONE;
+            return self::TRIAL_ACTION_NONE;
         }
 
-        return $eligible ? self::FREE_MONTH_ACTION_KEEP : self::FREE_MONTH_ACTION_ACTIVATE;
+        return $eligible ? self::TRIAL_ACTION_KEEP : self::TRIAL_ACTION_ACTIVATE;
     }
 
     /**
      * 把 Paddle 的訂閱狀態轉成我們自己的 `status`。
      *
-     * 抽成純函式的理由同 `freeMonthAction()`：Paddle SDK 的 client 到處直接 new，
+     * 抽成純函式的理由同 `trialAction()`：Paddle SDK 的 client 到處直接 new，
      * 換不掉，所以判斷本身要能單獨測。
      *
      * 對照表與**為什麼**：
      *
-     * - `trialing` → `trial`：免費月期間。前端靠這個顯示 Trial 徽章
+     * - `trialing` → `trial`：試用期間。前端靠這個顯示 Trial 徽章
      * - `active` → `active`
      * - `past_due` → **`active`**（不是取消）。扣款失敗後 Paddle 會進入 dunning，
      *   自動重試兩週左右才放棄。這段期間把人停權是錯的——卡片過期這種小事會
@@ -210,12 +211,12 @@ class PaddleSubscriptionService
      *
      * 三個欄位的語意：
      *
-     * - `status`：免費月期間是 `trial`，首次扣款成功後才轉 `active`。前端靠這個
+     * - `status`：試用期間是 `trial`，首次扣款成功後才轉 `active`。前端靠這個
      *   顯示 Trial 徽章，`GET /v1/subscriptions` 也只在 `trial` 時回
      *   `trial_ends_at`——而那個日子就是第一次扣款的日子
-     * - `start_date`：訂閱開始的那天，也就是結帳當天。免費月是這筆訂閱的一部分，
+     * - `start_date`：訂閱開始的那天，也就是結帳當天。試用期是這筆訂閱的一部分，
      *   不是它的前傳，所以不再像過去那樣記成「試用結束日」
-     * - `next_date`：`next_billed_at`。免費月期間就是首次扣款日；`scopeActive()`
+     * - `next_date`：`next_billed_at`。試用期間就是首次扣款日；`scopeActive()`
      *   對 `trial` 狀態會比對這個欄位，所以首次扣款沒過（Paddle 轉 past_due、
      *   日期停在過去）的訂閱會自然落回免費方案
      */
@@ -267,7 +268,7 @@ class PaddleSubscriptionService
         $paddleClient = $this->paddle();
 
         try {
-            $paddleSubscription = $this->applyFreeMonth(
+            $paddleSubscription = $this->applyTrial(
                 $subscription,
                 $paddleClient->subscriptions()->get($paddleTransaction->subscriptionId)
             );

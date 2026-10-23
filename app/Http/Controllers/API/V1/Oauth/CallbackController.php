@@ -73,6 +73,14 @@ class CallbackController extends AbstractController
                         new OAT\Property(property: 'access_token', type: 'string', example: 'eyJ0eXAiOiJKV1Qi...'),
                         new OAT\Property(property: 'token_type', type: 'string', example: 'bearer'),
                         new OAT\Property(property: 'expires_in', type: 'integer', example: 3600),
+                        new OAT\Property(
+                            property: 'created',
+                            type: 'boolean',
+                            description: 'True when this exchange created the account instead of signing in an '
+                                . 'existing one. The same endpoint serves both, so only the server can tell them '
+                                . 'apart; the web client needs it to count sign-ups.',
+                            example: true
+                        ),
                     ]
                 )
             ),
@@ -101,7 +109,14 @@ class CallbackController extends AbstractController
             SetLocale::preferredLocale($request->getHeaderLine('Accept-Language'))
         );
 
-        return $this->responseAccessToken($this->guard()->login($user), 201);
+        // `created` 讓前端分得出「用 Google 註冊」與「用 Google 登入」——這支端點
+        // 同時是兩者，而收斂到同一個帳號的判斷只發生在伺服器（provider_id / email），
+        // 前端沒有任何依據可以自己推。少了它，每次 Google 登入都會被算成一次註冊。
+        return $this->responseAccessToken(
+            $this->guard()->login($user),
+            201,
+            ['created' => $user->wasRecentlyCreated]
+        );
     }
 
     /**

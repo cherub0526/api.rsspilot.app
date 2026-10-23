@@ -12,6 +12,7 @@ return [
             'code_expired'        => 'That verification code has expired. Please request a new one.',
             'resend_throttled'    => 'Please wait before requesting another code.',
             'verify_failed'       => 'Verification failed. Please try again.',
+            'reset_link_invalid'  => 'This password reset link is no longer valid. Please request a new one.',
         ],
         'oauth' => [
             'provider_not_configured' => 'This sign-in method is not configured yet.',
@@ -31,6 +32,8 @@ return [
             'caption_not_found'   => 'Caption not found.',
             'invalid_url'         => 'Invalid YouTube video URL.',
             'video_limit_reached' => 'You have reached the video limit for your plan.',
+            'no_public_captions'    => 'This video has no public captions on YouTube, so it cannot be added yet.',
+            'captions_check_failed' => 'We could not check whether this video has public captions. Please try again later.',
         ],
         'download' => [
             'plan_required'  => 'Downloading summaries and transcripts requires a paid plan.',

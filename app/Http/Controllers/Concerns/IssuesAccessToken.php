@@ -20,9 +20,18 @@ trait IssuesAccessToken
         return auth('jwt');
     }
 
-    protected function responseAccessToken(string $token, int $statusCode = 200): ResponseInterface
-    {
+    /**
+     * `$extra` 只拿來補**某一支端點獨有**的欄位（目前只有 OAuth callback 的 `created`）。
+     * token 的三個欄位刻意放在合併的後面：`$extra` 因此不可能蓋掉它們，
+     * 「三支端點的 token 形狀逐字相同」這件事仍然成立。
+     */
+    protected function responseAccessToken(
+        string $token,
+        int $statusCode = 200,
+        array $extra = []
+    ): ResponseInterface {
         return response()->json([
+            ...$extra,
             'access_token' => $token,
             'token_type'   => 'bearer',
             'expires_in'   => config('jwt.ttl') * 60,

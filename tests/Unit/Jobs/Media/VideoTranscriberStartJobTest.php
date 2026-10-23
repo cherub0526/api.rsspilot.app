@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Jobs\Media;
 
+use Mockery;
 use Tests\TestCase;
 use App\Models\Media;
+use App\Services\PublicCaptionGate;
 use Hypervel\Queue\Jobs\FakeJob;
 use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
@@ -429,5 +431,116 @@ class VideoTranscriberStartJobTest extends TestCase
         $job = new VideoTranscriberStartJob($media);
 
         $this->assertSame($media->id, $job->uniqueId());
+    }
+
+    // ================================================================
+    // 公開字幕閘門（MEDIA_REQUIRE_PUBLIC_CAPTIONS）
+
+    /**
+     * @param null|bool|string $hasCaptions 'unset' 代表不預期被呼叫
+     */
+    private function gate(bool $enabled, bool|string|null $hasCaptions = 'unset'): PublicCaptionGate
+    {
+        $gate = Mockery::mock(PublicCaptionGate::class);
+        $gate->shouldReceive('enabled')->andReturn($enabled);
+
+        if ($hasCaptions === 'unset') {
+            $gate->shouldNotReceive('hasPublicCaptions');
+        } else {
+            $gate->shouldReceive('hasPublicCaptions')->with('abc123')->once()->andReturn($hasCaptions);
+        }
+
+        return $gate;
+    }
+
+    private function fakeSuccessfulStart(): void
+    {
+        Http::fake([
+            'videotranscriber.ai/api/v1/transcriptions/url-info*' => Http::response([
+                'code' => 100000,
+                'data' => ['type' => 3, 'title' => 'Test Video', 'audio_time' => 139],
+            ], 200),
+            'videotranscriber.ai/api/v1/transcriptions/start*' => Http::response([
+                'code' => 100000,
+                'data' => ['event_id' => 'event-1', 'audio_id' => 'audio-1'],
+            ], 200),
+        ]);
+    }
+
+    /**
+     * 沒有公開字幕 → 標成 no_captions、完全不碰轉錄服務。
+     */
+    public function testMarksMediaWithoutPublicCaptionsAndSkipsTranscription(): void
+    {
+        Http::fake();
+        $media = $this->createMedia();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient(), $this->gate(true, false));
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_NO_CAPTIONS, $media->status);
+        $this->assertFalse($media->video_detail['public_captions']);
+        Http::assertNothingSent();
+    }
+
+    /**
+     * 有公開字幕 → 記下結果並照常送轉錄。
+     */
+    public function testRecordsPublicCaptionsAndStartsTranscription(): void
+    {
+        $this->fakeSuccessfulStart();
+        $media = $this->createMedia();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient(), $this->gate(true, true));
+
+        $media->refresh();
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->status);
+        $this->assertTrue($media->video_detail['public_captions']);
+    }
+
+    /**
+     * 已經確認過有字幕（手動新增時查過、或上一次重試查過）→ 不再花一次 50 單位的配額。
+     */
+    public function testDoesNotRecheckMediaAlreadyKnownToHaveCaptions(): void
+    {
+        $this->fakeSuccessfulStart();
+        $media = Media::factory()->create([
+            'status'       => Media::STATUS_CREATED,
+            'video_detail' => ['yt:videoId' => 'abc123', 'public_captions' => true],
+        ]);
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient(), $this->gate(true));
+
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->refresh()->status);
+    }
+
+    /**
+     * 查不到（配額、網路）→ 稍後重試，media 留在 created，不誤標成沒有字幕。
+     */
+    public function testReleasesWhenCaptionCheckFails(): void
+    {
+        Http::fake();
+        $media = $this->createMedia();
+
+        $job = new VideoTranscriberStartJob($media);
+        $job->job = new FakeJob();
+        $job->handle(new VideoTranscriberClient(), $this->gate(true, null));
+
+        $this->assertTrue($job->job->isReleased());
+        $this->assertSame(Media::STATUS_CREATED, $media->refresh()->status);
+        Http::assertNothingSent();
+    }
+
+    /**
+     * 閘門關閉 → 完全不查，行為與以前一樣。
+     */
+    public function testSkipsCaptionCheckWhenGateDisabled(): void
+    {
+        $this->fakeSuccessfulStart();
+        $media = $this->createMedia();
+
+        (new VideoTranscriberStartJob($media))->handle(new VideoTranscriberClient(), $this->gate(false));
+
+        $this->assertSame(Media::STATUS_TRANSCRIBING, $media->refresh()->status);
     }
 }

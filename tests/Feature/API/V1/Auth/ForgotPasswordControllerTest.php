@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\API\V1\Auth;
 
+use Carbon\Carbon;
 use Tests\TestCase;
 use App\Models\User;
 use App\Mail\ResetPasswordMail;
@@ -76,7 +77,7 @@ class ForgotPasswordControllerTest extends TestCase
 
         User::factory()->create([
             'email' => 'validuser@example.com',
-            'email'   => 'validuser@example.com',
+            'email' => 'validuser@example.com',
         ]);
 
         $uri = route('api.v1.auth.forgot-password.store');
@@ -105,73 +106,14 @@ class ForgotPasswordControllerTest extends TestCase
             ->assertJsonPath('messages.signature', [$messages['signature.required']]);
     }
 
-    public function testUpdateWithInvalidToken(): void
-    {
-        $user = User::factory()->create(['email' => 'validuser2@example.com']);
-
-        $uri = route('api.v1.auth.forgot-password.update');
-
-        $this->json('PUT', $uri, [
-            'expires'               => now()->addHour()->timestamp,
-            'id'                    => $user->id,
-            'token'                 => 'invalid-token',
-            'signature'             => 'any-signature',
-            'password'              => 'newpassword123',
-            'password_confirmation' => 'newpassword123',
-        ])
-            ->assertStatus(422)
-            ->assertJsonPath('messages.token', 'Invalid token.');
-    }
-
-    public function testUpdateValidationPasswordTooShort(): void
-    {
-        $user = User::factory()->create(['email' => 'validuser3@example.com']);
-        $token = Hash::make(strval($user->id));
-
-        $uri = route('api.v1.auth.forgot-password.update');
-
-        $this->json('PUT', $uri, [
-            'expires'               => now()->addHour()->timestamp,
-            'id'                    => $user->id,
-            'token'                 => $token,
-            'signature'             => 'any-signature',
-            'password'              => 'short',
-            'password_confirmation' => 'short',
-        ])->assertStatus(422);
-    }
-
-    public function testUpdateValidationPasswordMismatch(): void
-    {
-        $user = User::factory()->create(['email' => 'validuser4@example.com']);
-        $token = Hash::make(strval($user->id));
-
-        $uri = route('api.v1.auth.forgot-password.update');
-
-        $this->json('PUT', $uri, [
-            'expires'               => now()->addHour()->timestamp,
-            'id'                    => $user->id,
-            'token'                 => $token,
-            'signature'             => 'any-signature',
-            'password'              => 'newpassword123',
-            'password_confirmation' => 'different456',
-        ])->assertStatus(422);
-    }
-
-    public function testUpdateSuccess(): void
+    public function testUpdateSuccessWithLinkFromMail(): void
     {
         $user = User::factory()->create([
             'email'    => 'validuser5@example.com',
             'password' => Hash::make('oldpassword'),
         ]);
-        $token = Hash::make(strval($user->id));
 
-        $uri = route('api.v1.auth.forgot-password.update');
-
-        $this->json('PUT', $uri, [
-            'expires'               => now()->addHour()->timestamp,
-            'id'                    => $user->id,
-            'token'                 => $token,
-            'signature'             => 'any-signature',
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $this->resetLinkParams($user) + [
             'password'              => 'newpassword123',
             'password_confirmation' => 'newpassword123',
         ])
@@ -180,6 +122,111 @@ class ForgotPasswordControllerTest extends TestCase
             ->assertJsonPath('token_type', 'bearer');
 
         $this->assertTrue(Hash::check('newpassword123', $user->fresh()->password));
+    }
+
+    /**
+     * 舊版的 token 是 Hash::make(id)：任何知道使用者 id 的人都能自己算出來，
+     * 不必收信就能改掉別人的密碼。這種自製的 token 不能被接受。
+     */
+    public function testUpdateRejectsTokenForgedFromUserId(): void
+    {
+        $user = User::factory()->create([
+            'email'    => 'victim@example.com',
+            'password' => Hash::make('oldpassword'),
+        ]);
+
+        $params = $this->resetLinkParams($user);
+        $params['token'] = Hash::make(strval($user->id));
+
+        $this->assertResetLinkRejected($user, $params);
+    }
+
+    public function testUpdateRejectsTamperedSignature(): void
+    {
+        $user = User::factory()->create(['password' => Hash::make('oldpassword')]);
+
+        $params = $this->resetLinkParams($user);
+        $params['signature'] = str_repeat('0', 64);
+
+        $this->assertResetLinkRejected($user, $params);
+    }
+
+    /** 簽章涵蓋 expires：自行把期限往後改，簽章就對不上。 */
+    public function testUpdateRejectsExtendedExpiry(): void
+    {
+        $user = User::factory()->create(['password' => Hash::make('oldpassword')]);
+
+        $params = $this->resetLinkParams($user);
+        $params['expires'] = (int) $params['expires'] + 3600;
+
+        $this->assertResetLinkRejected($user, $params);
+    }
+
+    public function testUpdateRejectsExpiredLink(): void
+    {
+        $user = User::factory()->create(['password' => Hash::make('oldpassword')]);
+
+        $params = $this->resetLinkParams($user);
+        Carbon::setTestNow(now()->addMinutes(61));
+
+        try {
+            $this->assertResetLinkRejected($user, $params);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /** 信裡的連結只能用一次：密碼改過之後，同一條連結就失效。 */
+    public function testUpdateRejectsReusedLink(): void
+    {
+        $user = User::factory()->create(['password' => Hash::make('oldpassword')]);
+        $params = $this->resetLinkParams($user);
+
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $params + [
+            'password'              => 'newpassword123',
+            'password_confirmation' => 'newpassword123',
+        ])->assertStatus(200);
+
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $params + [
+            'password'              => 'another456789',
+            'password_confirmation' => 'another456789',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.token', [__('validators.controllers.auth.reset_link_invalid')]);
+
+        $this->assertTrue(Hash::check('newpassword123', $user->fresh()->password));
+    }
+
+    /** 換成別人的 id：簽章與 token 都綁在原本的使用者上。 */
+    public function testUpdateRejectsLinkForAnotherUser(): void
+    {
+        $owner = User::factory()->create(['password' => Hash::make('ownerpass')]);
+        $victim = User::factory()->create(['password' => Hash::make('victimpass')]);
+
+        $params = $this->resetLinkParams($owner);
+        $params['id'] = strval($victim->id);
+
+        $this->assertResetLinkRejected($victim, $params, 'victimpass');
+    }
+
+    public function testUpdateValidationPasswordTooShort(): void
+    {
+        $user = User::factory()->create(['email' => 'validuser3@example.com']);
+
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $this->resetLinkParams($user) + [
+            'password'              => 'short',
+            'password_confirmation' => 'short',
+        ])->assertStatus(422);
+    }
+
+    public function testUpdateValidationPasswordMismatch(): void
+    {
+        $user = User::factory()->create(['email' => 'validuser4@example.com']);
+
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $this->resetLinkParams($user) + [
+            'password'              => 'newpassword123',
+            'password_confirmation' => 'different456',
+        ])->assertStatus(422);
     }
 
     public function testResetPasswordMailRendersWithRSSPilotBranding(): void
@@ -192,5 +239,45 @@ class ForgotPasswordControllerTest extends TestCase
         $this->assertStringContainsString('60', $html);
         $this->assertStringContainsString('If you did not request a password reset', $html);
         $this->assertStringContainsString('/reset-password?token=abc', $html);
+    }
+
+    /**
+     * 走真正的 store 流程拿到寄出的重設連結，回傳連結上的 query 參數
+     * （expires / id / token / signature），也就是前端會原樣送回 PUT 的那一組。
+     *
+     * @return array<string, string>
+     */
+    private function resetLinkParams(User $user): array
+    {
+        Mail::fake();
+
+        $this->json('POST', route('api.v1.auth.forgot-password.store'), ['email' => $user->email])
+            ->assertStatus(200);
+
+        $link = null;
+        Mail::assertSent(ResetPasswordMail::class, function (ResetPasswordMail $mail) use (&$link) {
+            $link = $mail->token;
+
+            return true;
+        });
+
+        parse_str((string) parse_url((string) $link, PHP_URL_QUERY), $params);
+
+        return $params;
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function assertResetLinkRejected(User $user, array $params, string $originalPassword = 'oldpassword'): void
+    {
+        $this->json('PUT', route('api.v1.auth.forgot-password.update'), $params + [
+            'password'              => 'hijacked12345',
+            'password_confirmation' => 'hijacked12345',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.token', [__('validators.controllers.auth.reset_link_invalid')]);
+
+        $this->assertTrue(Hash::check($originalPassword, $user->fresh()->password));
     }
 }

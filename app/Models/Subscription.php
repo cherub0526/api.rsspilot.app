@@ -37,13 +37,25 @@ class Subscription extends Model
     public const string PAYMENT_METHOD_TRIAL = 'trial';
 
     /**
-     * 首月免費的長度（月）。
+     * 免費試用的長度（**天**）。所有付費方案、月繳與年繳都一樣。
      *
-     * 一個數字有三個落點，改的時候要一起動：Paddle 是設在 price 的
-     * `trial_period`（`paddle:sync`）、Stripe 是結帳時的 `trial_end`、我們自己的
-     * `next_date` 則照金流商回報的日期寫入。
+     * **單位是天而不是月**（2026-10，RSS-3）。原本是 `FREE_MONTHS = 1`，但 14 天
+     * 用月表示不出來，而三家金流只有 Paddle 收「月」：Creem 的
+     * `trial_period_days` 本來就得把月換算成 30 天，Stripe 是個絕對時間點。
+     * 以天為單位之後那個換算消失了，三邊拿到的是同一個數字。
+     *
+     * 這個數字有三個落點，改的時候會一起動（都讀這個常數）：
+     *
+     * - Creem：product 的 `trial_period_days`（`creem:sync`）
+     * - Stripe：結帳時的 `trial_end`（`StripeSubscriptionService::trialEndFor()`）
+     * - Paddle：price 的 `trial_period`（`paddle:sync`，interval 用 day）
+     *
+     * 我們自己的 `next_date` 不自己算，照金流商回報的日期寫入。
+     *
+     * 對外文案也要跟著改：前端讀 `/v1/plans` 的 `prices[].trial_days`
+     * （見 `PriceResource`），不自己寫死天數。
      */
-    public const int FREE_MONTHS = 1;
+    public const int TRIAL_DAYS = 14;
 
     public static array $statusMaps = [
         self::STATUS_PAYING   => '付款中',

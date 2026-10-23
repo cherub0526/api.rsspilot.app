@@ -101,6 +101,48 @@ class CallbackControllerTest extends TestCase
         $this->assertSame('Ada Lovelace', $user->name);
     }
 
+    public function testStoreReportsCreatedForANewUser(): void
+    {
+        // 前端靠這個欄位分辨「用 Google 註冊」與「用 Google 登入」（漏斗的 sign_up）。
+        $this->mockProvider($this->fakeProviderUser());
+
+        $response = $this->json('POST', $this->uri(), $this->payload());
+
+        $response->assertStatus(201);
+        $this->assertTrue($response->json('created'));
+    }
+
+    public function testStoreReportsNotCreatedForAnExistingUser(): void
+    {
+        User::factory()->create([
+            'social_type' => Oauth::PROVIDER_GOOGLE,
+            'provider_id' => self::PROVIDER_ID,
+        ]);
+
+        $this->mockProvider($this->fakeProviderUser());
+
+        $response = $this->json('POST', $this->uri(), $this->payload());
+
+        $response->assertStatus(201);
+        $this->assertFalse($response->json('created'));
+    }
+
+    public function testStoreReportsNotCreatedWhenTheEmailAlreadyHasAnAccount(): void
+    {
+        // 同 email 會掛到既有帳號上（見 SocialAccountService），那也不是新註冊。
+        User::factory()->create([
+            'email'       => 'ada@example.com',
+            'social_type' => User::SOCIAL_TYPE_LOCAL,
+        ]);
+
+        $this->mockProvider($this->fakeProviderUser());
+
+        $response = $this->json('POST', $this->uri(), $this->payload());
+
+        $response->assertStatus(201);
+        $this->assertFalse($response->json('created'));
+    }
+
     public function testStoreStoresProviderCredentials(): void
     {
         $this->mockProvider($this->fakeProviderUser());
