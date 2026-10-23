@@ -15,13 +15,14 @@ class UserObserver
      * Handle the User "created" event.
      *
      * 這裡**刻意不建立任何訂閱**。2026-09 之前註冊會自動送一個月 Pro 試用，現在
-     * 改成「首次訂閱時，第一個月免費」——贈送的時機從註冊移到結帳，所以新會員
-     * 一開始沒有訂閱紀錄，直接落到免費方案退路（見
+     * 改成「首次訂閱時免費試用 `Subscription::TRIAL_DAYS` 天」——贈送的時機從註冊
+     * 移到結帳，所以新會員一開始沒有訂閱紀錄，直接落到免費方案退路（見
      * `SubscriptionService::getUserSubscriptionPlan()`）。
      *
-     * 免費月怎麼給：Paddle 是 price 上的 `trial_period`（`paddle:sync` 設定）、
-     * Stripe 是結帳時的 `trial_end`；資格判定在
-     * `SubscriptionService::isEligibleForFreeMonth()`，終生一次。
+     * 試用怎麼給：Creem 與 Paddle 都是綁在 product/price 上（`creem:sync` 的
+     * `trial_period_days`、`paddle:sync` 的 `trial_period`）、Stripe 是結帳時的
+     * `trial_end`；資格判定在 `SubscriptionService::isEligibleForIntroOffer()`，
+     * 終生一次。
      *
      * 但**一定**建一筆空的 settings：每個使用者恰好一筆（settings.user_id 有唯一索引），
      * 讀設定的地方不必再處理「還沒有資料列」。空的 data 代表「沒有偏好」——

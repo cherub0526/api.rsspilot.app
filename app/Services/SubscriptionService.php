@@ -22,7 +22,13 @@ class SubscriptionService
     }
 
     /**
-     * 這個帳號還能不能領首月免費。
+     * 這個帳號還能不能領**新客優惠**。
+     *
+     * 新客優惠目前是**免費試用 14 天**（`Subscription::TRIAL_DAYS`，月繳與年繳
+     * 都一樣），另外年繳的 price 可以選擇性地設首年折價
+     * （`prices.first_period_price`，目前全部為 null）。**這兩種優惠共用這一個
+     * 閘門，而且刻意只有一個**：分開算的話「用掉試用 → 取消 → 改訂年繳拿折價」
+     * 就能一個人吃兩份。
      *
      * 規則是**終生一次**：只要曾經有一筆訂閱真的成立過（走完結帳、或留下過交易
      * 紀錄），之後再訂閱一律當場計費。用「成立過」而不是「目前有沒有在訂閱」是
@@ -33,14 +39,14 @@ class SubscriptionService
      * 排除兩種紀錄：
      *
      * - `payment_method = trial`：2026-09 之前註冊即贈送的那批試用訂閱。那是系統
-     *   送的、不是使用者買的，不該吃掉他的首月免費。
+     *   送的、不是使用者買的，不該吃掉他的新客優惠。
      * - `$excludeSubscriptionId`：結帳當下那筆 `paying` 紀錄本身。它是
      *   `SubscriptionsController::store()` 在導去結帳前就先建好的。
      *
      * 連軟刪除的紀錄都要算（`withTrashed()`）——訂閱成立過這件事不會因為資料列
      * 被刪掉而沒發生過。
      */
-    public function isEligibleForFreeMonth(string $userId, ?string $excludeSubscriptionId = null): bool
+    public function isEligibleForIntroOffer(string $userId, ?string $excludeSubscriptionId = null): bool
     {
         $query = Subscription::withTrashed()
             ->where('user_id', $userId)

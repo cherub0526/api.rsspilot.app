@@ -36,9 +36,10 @@ class StripeSubscriptionService
             'metadata'   => ['subscriptionId' => $subscription->id],
         ];
 
-        // 第一次訂閱的話第一個月免費：Stripe 當下仍然收取付款方式、但不扣款，
-        // 一個月後才開第一張帳單，付費週期也從那天起算。Paddle 那邊的同一件事是
-        // 設在 price 上的 trial_period（見 PaddleSubscriptionService）。
+        // 第一次訂閱的人送 `Subscription::TRIAL_DAYS` 天免費試用：Stripe 當下仍然
+        // 收取付款方式、但不扣款，試用結束才開第一張帳單，付費週期也從那天起算。
+        // Paddle 那邊的同一件事是設在 price 上的 trial_period（見
+        // PaddleSubscriptionService）、Creem 是 product 上的 trial_period_days。
         if ($trialEnd = $this->trialEndFor($user)) {
             $params['subscription_data'] = ['trial_end' => $trialEnd->getTimestamp()];
         }
@@ -60,19 +61,19 @@ class StripeSubscriptionService
     }
 
     /**
-     * 這次結帳要不要帶免費月——要的話回傳首次扣款的時間，不用的話回 null。
+     * 這次結帳要不要帶免費試用——要的話回傳首次扣款的時間，不用的話回 null。
      *
-     * 資格判定是共用的（終生一次，見 `SubscriptionService::isEligibleForFreeMonth()`）。
+     * 資格判定是共用的（終生一次，見 `SubscriptionService::isEligibleForIntroOffer()`）。
      * 這裡不用擔心 Stripe「trial_end 必須至少是 48 小時之後」的限制：送的固定是
-     * 一個月，永遠過得了那道門檻。
+     * `Subscription::TRIAL_DAYS`（14 天），永遠過得了那道門檻。
      */
     private function trialEndFor(User $user): ?Carbon
     {
-        if (!(new SubscriptionService())->isEligibleForFreeMonth((string) $user->id)) {
+        if (!(new SubscriptionService())->isEligibleForIntroOffer((string) $user->id)) {
             return null;
         }
 
-        return now()->addMonths(Subscription::FREE_MONTHS);
+        return now()->addDays(Subscription::TRIAL_DAYS);
     }
 
     public function cancel(Subscription $subscription): void
@@ -151,7 +152,7 @@ class StripeSubscriptionService
             'stripe_detail' => $stripeSub->toArray(),
         ]);
 
-        // 免費月期間記成 trial，首次扣款成功（invoice.paid）後才轉 active，跟
+        // 試用期間記成 trial，首次扣款成功（invoice.paid）後才轉 active，跟
         // Paddle 那條路一致——前端的 Trial 徽章與 trial_ends_at 都讀這個狀態。
         $insertData = [
             'status' => $stripeSub->status === 'trialing'
@@ -161,7 +162,7 @@ class StripeSubscriptionService
         ];
 
         if (!$subscription->start_date) {
-            // 訂閱開始的日子就是結帳這天。免費月是這筆訂閱的第一期（Stripe 在試用
+            // 訂閱開始的日子就是結帳這天。試用期是這筆訂閱的第一期（Stripe 在試用
             // 期間的 current_period 就是那一段），不是它的前傳。next_date 則是
             // current_period_end——第一次扣款的日子。
             $insertData['start_date'] = Carbon::createFromTimestamp(

@@ -66,10 +66,10 @@ class StripeControllerTest extends TestCase
     }
 
     /**
-     * 免費月期間：訂閱起始日就是結帳這天，狀態記成 trial，next_date 是第一次
-     * 扣款的日子。免費月是這筆訂閱的第一期，不是它的前傳。
+     * 試用期間：訂閱起始日就是結帳這天，狀態記成 trial，next_date 是第一次
+     * 扣款的日子。試用期是這筆訂閱的第一期，不是它的前傳。
      */
-    public function testCheckoutCompletedDuringTheFreeMonthStartsToday(): void
+    public function testCheckoutCompletedDuringTheTrialStartsToday(): void
     {
         [$subscription, $stripeSubId] = $this->makeSubscriptionWithStripe();
 
@@ -108,7 +108,7 @@ class StripeControllerTest extends TestCase
         $this->assertSame(
             Subscription::STATUS_TRIAL,
             $subscription->status,
-            '免費月期間記成 trial，首次扣款成功後才轉 active'
+            '試用期間記成 trial，首次扣款成功後才轉 active'
         );
         $this->assertSame(
             $startedAt->toDateTimeString(),
@@ -122,8 +122,8 @@ class StripeControllerTest extends TestCase
         );
     }
 
-    /** 沒有免費月（已經用掉的人）：當場計費，起始日就是這一期的開始。 */
-    public function testCheckoutCompletedWithoutTheFreeMonthStartsImmediately(): void
+    /** 沒有試用（已經用掉的人）：當場計費，起始日就是這一期的開始。 */
+    public function testCheckoutCompletedWithoutTheTrialStartsImmediately(): void
     {
         [$subscription, $stripeSubId] = $this->makeSubscriptionWithStripe();
 

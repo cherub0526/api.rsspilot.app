@@ -62,6 +62,13 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 12.99],
+                    // **沒有首期折價**（`first_period_price` 不填 = null）。owner 在
+                    // 2026-10-13 決定兩個方案都不降價，新客優惠統一成
+                    // `Subscription::TRIAL_DAYS` 天免費試用，月繳與年繳都適用。
+                    //
+                    // 日後真要折價，填這個欄位會讓年繳從試用那條路切到折扣碼那條路
+                    // （兩者互斥，見 CreemSubscriptionService::grantsTrial()），而且
+                    // 已部署的環境要同時附一支 migration（理由見 pricing-cost-model §6）。
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 129],
                 ],
             ],
@@ -90,6 +97,10 @@ class PlanPriceSeeder extends Seeder
                 ],
                 'prices' => [
                     ['unit' => Price::UNIT_MONTHLY, 'price' => 24.99],
+                    // Advance 年繳**沒有**首年折價，而且比 Pro 更不該有：典型使用的
+                    // 成本（$15.52/月）就已經吃掉年繳實收的 78%，折到 $189 之後典型
+                    // 毛利是 −3%——不是極端使用者小虧，是平均每一位都虧。要折價得先
+                    // 動 pricing-cost-model §5 那三個旋鈕。
                     ['unit' => Price::UNIT_ANNUALLY, 'price' => 249],
                 ],
             ],
@@ -106,8 +117,9 @@ class PlanPriceSeeder extends Seeder
 
             foreach ($prices as $price) {
                 $entity->prices()->create([
-                    'unit'  => $price['unit'],
-                    'price' => $price['price'],
+                    'unit'               => $price['unit'],
+                    'price'              => $price['price'],
+                    'first_period_price' => $price['first_period_price'] ?? null,
                 ]);
             }
         }
