@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: video-assistant/hypervel:latest
-    container_name: video-assistant
+    image: rsspilot.app/hypervel:latest
+    container_name: api.rsspilot.app
     ports:
       - "9501:9501"
     privileged: true
