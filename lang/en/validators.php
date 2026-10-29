@@ -23,6 +23,9 @@ return [
             'name'          => 'A name is required and must not exceed 60 characters.',
             'limit'         => 'You can keep at most :max API keys. Delete one you no longer use.',
         ],
+        'source_skill' => [
+            'plan_required' => 'Downloading channel skills requires an upgrade.',
+        ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',

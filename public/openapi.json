@@ -4162,6 +4162,10 @@
                         "type": "boolean",
                         "example": true
                     },
+                    "skill_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
                     "advanced_model_enabled": {
                         "type": "boolean",
                         "example": true

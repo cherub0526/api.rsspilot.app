@@ -23,6 +23,9 @@ return [
             'name'          => 'API key 名称必填，且不可超过 60 个字。',
             'limit'         => '最多只能创建 :max 把 API key，请先删除不用的。',
         ],
+        'source_skill' => [
+            'plan_required' => '下载频道 Skill 需要升级方案。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
