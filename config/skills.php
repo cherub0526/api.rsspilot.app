@@ -25,5 +25,11 @@ return [
      * SKILL.md 的 MCP 段落裡寫的端點。由系統模板插入，不讓模型產生，
      * 避免「把你的 key 送到別人的 MCP」這類替換。
      */
+    /*
+     * 全站每天（UTC）最多派幾次產生，排程與插隊共用（SourceSkillService::dispatchGeneration）。
+     * 0 = 全部停派，當緊急開關用；正式值在 T11 估算成本後由使用者確認。
+     */
+    'daily_global_limit' => (int) env('SKILL_DAILY_GLOBAL_LIMIT', 0),
+
     'mcp_url' => env('SKILL_MCP_URL', rtrim((string) env('APP_URL', 'http://localhost'), '/') . '/mcp'),
 ];

@@ -365,6 +365,9 @@ export default defineRailway((ctx) => {
     //
     // media.custom-summary（使用者自訂 AI 摘要）也是一趟 LLM 推論，長度跟
     // smart-summary 同級，放 fast 那組會被 120 秒截斷。
+    //
+    // sources.skill（頻道 Skill）一次送約 30 支長摘要、等一整份 SKILL.md 回來，
+    // job 內 HTTP 逾時 240 秒，只能放這組。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -372,7 +375,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary,sources.skill' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",

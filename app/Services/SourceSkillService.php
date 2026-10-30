@@ -5,15 +5,23 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Throwable;
+use ZipArchive;
 use Carbon\Carbon;
+use App\Models\User;
 use App\Models\Media;
+use RuntimeException;
 use App\Models\Source;
 use App\Models\Summary;
 use Hyperf\Stringable\Str;
+use App\Models\SourceSkill;
 use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
 use InvalidArgumentException;
+use App\Utils\AI\RoutingProfile;
+use Hypervel\Support\Facades\Log;
+use Hypervel\Support\Facades\Cache;
 use App\Services\SourceSkill\Sanitizer;
+use App\Jobs\Sources\GenerateSourceSkillJob;
 use App\Services\SourceSkill\SummarySampler;
 use App\Services\Prompts\ChannelSkillTemplate;
 use App\Services\Prompts\TemplateCompletionManager;
@@ -40,6 +48,9 @@ class SourceSkillService
     public const OUTLINE_MAX_ITEMS = 15;
 
     public const OUTLINE_ITEM_MAX_LENGTH = 80;
+
+    /** 頻道至少要有這麼多支有共用摘要的影片才產生（spec S29）。 */
+    public const MIN_SHARED_SUMMARIES = 3;
 
     /** 標題轉出來的 slug 上限；加上前綴與 id 片段後仍在 Agent Skill 的 64 字元內。 */
     private const SLUG_MAX_LENGTH = 40;
@@ -122,13 +133,100 @@ class SourceSkillService
     {
     }
 
+    /** skill 支援的語言與設定頁的 AI 語言相同（SettingValidator 的 `ai.language`）。 */
+    public function isSupportedLanguage(string $language): bool
+    {
+        return in_array($language, ISO6391::LANGUAGES, true);
+    }
+
+    /**
+     * 排程與插隊共用的派工守門：語言不支援或今天已達全域上限就不派。
+     *
+     * 上限以 UTC 日期為鍵的原子計數器計算，只算真的派出去的；同一列當天重派會覆蓋
+     * `started_at`，所以不能用資料列計數。`skills.daily_global_limit` 為 0 是緊急停派。
+     */
+    public function dispatchGeneration(Source $source, string $language): bool
+    {
+        if (!$this->isSupportedLanguage($language)) {
+            return false;
+        }
+
+        $today = now('UTC');
+        $key = 'skills:dispatched:' . $today->format('Y-m-d');
+        $limit = (int) config('skills.daily_global_limit');
+
+        Cache::add($key, 0, $today->copy()->addDay()->startOfDay());
+        // 先佔名額再比對，兩個呼叫端同時搶最後一個名額時只有一個過得去
+        if ((int) Cache::increment($key) > $limit) {
+            Cache::decrement($key);
+            Log::warning('Source skill daily global limit reached', ['limit' => $limit]);
+
+            return false;
+        }
+
+        GenerateSourceSkillJob::dispatch($source, $language);
+
+        return true;
+    }
+
+    /**
+     * 頻道現在還值不值得產生：有效訂閱者裡至少一位方案開放 skill，共用摘要的影片數夠。
+     */
+    public function isEligible(Source $source): bool
+    {
+        return count($this->sampler->sample($source, 'en', self::MIN_SHARED_SUMMARIES)) >= self::MIN_SHARED_SUMMARIES
+            && $this->hasSkillSubscriber($source);
+    }
+
+    /**
+     * @return list<array{media: Media, summary: Summary}>
+     */
+    public function samples(Source $source, string $language): array
+    {
+        return $this->sampler->sample($source, $language, self::SAMPLE_SIZE);
+    }
+
+    /** 這次產生用的模型；generateRaw() 不帶使用者，所以就是用途層的設定。 */
+    public function modelName(): string
+    {
+        return RoutingProfile::forPurpose(ChannelSkillTemplate::class)->model;
+    }
+
+    /**
+     * 打包成 zip，回傳 `sys_get_temp_dir()` 底下的唯一暫存檔，呼叫端送完即刪。
+     *
+     * 資料夾名稱一律由系統重算（SR-9）：資料列的 name 是存下來的值，萬一被改成
+     * `../../.ssh/…`，解壓縮時就會寫到使用者家目錄別處。
+     */
+    public function zip(SourceSkill $skill): string
+    {
+        /** @var Source $source */
+        $source = $skill->source()->firstOrFail();
+        $name = $this->skillName($source);
+
+        $path = tempnam(sys_get_temp_dir(), 'skill-');
+        $zip = new ZipArchive();
+        if ($path === false || $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Unable to create the skill zip.');
+        }
+
+        $zip->addFromString("{$name}/SKILL.md", (string) $skill->getAttribute('content'));
+        $zip->addFromString("{$name}/references/videos.md", (string) $skill->getAttribute('references'));
+        $zip->close();
+
+        return $path;
+    }
+
     /**
      * 取材、組 prompt、呼叫 LLM，回傳模型的原始輸出；組裝與清洗交給 assemble()。
      *
      * skill 全站共用，不帶使用者建構 manager：只吃用途層的模型路由，不讓觸發者的方案
      * 決定所有人拿到的品質。
      */
-    public function generateRaw(Source $source, string $language): string
+    /**
+     * @param null|list<array{media: Media, summary: Summary}> $samples 已取好的材料；job 要用同一份算 media_ids
+     */
+    public function generateRaw(Source $source, string $language, ?array $samples = null): string
     {
         // 語言名稱會進 system prompt，查不到就不能把呼叫端給的字串原樣放進去
         $name = ISO6391::getNameByCode(ISO6391::normalize($language));
@@ -144,13 +242,30 @@ class SourceSkillService
 
         $samples = array_map(
             fn (array $sample) => $this->sampleText($sample['media'], $sample['summary']),
-            $this->sampler->sample($source, $language, self::SAMPLE_SIZE)
+            $samples ?? $this->samples($source, $language)
         );
 
         return (new TemplateCompletionManager(Completion::make(), $template))
             ->setOptions(['max_tokens' => self::MAX_TOKENS])
             ->setTimeout(self::TIMEOUT_SECONDS)
             ->completeAndGetContent($template->wrap(implode("\n\n", $samples)));
+    }
+
+    private function hasSkillSubscriber(Source $source): bool
+    {
+        $subscriptions = app(SubscriptionService::class);
+        $subscribers = User::query()
+            ->whereHas('sources', fn ($query) => $query->where('sources.id', $source->getKey()))
+            ->cursor();
+
+        foreach ($subscribers as $user) {
+            $plan = $subscriptions->getUserSubscriptionPlan($subscriptions->getUserSubscription((string) $user->getKey()));
+            if ($plan !== null && (bool) $plan->getAttribute('skill_enabled')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** 一支影片一段：標題與日期當小標，內容沿用心智圖的輸入組法。 */

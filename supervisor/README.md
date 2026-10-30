@@ -15,6 +15,7 @@ One file per queue. Supervisor programs address **queues**, not job classes, so
 | `videotranscriber-fetch.conf` | `videotranscriber.fetch` | `VideoTranscriberFetchJob` | 120 |
 | `videotranscriber-smart-summary.conf` | `videotranscriber.smart-summary` | `VideoTranscriberSmartSummaryJob` | 300 |
 | `videotranscriber-archive.conf` | `videotranscriber.archive` | `VideoTranscriberArchiveJob` | 300 |
+| `sources-skill.conf` | `sources.skill` | `GenerateSourceSkillJob` | 300 |
 
 ## The two rules that must hold
 

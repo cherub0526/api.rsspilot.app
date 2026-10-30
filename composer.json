@@ -15,6 +15,7 @@
   "require": {
     "php": ">=8.3",
     "ext-simplexml": "*",
+    "ext-zip": "*",
     "barryvdh/laravel-ide-helper": "^3.6",
     "friendsofhyperf/tinker": "~3.1.0",
     "google/apiclient": "^2.19",
