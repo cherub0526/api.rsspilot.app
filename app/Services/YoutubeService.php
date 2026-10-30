@@ -48,10 +48,6 @@ class YoutubeService
         $path = trim($parsedUrl['path'], '/');
         $segments = explode('/', $path);
 
-        if (empty($segments)) {
-            return null;
-        }
-
         // Case 1: /channel/ID
         if ($segments[0] === 'channel' && isset($segments[1])) {
             return $segments[1];

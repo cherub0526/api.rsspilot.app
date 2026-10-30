@@ -53,7 +53,10 @@ class YoutubeDataCaptionJob implements ShouldQueue
 
         foreach ($tracks as $track) {
             $snippet = $track->getSnippet();
-            $langCode = (string) ($snippet->getLanguage() ?? '');
+            $langCode = (string) $snippet->getLanguage();
+            // Google 的 getter 宣告回傳非 null，但 API 沒給這個欄位時實際是 null，
+            // 而 null 要當成 standard（primary 字幕看的就是它）。
+            // @phpstan-ignore nullCoalesce.expr
             $trackKind = strtolower((string) ($snippet->getTrackKind() ?? 'standard'));
 
             if ($langCode === '') {
