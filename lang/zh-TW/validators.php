@@ -25,16 +25,18 @@ return [
         ],
         'source_skill' => [
             'plan_required' => '下載頻道 Skill 需要升級方案。',
+            'not_ready'     => '這個 Skill 還沒準備好，產生完成後就能下載。',
+            'format'        => '不支援這個下載格式。',
         ],
         'custom_prompts' => [
             'plan_required'  => '自訂 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
         ],
         'media' => [
-            'not_found'           => '找不到指定的媒體。',
-            'caption_not_found'   => '找不到指定的字幕。',
-            'invalid_url'         => '無效的 YouTube 影片網址。',
-            'video_limit_reached' => '已達到方案允許的影片數量上限。',
+            'not_found'             => '找不到指定的媒體。',
+            'caption_not_found'     => '找不到指定的字幕。',
+            'invalid_url'           => '無效的 YouTube 影片網址。',
+            'video_limit_reached'   => '已達到方案允許的影片數量上限。',
             'no_public_captions'    => '這支影片在 YouTube 上沒有公開字幕，暫時無法加入。',
             'captions_check_failed' => '目前無法確認這支影片是否有公開字幕，請稍後再試。',
         ],

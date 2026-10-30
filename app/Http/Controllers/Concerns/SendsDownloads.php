@@ -16,8 +16,14 @@ trait SendsDownloads
 {
     protected function fileResponse(string $content, string $filename, string $mime): ResponseInterface
     {
+        return $this->binaryResponse($content, $filename, $mime . '; charset=utf-8');
+    }
+
+    /** 不是文字的檔案（zip 等）：charset 對它沒有意義，不帶。 */
+    protected function binaryResponse(string $content, string $filename, string $mime): ResponseInterface
+    {
         return response()->make($content, 200, [
-            'Content-Type'        => $mime . '; charset=utf-8',
+            'Content-Type'        => $mime,
             'Content-Disposition' => $this->contentDisposition($filename),
             'Content-Length'      => (string) strlen($content),
         ]);

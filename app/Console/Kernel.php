@@ -6,6 +6,7 @@ namespace App\Console;
 
 use App\Console\Commands\Media\Notify;
 use App\Console\Commands\Sources\Sync;
+use App\Console\Commands\Sources\Skills;
 use Hypervel\Console\Scheduling\Schedule;
 use App\Console\Commands\Media\CustomSummaries;
 use App\Console\Commands\Users\PurgeUnverified;
@@ -42,6 +43,11 @@ class Kernel extends ConsoleKernel
         // 指令內會跳過已有摘要列的 (影片, 使用者)，所以每分鐘跑不會重複派。
         $schedule->command(CustomSummaries::class)->everyMinute()
             ->name('media.custom-summaries')->onOneServer()->withoutOverlapping(5);
+
+        // 頻道 Skill：每輪最多排 skills.batch_size 組，全域每日上限在派工時把關。
+        // job 最長跑 300 秒，一小時一輪足以消化一批，也讓 worker-slow 的其他佇列有空檔。
+        $schedule->command(Skills::class)->hourly()
+            ->name('sources.skills')->onOneServer()->withoutOverlapping(30);
 
         // 每日摘要信。時間是應用程式時區（APP_TIMEZONE），跟指令內判斷「今天」
         // 用的是同一個時區，所以 09:00 跑到的一定是前一個完整的日界線之後、

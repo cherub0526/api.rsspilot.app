@@ -113,4 +113,14 @@ class AssembleTest extends TestCase
         }
         $this->assertNull($inside, 'every fence is closed');
     }
+
+    /** GET 從存下來的 content 重算目錄：系統插入的 MCP 段落標題不算模型的目錄（每種語言都一樣）。 */
+    public function testTheOutlineOfStoredContentLeavesOutTheSystemSection(): void
+    {
+        foreach (['en', 'zh-TW', 'zh-CN'] as $language) {
+            $skill = $this->assemble("## Principles\nA\n\n## Checklist\nB", ['resource_id' => "vid-{$language}-001"], $language);
+
+            $this->assertSame(['Principles', 'Checklist'], app(SourceSkillService::class)->outlineOf($skill['content']), $language);
+        }
+    }
 }

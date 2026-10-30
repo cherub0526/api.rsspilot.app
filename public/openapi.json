@@ -2202,6 +2202,180 @@
                 ]
             }
         },
+        "/v1/sources/{sourceId}/skill/download": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Download the channel skill",
+                "description": "Download the channel skill in the user AI language. Every successful download is recorded. Playlists are 404.",
+                "operationId": "api.v1.sources.skill.download.index",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "description": "`zip` (default) returns `<name>.zip`; `files` returns both files as JSON for the desktop install",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "zip",
+                            "enum": [
+                                "zip",
+                                "files"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`application/zip` for `format=zip`; JSON for `format=files`",
+                        "content": {
+                            "application/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "example": "rsspilot-example-channel-abc123"
+                                        },
+                                        "files": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "path": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "SKILL.md",
+                                                            "references/videos.md"
+                                                        ]
+                                                    },
+                                                    "content": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/sources/{sourceId}/skill": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Get the channel skill",
+                "description": "Status and content of the channel skill in the user AI language. May queue a generation as a side effect (at most 10 per user per UTC day). Playlists are 404.",
+                "operationId": "api.v1.sources.skill.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Skill status; `reason` is only set when `status` is `not_generated`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "ready",
+                                                "generating",
+                                                "failed",
+                                                "insufficient",
+                                                "not_generated"
+                                            ]
+                                        },
+                                        "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                                "upgrade_required",
+                                                "subscribe_required",
+                                                "daily_limit"
+                                            ],
+                                            "nullable": true
+                                        },
+                                        "locked": {
+                                            "type": "boolean"
+                                        },
+                                        "language": {
+                                            "description": "Language of the returned skill",
+                                            "type": "string",
+                                            "example": "zh-TW"
+                                        },
+                                        "min_videos": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "summarized_count": {
+                                            "type": "integer",
+                                            "example": 12
+                                        },
+                                        "skill": {
+                                            "oneOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/SourceSkillResource"
+                                                }
+                                            ],
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/sources": {
             "get": {
                 "tags": [
@@ -4256,6 +4430,44 @@
                     "thumbnail": {
                         "type": "string",
                         "example": "https://yt3.googleusercontent.com/ytc/example",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "SourceSkillResource": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "rsspilot-example-channel-abcdef"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Methods and checklists distilled by RSSPilot …"
+                    },
+                    "outline": {
+                        "description": "Plain-text `##` headings of the skill, at most 15 items of 80 characters each.",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "Core principles",
+                            "Checklist"
+                        ]
+                    },
+                    "content": {
+                        "description": "Full SKILL.md, starting with `---` frontmatter. Always null when the user's plan does not include skills.",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "video_count": {
+                        "type": "integer",
+                        "example": 30
+                    },
+                    "generated_at": {
+                        "type": "string",
+                        "format": "date-time",
                         "nullable": true
                     }
                 },

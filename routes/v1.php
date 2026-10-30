@@ -37,12 +37,14 @@ use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
+use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\FollowUpsController as ChatFollowUpsController;
 use App\Http\Controllers\API\V1\Subscriptions\UsageController as SubscriptionUsageController;
+use App\Http\Controllers\API\V1\Sources\Skill\DownloadController as SourceSkillDownloadController;
 
 Route::group('/feedbacks', function () {
     Route::post('/', [
@@ -250,6 +252,20 @@ Route::group('/sources', function () {
             'middleware' => ['auth'],
         ]);
     }, ['as' => 'medias']);
+    Route::group('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}/skill', function () {
+        Route::get('/', [
+            'as'         => 'show',
+            'uses'       => SourceSkillController::class . '@show',
+            'middleware' => ['auth', 'throttle:60,1'],
+        ]);
+        Route::group('/download', function () {
+            Route::get('/', [
+                'as'         => 'index',
+                'uses'       => SourceSkillDownloadController::class . '@index',
+                'middleware' => ['auth', 'throttle:30,1'],
+            ]);
+        }, ['as' => 'download']);
+    }, ['as' => 'skill']);
 }, ['as' => 'sources']);
 
 Route::group('/media', function () {

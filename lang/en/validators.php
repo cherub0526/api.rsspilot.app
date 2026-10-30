@@ -25,16 +25,18 @@ return [
         ],
         'source_skill' => [
             'plan_required' => 'Downloading channel skills requires an upgrade.',
+            'not_ready'     => 'This skill isn\'t ready yet. You can download it once it\'s generated.',
+            'format'        => 'This download format isn\'t supported.',
         ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
         ],
         'media' => [
-            'not_found'           => 'Media not found.',
-            'caption_not_found'   => 'Caption not found.',
-            'invalid_url'         => 'Invalid YouTube video URL.',
-            'video_limit_reached' => 'You have reached the video limit for your plan.',
+            'not_found'             => 'Media not found.',
+            'caption_not_found'     => 'Caption not found.',
+            'invalid_url'           => 'Invalid YouTube video URL.',
+            'video_limit_reached'   => 'You have reached the video limit for your plan.',
             'no_public_captions'    => 'This video has no public captions on YouTube, so it cannot be added yet.',
             'captions_check_failed' => 'We could not check whether this video has public captions. Please try again later.',
         ],

@@ -31,5 +31,8 @@ return [
      */
     'daily_global_limit' => (int) env('SKILL_DAILY_GLOBAL_LIMIT', 0),
 
+    // 每個人每天（UTC）最多能在 GET 插隊幾次（SR-5，使用者已確認）；逾時重派也算
+    'daily_user_limit' => 10,
+
     'mcp_url' => env('SKILL_MCP_URL', rtrim((string) env('APP_URL', 'http://localhost'), '/') . '/mcp'),
 ];

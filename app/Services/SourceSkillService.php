@@ -170,6 +170,47 @@ class SourceSkillService
     }
 
     /**
+     * skill 用的語言：使用者的 AI 語言；不在支援清單（設定裡的舊資料）就當成預設語言，
+     * 那個字串不會被拿去派工、建資料列或出現在回應裡。GET（T05）與排程（T04）共用。
+     */
+    public function languageFor(User $user): string
+    {
+        $language = $user->aiLanguageCode();
+
+        return $this->isSupportedLanguage($language) ? $language : User::DEFAULT_AI_LANGUAGE;
+    }
+
+    /** 方案是否開放 skill；每次即時判斷，降級立刻生效（S39）。 */
+    public function isSkillEnabled(User $user): bool
+    {
+        $subscriptions = app(SubscriptionService::class);
+        $plan = $subscriptions->getUserSubscriptionPlan($subscriptions->getUserSubscription((string) $user->getKey()));
+
+        return $plan !== null && (bool) $plan->getAttribute('skill_enabled');
+    }
+
+    /** 頻道有幾支影片至少有一筆可用的共用摘要（與取材同一個定義）。 */
+    public function summarizedCount(Source $source): int
+    {
+        return count($this->sampler->sample($source, User::DEFAULT_AI_LANGUAGE, PHP_INT_MAX));
+    }
+
+    /**
+     * 存下來的 SKILL.md 的目錄：只取模型寫的 `##` 標題，去掉系統插入的 MCP 段落標題。
+     *
+     * @return list<string>
+     */
+    public function outlineOf(string $content): array
+    {
+        $system = array_map(
+            fn (array $text) => $this->plainText(substr($text['mcp_heading'], 3)),
+            array_values(self::TEXT)
+        );
+
+        return array_values(array_diff($this->outline($content), $system));
+    }
+
+    /**
      * 頻道現在還值不值得產生：有效訂閱者裡至少一位方案開放 skill，共用摘要的影片數夠。
      */
     public function isEligible(Source $source): bool
@@ -253,14 +294,12 @@ class SourceSkillService
 
     private function hasSkillSubscriber(Source $source): bool
     {
-        $subscriptions = app(SubscriptionService::class);
         $subscribers = User::query()
             ->whereHas('sources', fn ($query) => $query->where('sources.id', $source->getKey()))
             ->cursor();
 
         foreach ($subscribers as $user) {
-            $plan = $subscriptions->getUserSubscriptionPlan($subscriptions->getUserSubscription((string) $user->getKey()));
-            if ($plan !== null && (bool) $plan->getAttribute('skill_enabled')) {
+            if ($this->isSkillEnabled($user)) {
                 return true;
             }
         }
