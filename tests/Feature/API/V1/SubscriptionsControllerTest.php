@@ -13,6 +13,7 @@ use App\Models\Paddle;
 use App\Models\Stripe;
 use Stripe\ApiRequestor;
 use App\Models\Subscription;
+use Hypervel\Support\Facades\DB;
 use Hypervel\Support\Facades\Config;
 use Tests\Support\FakeStripeHttpClient;
 use Hypervel\Foundation\Testing\RefreshDatabase;
@@ -807,6 +808,117 @@ class SubscriptionsControllerTest extends TestCase
 
             $this->assertNull($subscription->fresh()->cancellation_date, "{$method} 不該被記成已取消");
         }
+    }
+
+    /**
+     * Paddle 下線後仍留在資料庫裡的 Paddle 訂閱：方案照常讀得到，不會因為
+     * 金流商已經不在而退回免費方案或 500。
+     */
+    public function testLegacyPaddleSubscriberStillSeesTheirPlan(): void
+    {
+        $user = $this->fakeLogin();
+        $subscription = $this->createLegacyPaddleSubscription($user);
+
+        $this->json('GET', route('api.v1.subscriptions.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('status', Subscription::STATUS_ACTIVE)
+            ->assertJsonPath('subscription_id', $subscription->id)
+            ->assertJsonPath('id', $this->basicPlan->id);
+    }
+
+    /**
+     * 我們已經沒有辦法替 Paddle 訂閱停止扣款，所以 app 內取消要回 422 請他聯絡
+     * 客服，不能打 Paddle API，也不能記成已取消（Paddle 那邊仍在扣款）。
+     */
+    public function testLegacyPaddleSubscriberCannotCancelInApp(): void
+    {
+        $user = $this->fakeLogin();
+        $subscription = $this->createLegacyPaddleSubscription($user);
+
+        $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.cancel_unavailable'));
+
+        $this->assertNull($subscription->fresh()->cancellation_date);
+        $this->assertSame(Subscription::STATUS_ACTIVE, $subscription->fresh()->status);
+    }
+
+    /**
+     * Paddle 訂閱還在期內時不能再開一筆結帳，否則 Paddle 與新金流會各扣一次。
+     */
+    public function testLegacyPaddleSubscriberCannotStartASecondCheckout(): void
+    {
+        $user = $this->fakeLogin();
+        $this->createLegacyPaddleSubscription($user);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.already_subscribed'));
+    }
+
+    public function testStoreRejectsPaddleAsPaymentMethod(): void
+    {
+        $user = $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'paddle',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.paymentMethod.0', __('validators.subscription.paymentMethod.in'));
+
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    /**
+     * 正式環境的 PAYMENT_DEFAULT_PROVIDER 若還寫著 paddle，新結帳要落到 Creem，
+     * 不能讓整站結不了帳。
+     */
+    public function testDefaultPaymentMethodFallsBackToCreemWhenSetToPaddle(): void
+    {
+        $previous = getenv('PAYMENT_DEFAULT_PROVIDER');
+        putenv('PAYMENT_DEFAULT_PROVIDER=paddle');
+        $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = 'paddle';
+
+        try {
+            $this->assertSame(Subscription::PAYMENT_METHOD_CREEM, Subscription::defaultPaymentMethod());
+        } finally {
+            putenv($previous === false ? 'PAYMENT_DEFAULT_PROVIDER' : 'PAYMENT_DEFAULT_PROVIDER=' . $previous);
+            $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = $previous === false ? null : $previous;
+        }
+    }
+
+    /**
+     * 照正式資料的形狀建一筆 Paddle 時期的訂閱：`payment_method = paddle`，
+     * 並在 `paddles` 表留下對應列。直接寫表，因為程式裡已經沒有 Paddle model。
+     */
+    private function createLegacyPaddleSubscription(User $user): Subscription
+    {
+        $subscription = Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => 'paddle',
+            'status'         => Subscription::STATUS_ACTIVE,
+            'start_date'     => now()->subMonth(),
+            'next_date'      => now()->addWeeks(2),
+        ]);
+
+        DB::table('paddles')->insert([
+            'foreign_type'  => Subscription::class,
+            'foreign_id'    => $subscription->id,
+            'paddle_id'     => 'sub_legacy_paddle',
+            'paddle_detail' => '{}',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        return $subscription;
     }
 
     /**
