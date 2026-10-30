@@ -309,23 +309,6 @@ return [
         ],
     ],
 
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'status 字段为必填项。',
-            'in'       => '所选的 status 无效。',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'data.status 字段为必填项。',
-                'in'       => '所选的 data.status 无效。',
-            ],
-            'link' => [
-                'required'   => 'data.link 字段为必填项。',
-                'active_url' => 'data.link 不是有效的可访问网址。',
-            ],
-        ],
-    ],
-
     'summary' => [
         'locale' => [
             'required' => 'locale 字段为必填项。',

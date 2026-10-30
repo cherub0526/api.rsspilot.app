@@ -35,7 +35,6 @@ use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
-use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
@@ -518,14 +517,6 @@ Route::group('/webhook', function () {
         [
             'as'   => 'creem.store',
             'uses' => CreemController::class . '@store',
-        ]
-    );
-
-    Route::post(
-        '/youtube-mp3-downloader/{mediaId}',
-        [
-            'as'   => 'youtube-mp3-downloader.store',
-            'uses' => YoutubeMp3DownloaderController::class . '@store',
         ]
     );
 

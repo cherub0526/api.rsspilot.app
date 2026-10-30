@@ -64,10 +64,6 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI', ''),
     ],
 
-    'rapidapi' => [
-        'key' => env('RAPID_API_KEY'),
-    ],
-
     'youtube' => [
         // 公開字幕閘門：開啟時只收「YouTube 上已經有公開字幕（作者上傳或自動產生皆可）」的影片。
         // 手動新增沒有字幕的影片會被拒絕；頻道同步進來的則標成 no_captions、不送轉錄。

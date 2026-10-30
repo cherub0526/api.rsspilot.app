@@ -84,7 +84,7 @@ validators.{feature}.{field}.{rule}
 > **`{feature}` 先查 lang 檔再決定，不要從類別名硬推。** 既有段落名並不完全一致：
 > `SettingValidator` 對應的是 `validators.settings`（複數），`SourceValidator` 對應
 > `validators.source`（單數）。沿用既有段落，新 Feature 才用類別名去掉 `Validator`
-> 後的小寫 snake_case（`YoutubeMp3DownloaderValidator` → `youtube_mp3_downloader`）。
+> 後的小寫 snake_case（`CustomPromptsValidator` → `custom_prompts`）。
 
 陣列欄位：validator messages 的 key 是 `items.*.source.required`，
 對應翻譯 key 把 `*` 省略，寫成 `items.source.required`。

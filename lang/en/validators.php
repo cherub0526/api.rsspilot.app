@@ -309,23 +309,6 @@ return [
         ],
     ],
 
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'The status field is required.',
-            'in'       => 'The selected status is invalid.',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'The data.status field is required.',
-                'in'       => 'The selected data.status is invalid.',
-            ],
-            'link' => [
-                'required'   => 'The data.link field is required.',
-                'active_url' => 'The data.link is not a valid active URL.',
-            ],
-        ],
-    ],
-
     'summary' => [
         'locale' => [
             'required' => 'The locale field is required.',

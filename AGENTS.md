@@ -96,8 +96,7 @@ docker compose exec hypervel php artisan server:watch
 docker compose exec hypervel php artisan queue:work
 
 # Process specific queue
-docker compose exec hypervel php artisan queue:work --queue=media.caption
-docker compose exec hypervel php artisan queue:work --queue=media.info
+docker compose exec hypervel php artisan queue:work --queue=videotranscriber.fetch
 ```
 
 ## Framework-Specific Notes
@@ -166,13 +165,11 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
   submits and `VideoTranscriberFetchJob` collects the result
 - **Groq is receive-only**: `POST /v1/webhook/groq/{mediaId}` accepts a callback,
   but nothing in `app/` calls Groq or reads `GROQ_API_KEY`
-- `YoutubeCaptionJob`, `YoutubeDataCaptionJob` and `CaptionJob` still exist but
-  have **no dispatch site** — they are referenced only from comments
+- `YoutubeCaptionJob` and `YoutubeDataCaptionJob` still exist but have
+  **no dispatch site** — they are referenced only from comments
+- The old YouTube→mp3 pipeline (RapidAPI downloader, `InfoJob`, `CaptionJob`,
+  `media:sync-job`, the `youtube-mp3-downloader` webhook) was deleted
 - Details and pitfalls: `docs/lore/transcription/`
-
-**YoutubeMediaDownloader** (`App\Services\RapidApi\YoutubeMediaDownloader`)
-
-- RapidAPI client for fetching YouTube video details and audio info
 
 ### Localization & Internationalization
 

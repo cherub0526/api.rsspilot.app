@@ -507,14 +507,14 @@ migration 只掛在 `api` 一個 service 上，其餘三個不要加，否則同
 
 | Queue | 誰派工 | 暫停的實際影響 |
 |---|---|---|
-| `media.info` | **無** | 無。`InfoJob` 在 `app/` 內沒有任何 dispatch 點 |
+| `media.info` | **無** | 無。`InfoJob` 已刪除，這個 queue 沒有對應的 job 類別 |
 | `media.youtube-data-caption` | **無** | 無。`YoutubeDataCaptionJob` 同上 |
 | `media.summary` | **無** | 無。`SummaryJob` 同上 |
 | `media.caption` | **無** | 無。唯一的派工點 `SyncJob:175` 已隨 RSS 管線移除 |
 
-`InfoJob`、`CaptionJob`、`YoutubeDataCaptionJob`、`SummaryJob` 四個 job
-類別在 `app/`、`routes/`、`database/` 底下都找不到 dispatch 點——它們是改用
-videotranscriber.ai 之前的遺留物。所以 `media.info`、
+`YoutubeDataCaptionJob`、`SummaryJob` 兩個 job 類別在 `app/`、`routes/`、
+`database/` 底下都找不到 dispatch 點——它們是改用 videotranscriber.ai 之前的
+遺留物。同一批的 `InfoJob` 與 `CaptionJob`（YouTube→mp3 管線）已經刪除。所以 `media.info`、
 `media.youtube-data-caption` 與 `media.summary` 本來就是空的佇列，移除與否
 沒有差別。
 
@@ -522,8 +522,8 @@ videotranscriber.ai 之前的遺留物。所以 `media.info`、
 `app/Console/Commands/VideoTranscriber/Summarize.php` 派工），那個仍在運作。
 
 `media.caption` 原本唯一的來源是 `SyncJob:175` 派出的 `YoutubeCaptionJob`，
-RSS 管線下架後連新工作都不會產生，`CaptionJob` 與 `YoutubeCaptionJob` 兩個
-類別也一併成為沒有派工點的遺留物。
+RSS 管線下架後連新工作都不會產生，`YoutubeCaptionJob` 也一併成為沒有派工點
+的遺留物。
 
 ### 累積與恢復
 

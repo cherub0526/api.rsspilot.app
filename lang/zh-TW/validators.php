@@ -308,23 +308,6 @@ return [
         ],
     ],
 
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'status 欄位為必填項。',
-            'in'       => '所選的 status 無效。',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'data.status 欄位為必填項。',
-                'in'       => '所選的 data.status 無效。',
-            ],
-            'link' => [
-                'required'   => 'data.link 欄位為必填項。',
-                'active_url' => 'data.link 不是有效的可存取網址。',
-            ],
-        ],
-    ],
-
     'summary' => [
         'locale' => [
             'required' => 'locale 欄位為必填項。',

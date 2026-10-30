@@ -3782,127 +3782,6 @@
                     }
                 }
             }
-        },
-        "/v1/webhook/youtube": {
-            "post": {
-                "tags": [
-                    "Webhooks"
-                ],
-                "summary": "Receive YouTube video and audio detail webhook payload",
-                "operationId": "api.v1.webhook.youtube.store",
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "video_detail": {
-                                        "type": "object",
-                                        "example": null
-                                    },
-                                    "audio_detail": {
-                                        "type": "object",
-                                        "example": null
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Payload echoed back",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "video_detail": {
-                                            "type": "object"
-                                        },
-                                        "audio_detail": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/webhook/youtube-mp3-downloader/{mediaId}": {
-            "post": {
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "Receive YouTube MP3 downloader webhook callback",
-                "operationId": "api.v1.webhook.youtube-mp3-downloader.store",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/mediaId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "status",
-                                    "data"
-                                ],
-                                "properties": {
-                                    "status": {
-                                        "type": "string",
-                                        "enum": [
-                                            "success",
-                                            "error"
-                                        ],
-                                        "example": "success"
-                                    },
-                                    "data": {
-                                        "required": [
-                                            "status",
-                                            "link"
-                                        ],
-                                        "properties": {
-                                            "status": {
-                                                "type": "string",
-                                                "enum": [
-                                                    "ok",
-                                                    "processing",
-                                                    "fail"
-                                                ],
-                                                "example": "ok"
-                                            },
-                                            "link": {
-                                                "type": "string",
-                                                "format": "uri",
-                                                "example": "https://example.com/audio.mp3"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/200"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "404": {
-                        "$ref": "#/components/responses/404"
-                    }
-                }
-            }
         }
     },
     "components": {
@@ -4915,10 +4794,6 @@
         {
             "name": "Webhook",
             "description": "Webhook"
-        },
-        {
-            "name": "Webhooks",
-            "description": "Webhooks"
         }
     ]
 }
