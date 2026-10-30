@@ -105,7 +105,7 @@ class CreemController extends AbstractController
     /**
      * 驗證 `creem-signature`：HMAC-SHA256(raw body, webhook secret)。
      *
-     * **與 Paddle 的重要差異：Creem 的簽章不含時間戳**，所以這個標頭本身沒有任何
+     * **Creem 的簽章不含時間戳**，所以這個標頭本身沒有任何
      * 重放保護——側錄到的合法請求可以無限次重送。緩解靠的是下游處理的冪等性
      * （`syncFromCreem` 是覆寫而非累加，`isStale()` 會擋掉舊事件），而不是這一層。
      *

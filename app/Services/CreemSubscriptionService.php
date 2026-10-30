@@ -16,15 +16,14 @@ use Hypervel\Support\Facades\Log;
 /**
  * Creem 這條金流的業務邏輯。
  *
- * **與 Paddle / Stripe 的三個結構差異**，整份實作都是繞著它們轉的：
+ * **三個結構上的特點**，整份實作都是繞著它們轉的：
  *
  * 1. **轉址型結帳**。Creem 沒有 overlay SDK，`POST /checkouts` 回一個 `checkout_url`，
- *    前端要把使用者送過去，付完再帶回 `success_url`。形狀上跟 Stripe 那條路一樣，
- *    跟 Paddle 的 overlay 完全不同。
+ *    前端要把使用者送過去，付完再帶回 `success_url`。
  * 2. **價格綁在 product 上**。Creem 沒有 product → 多 price 的階層，所以我們的
  *    「Pro 月繳」「Pro 年繳」在 Creem 是兩個獨立 product，對應表掛在 `Price` 上。
- * 3. **試用期也綁在 product 上，且結帳時不可覆寫**，而且 Creem 沒有 Paddle 那種
- *    activate 端點可以當場結束試用。「試用只送第一次」因此只能靠**同一個 price
+ * 3. **試用期也綁在 product 上，且結帳時不可覆寫**，而且 Creem 沒有可以當場結束
+ *    試用的 activate 端點。「試用只送第一次」因此只能靠**同一個 price
  *    建兩個 product**（含試用 / 不含）來守，結帳時依資格挑一個——見 `productIdFor()`。
  *
  * **新客優惠是免費試用 14 天**（`Subscription::TRIAL_DAYS`，2026-10 RSS-3 由
@@ -47,7 +46,7 @@ class CreemSubscriptionService
     /**
      * 建立結帳。
      *
-     * 回傳形狀刻意與 Paddle / Stripe 那兩條路平行（都是 `[供應商名 => [...]]`），
+     * 回傳形狀刻意與 Stripe 那條路平行（都是 `[供應商名 => [...]]`），
      * 讓前端用同一個 `paymentMethod` 參數分派，不必為 Creem 另開一條資料通道。
      *
      * @return array<string, mixed>
@@ -353,7 +352,7 @@ class CreemSubscriptionService
     /**
      * 付款完成、使用者被導回來時，當場開通訂閱——不必等 webhook。
      *
-     * 與 Paddle 的 confirm() 同一個用意：Creem 原本完全靠 webhook 開通，webhook
+     * Creem 原本完全靠 webhook 開通，webhook
      * 延遲、失敗，或本機開發收不到時，使用者付了錢卻用不到方案，而且因為訂閱
      * 從沒生效，連取消都找不到它。
      *
@@ -482,7 +481,7 @@ class CreemSubscriptionService
     /**
      * 所有 `subscription.*` 事件共用的處理。
      *
-     * 與 Paddle 那條路的取捨不同：**這裡直接採信 webhook 帶來的 object**，不回頭
+     * **這裡直接採信 webhook 帶來的 object**，不回頭
      * 再查一次 API。理由是 Creem 的驗簽涵蓋整個 raw body，內容沒有被竄改的可能，
      * 而它的訂閱物件本身就帶著我們要的全部欄位（status、期間、canceled_at）。
      *

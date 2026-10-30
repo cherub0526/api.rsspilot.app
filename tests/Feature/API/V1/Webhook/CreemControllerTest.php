@@ -14,7 +14,7 @@ use App\Http\Controllers\API\V1\Webhook\CreemController;
  *
  * 只覆蓋驗簽與分派兩層。成功的訂閱同步需要資料庫裡有對得上的訂閱，而更完整的
  * 路徑會碰到 Creem API（CreemClient 一律自己 new，不經容器解析，換不掉），
- * 讓測試對外發請求是這個專案明確避免的事——與 PaddleControllerTest 同樣的取捨。
+ * 讓測試對外發請求是這個專案明確避免的事。
  */
 class CreemControllerTest extends TestCase
 {
@@ -39,7 +39,7 @@ class CreemControllerTest extends TestCase
     }
 
     /**
-     * Creem 的簽章是 HMAC-SHA256(raw body)，**不含時間戳**（Paddle 有）。
+     * Creem 的簽章是 HMAC-SHA256(raw body)，**不含時間戳**。
      *
      * rawBody 必須與測試客戶端實際送出的位元組完全一致，而 `TestClient::json()`
      * 用的是 `json_encode($data, JSON_UNESCAPED_UNICODE)`——flag 對不上就一定不過。
