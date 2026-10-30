@@ -8,8 +8,15 @@ use Throwable;
 use Carbon\Carbon;
 use App\Models\Media;
 use App\Models\Source;
+use App\Models\Summary;
 use Hyperf\Stringable\Str;
+use App\Utils\AI\Completion;
+use App\Utils\Const\ISO6391;
+use InvalidArgumentException;
 use App\Services\SourceSkill\Sanitizer;
+use App\Services\SourceSkill\SummarySampler;
+use App\Services\Prompts\ChannelSkillTemplate;
+use App\Services\Prompts\TemplateCompletionManager;
 
 /**
  * 頻道 Skill：把一個來源的共用摘要萃取成 Agent Skill（SKILL.md + references/videos.md）。
@@ -102,8 +109,57 @@ class SourceSkillService
         ],
     ];
 
-    public function __construct(private Sanitizer $sanitizer)
+    /** 取材的影片數（spec S15）。 */
+    private const SAMPLE_SIZE = 30;
+
+    /** 輸出上限；SKILL.md 本身也只有 50,000 字元（SR-7）。 */
+    private const MAX_TOKENS = 8000;
+
+    /** 一次送數十支影片的摘要、要一整份 SKILL.md 回來，60 秒的預設等不到；要小於 worker 的 --timeout。 */
+    private const TIMEOUT_SECONDS = 240;
+
+    public function __construct(private Sanitizer $sanitizer, private SummarySampler $sampler)
     {
+    }
+
+    /**
+     * 取材、組 prompt、呼叫 LLM，回傳模型的原始輸出；組裝與清洗交給 assemble()。
+     *
+     * skill 全站共用，不帶使用者建構 manager：只吃用途層的模型路由，不讓觸發者的方案
+     * 決定所有人拿到的品質。
+     */
+    public function generateRaw(Source $source, string $language): string
+    {
+        // 語言名稱會進 system prompt，查不到就不能把呼叫端給的字串原樣放進去
+        $name = ISO6391::getNameByCode(ISO6391::normalize($language));
+        if (!is_string($name)) {
+            throw new InvalidArgumentException("Unsupported skill language: {$language}");
+        }
+
+        [$channel] = $this->sanitizer->inline((string) $source->getAttribute('title'));
+        $template = new ChannelSkillTemplate([
+            'language' => $name,
+            'channel'  => mb_substr($channel, 0, self::CHANNEL_TITLE_MAX_LENGTH),
+        ]);
+
+        $samples = array_map(
+            fn (array $sample) => $this->sampleText($sample['media'], $sample['summary']),
+            $this->sampler->sample($source, $language, self::SAMPLE_SIZE)
+        );
+
+        return (new TemplateCompletionManager(Completion::make(), $template))
+            ->setOptions(['max_tokens' => self::MAX_TOKENS])
+            ->setTimeout(self::TIMEOUT_SECONDS)
+            ->completeAndGetContent($template->wrap(implode("\n\n", $samples)));
+    }
+
+    /** 一支影片一段：標題與日期當小標，內容沿用心智圖的輸入組法。 */
+    private function sampleText(Media $media, Summary $summary): string
+    {
+        $date = $this->date($media->getAttribute('published_at'));
+
+        return '### ' . $media->getAttribute('title') . ($date !== null ? " ({$date})" : '')
+            . "\n\n" . $summary->aiInput();
     }
 
     /**

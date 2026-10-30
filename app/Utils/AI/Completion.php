@@ -32,10 +32,12 @@ class Completion
 
     /**
      * @param array $options Additional parameters (e.g. max_tokens, temperature)
+     * @param int $timeout 秒。預設 60；頻道 Skill 這類長輸入、長輸出的請求要自己放寬，
+     *                     但必須小於 worker 的 --timeout（逾時是整個 worker 被砍）
      * @return array Decoded JSON response
      * @throws RuntimeException on HTTP / JSON errors
      */
-    public function completions(string $model, array $messages, array $options = []): array
+    public function completions(string $model, array $messages, array $options = [], int $timeout = 60): array
     {
         $payload = array_merge([
             'model'       => $model,
@@ -45,7 +47,7 @@ class Completion
             'top_p'       => 1,
         ], $options);
 
-        return $this->send('/chat/completions', $payload);
+        return $this->send('/chat/completions', $payload, $timeout);
     }
 
     /**
@@ -74,11 +76,11 @@ class Completion
             ->toPsrResponse();
     }
 
-    private function send(string $path, array $payload): array
+    private function send(string $path, array $payload, int $timeout): array
     {
         return Http::withToken($this->apiKey)
             ->withHeaders($this->extraHeaders)
-            ->timeout(60)
+            ->timeout($timeout)
             ->acceptJson()
             ->post($this->baseUri . $path, $payload)
             ->json();

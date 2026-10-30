@@ -30,6 +30,7 @@ class OpenRouterModelsTest extends TestCase
             'App/Services/Prompts/SummaryTemplate'                   => $default,
             'App/Services/Prompts/CustomPromptTemplate'              => $default,
             'App/Jobs/Media/SummaryTranslationJob'                   => $default,
+            'App/Services/Prompts/ChannelSkillTemplate'              => $default,
         ], OpenRouterModels::defaults());
     }
 

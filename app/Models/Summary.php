@@ -83,4 +83,43 @@ class Summary extends Model
     {
         return $this->belongsTo(SummaryConfig::class, 'config_id', 'id');
     }
+
+    /**
+     * 當成 AI 素材時的文字：摘要正文 + 重點條列 + 關鍵字。心智圖與頻道 Skill 共用。
+     *
+     * key_points 是現成的條列骨架，直接對應 ## / ### 的階層；只給 content 那段散文
+     * 而要求四層結構，等於請模型編造。short_summary 刻意不放——它與 content 內容
+     * 重複，會讓模型產出重複的段落。
+     *
+     * 回傳空字串代表這份摘要不能拿來當素材（還沒跑完、或模型沒給正文）。
+     */
+    public function aiInput(): string
+    {
+        $text = $this->getAttribute('text');
+        $text = is_array($text) ? $text : [];
+        $long = is_array($text['long_summary'] ?? null) ? $text['long_summary'] : [];
+
+        $parts = [];
+
+        $content = trim((string) ($long['content'] ?? ''));
+        if ($content !== '') {
+            $parts[] = $content;
+        }
+
+        $keyPoints = array_filter(
+            array_map('strval', is_array($long['key_points'] ?? null) ? $long['key_points'] : [])
+        );
+        if ($keyPoints !== []) {
+            $parts[] = "Key points:\n- " . implode("\n- ", $keyPoints);
+        }
+
+        $keywords = array_filter(
+            array_map('strval', is_array($long['keywords'] ?? null) ? $long['keywords'] : [])
+        );
+        if ($keywords !== []) {
+            $parts[] = 'Keywords: ' . implode(', ', $keywords);
+        }
+
+        return trim(implode("\n\n", $parts));
+    }
 }
