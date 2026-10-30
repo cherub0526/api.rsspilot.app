@@ -18,7 +18,7 @@ return new class extends BaseMigration {
             $table->foreignUlid('user_id')->index()->comment('使用者 ID');
             $table->foreignUlid('plan_id')->index()->comment('方案 ID');
             $table->foreignUlid('price_id')->index()->comment('價格 ID');
-            $table->string('payment_method')->default(Subscription::PAYMENT_METHOD_PADDLE)->comment(
+            $table->string('payment_method')->default('paddle')->comment(
                 '付款方式'
             );
             $table->timestamp('start_date')->nullable()->index()->comment('開始日');

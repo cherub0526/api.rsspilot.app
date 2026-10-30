@@ -249,7 +249,6 @@ class CreemSubscriptionService
     /**
      * Creem 的訂閱狀態 → 我們自己的 `status`。
      *
-     * 判斷與 `PaddleSubscriptionService::statusFor()` 同一套哲學，理由也一樣——
      * `Subscription::scopeActive()` 只認 `active` 與未到期的 `trial`，寫錯的下場是
      * 權限問題而不是顯示問題：
      *

@@ -32,9 +32,9 @@ class SubscriptionService
      *
      * 規則是**終生一次**：只要曾經有一筆訂閱真的成立過（走完結帳、或留下過交易
      * 紀錄），之後再訂閱一律當場計費。用「成立過」而不是「目前有沒有在訂閱」是
-     * 因為 Paddle 取消訂閱時我們自己的 `subscriptions.status` 不會被改寫（只有
-     * Stripe 的 webhook 會寫 `canceled`），拿當下狀態判斷會讓「訂閱 → 取消 →
-     * 再訂閱」變成無限續杯的手法。
+     * 因為取消後 `subscriptions.status` 不一定會被改寫成 `canceled`（要等金流商
+     * 的 webhook），拿當下狀態判斷會讓「訂閱 → 取消 → 再訂閱」變成無限續杯的
+     * 手法。前一代金流 Paddle 留下的訂閱列也照樣算進來。
      *
      * 排除兩種紀錄：
      *

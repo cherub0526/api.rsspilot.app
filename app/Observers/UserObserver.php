@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace App\Observers;
 
 use App\Models\User;
-use App\Models\Subscription;
-use App\Services\PaddleClient;
-use Paddle\SDK\Resources\Customers\Operations\UpdateCustomer;
 
 class UserObserver
 {
@@ -19,9 +16,8 @@ class UserObserver
      * 移到結帳，所以新會員一開始沒有訂閱紀錄，直接落到免費方案退路（見
      * `SubscriptionService::getUserSubscriptionPlan()`）。
      *
-     * 試用怎麼給：Creem 與 Paddle 都是綁在 product/price 上（`creem:sync` 的
-     * `trial_period_days`、`paddle:sync` 的 `trial_period`）、Stripe 是結帳時的
-     * `trial_end`；資格判定在 `SubscriptionService::isEligibleForIntroOffer()`，
+     * 試用怎麼給：Creem 是綁在 product 上（`creem:sync` 的 `trial_period_days`）、
+     * Stripe 是結帳時的 `trial_end`；資格判定在 `SubscriptionService::isEligibleForIntroOffer()`，
      * 終生一次。
      *
      * 但**一定**建一筆空的 settings：每個使用者恰好一筆（settings.user_id 有唯一索引），
@@ -39,18 +35,6 @@ class UserObserver
      */
     public function updated(User $user): void
     {
-        // Paddle 關閉時不再同步；開著也只同步已經有 Paddle customer 的使用者。
-        if (!Subscription::paddleEnabled() || !$user->paddle()->exists()) {
-            return;
-        }
-
-        (new PaddleClient())->customers()->update(
-            $user->paddle->paddle_id,
-            new UpdateCustomer(
-                email: $user->email,
-                name: $user->name
-            )
-        );
     }
 
     /**

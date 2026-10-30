@@ -19,7 +19,6 @@ use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
 use App\Services\CreemSubscriptionService;
 use App\Exceptions\InvalidRequestException;
-use App\Services\PaddleSubscriptionService;
 use App\Services\StripeSubscriptionService;
 use App\Http\Controllers\AbstractController;
 use App\OpenApi\Schemas\PlanResource as PlanSchema;
@@ -174,8 +173,8 @@ class SubscriptionsController extends AbstractController
                         property: 'paymentMethod',
                         description: 'Payment gateway. Defaults to PAYMENT_DEFAULT_PROVIDER.',
                         type: 'string',
-                        enum: ['stripe', 'paddle', 'creem'],
-                        example: 'paddle'
+                        enum: ['stripe', 'creem'],
+                        example: 'creem'
                     ),
                 ]
             )
@@ -236,13 +235,13 @@ class SubscriptionsController extends AbstractController
 
         $this->assertNoPaidSubscription((string) $request->user()->id);
 
-        // 三條金流並存，用參數切換：
+        // 兩條金流並存，用參數切換：
         //
         // 1. 請求帶 `paymentMethod` → 用它（前端可針對特定使用者或 A/B 指定）
         // 2. 沒帶 → 用 env 的 PAYMENT_DEFAULT_PROVIDER
         //
         // 預設放在 env 而不是寫死，是為了讓「整站換金流」變成改一個環境變數＋重啟，
-        // 不必動前端也不必重新部署——Paddle 退件那次的教訓是，這個開關遲早要用。
+        // 不必動前端也不必重新部署。
         $paymentMethod = $params['paymentMethod'] ?? Subscription::defaultPaymentMethod();
 
         $subscription = $request->user()->subscriptions()->create([
@@ -260,63 +259,6 @@ class SubscriptionsController extends AbstractController
         );
 
         return response()->json($data);
-    }
-
-    /**
-     * @throws InvalidRequestException
-     */
-    #[OAT\Put(
-        path: '/v1/subscriptions/{subscriptionId}',
-        operationId: 'api.v1.subscriptions.update',
-        summary: 'Confirm subscription after successful Paddle payment',
-        security: [['bearerAuth' => []]],
-        requestBody: new OAT\RequestBody(
-            required: true,
-            content: new OAT\JsonContent(
-                required: ['transaction_id'],
-                properties: [
-                    new OAT\Property(
-                        property: 'transaction_id',
-                        description: 'Paddle transaction ID',
-                        type: 'string',
-                        example: 'txn_01abc...'
-                    ),
-                ]
-            )
-        ),
-        tags: ['Subscriptions'],
-        parameters: [
-            new OAT\Parameter(ref: SubscriptionIdParam::class),
-        ],
-        responses: [
-            new OAT\Response(response: 200, description: 'OK'),
-            new OAT\Response(ref: Http400::class, response: 400),
-            new OAT\Response(ref: Http401::class, response: 401),
-        ]
-    )]
-    public function update(Request $request, string $subscriptionId)
-    {
-        // 這支只做 Paddle 結帳後的確認；Paddle 關閉時不會有新的 Paddle 結帳。
-        if (!Subscription::paddleEnabled()) {
-            throw new InvalidRequestException(
-                ['subscription' => [__('validators.controllers.subscription.paddle_disabled')]]
-            );
-        }
-
-        if (!$subscription = $request->user()->subscriptions()->find($subscriptionId)) {
-            throw new InvalidRequestException(
-                ['subscriptionId' => [__('validators.controllers.subscription.not_found')]]
-            );
-        }
-
-        $confirmed = (new PaddleSubscriptionService())->confirm(
-            $subscription,
-            $request->input('transaction_id', '')
-        );
-
-        if ($confirmed) {
-            return response()->make(self::RESPONSE_OK);
-        }
     }
 
     /**
@@ -344,8 +286,7 @@ class SubscriptionsController extends AbstractController
         }
 
         // 系統贈送的試用訂閱（2026-09 前註冊即送）從來沒經過任何金流商，沒有帳單可停，
-        // 只要在本地記下取消即可。少了這個分支它會掉進下面 match 的 default，被當成
-        // Paddle 訂閱去讀一個不存在的對應列。
+        // 只要在本地記下取消即可。
         if ($subscription->payment_method !== Subscription::PAYMENT_METHOD_TRIAL) {
             $this->assertHasProviderLink($subscription);
 
@@ -354,17 +295,16 @@ class SubscriptionsController extends AbstractController
             match ($subscription->payment_method) {
                 Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
                 Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
-                default                             => (new PaddleSubscriptionService())->cancel($subscription),
             };
         }
 
         // 就地記下取消時間，讓畫面立刻反映。
         //
-        // 權威來源仍然是金流商送回來的 webhook（syncFromPaddle / syncFromCreem 會用
-        // 它們回報的 canceled_at 覆寫），但那可能要幾秒到幾分鐘。少了這一行，使用者
+        // 權威來源仍然是金流商送回來的 webhook（syncFromCreem 會用它回報的
+        // canceled_at 覆寫），但那可能要幾秒到幾分鐘。少了這一行，使用者
         // 按完取消看到畫面毫無變化，就會以為沒成功而重按或來信。
         //
-        // 不動 status：三家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
+        // 不動 status：兩家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
         $subscription->fill(['cancellation_date' => now()])->save();
 
         return response()->make(self::RESPONSE_OK);
@@ -404,6 +344,9 @@ class SubscriptionsController extends AbstractController
      * 「已取消」，就是一筆之後才爆的客訴。所以回 422 讓前端顯示「請聯絡客服」，
      * 並留 log 讓我們知道有一筆對不起來的訂閱。
      *
+     * 已經下線的金流（Paddle，2026-10 移除）也走這條：我們沒有辦法替它停止扣款，
+     * 只能由客服到該金流商的後台處理。
+     *
      * @throws InvalidRequestException
      */
     private function assertHasProviderLink(Subscription $subscription): void
@@ -413,7 +356,7 @@ class SubscriptionsController extends AbstractController
             // 只有 checkout id 時要回頭問 Creem 才知道有沒有訂閱，見
             // CreemSubscriptionService::resolveCreemSubscriptionId()
             Subscription::PAYMENT_METHOD_CREEM => (new CreemSubscriptionService())->resolveCreemSubscriptionId($subscription),
-            default                            => $subscription->paddle()->first(),
+            default                            => null,
         };
 
         if ($link) {
@@ -431,16 +374,14 @@ class SubscriptionsController extends AbstractController
     }
 
     /**
-     * 建立結帳用的 service。三家的 createCheckout() 簽章刻意一致，
+     * 建立結帳用的 service。兩家的 createCheckout() 簽章刻意一致，
      * 所以這裡只挑物件，不做分支邏輯。
      */
-    private function checkoutServiceFor(
-        string $paymentMethod
-    ): CreemSubscriptionService|PaddleSubscriptionService|StripeSubscriptionService {
+    private function checkoutServiceFor(string $paymentMethod): CreemSubscriptionService|StripeSubscriptionService
+    {
         return match ($paymentMethod) {
             Subscription::PAYMENT_METHOD_STRIPE => new StripeSubscriptionService(),
             Subscription::PAYMENT_METHOD_CREEM  => new CreemSubscriptionService(),
-            default                             => new PaddleSubscriptionService(),
         };
     }
 }

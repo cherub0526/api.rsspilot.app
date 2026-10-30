@@ -28,8 +28,6 @@ class Subscription extends Model
 
     public const string STATUS_CANCELED = 'canceled';
 
-    public const string PAYMENT_METHOD_PADDLE = 'paddle';
-
     public const string PAYMENT_METHOD_STRIPE = 'stripe';
 
     public const string PAYMENT_METHOD_CREEM = 'creem';
@@ -40,15 +38,13 @@ class Subscription extends Model
      * 免費試用的長度（**天**）。所有付費方案、月繳與年繳都一樣。
      *
      * **單位是天而不是月**（2026-10，RSS-3）。原本是 `FREE_MONTHS = 1`，但 14 天
-     * 用月表示不出來，而三家金流只有 Paddle 收「月」：Creem 的
-     * `trial_period_days` 本來就得把月換算成 30 天，Stripe 是個絕對時間點。
-     * 以天為單位之後那個換算消失了，三邊拿到的是同一個數字。
+     * 用月表示不出來：Creem 的 `trial_period_days` 本來就得把月換算成 30 天，
+     * Stripe 是個絕對時間點。以天為單位之後那個換算消失了，兩邊拿到的是同一個數字。
      *
-     * 這個數字有三個落點，改的時候會一起動（都讀這個常數）：
+     * 這個數字有兩個落點，改的時候會一起動（都讀這個常數）：
      *
      * - Creem：product 的 `trial_period_days`（`creem:sync`）
      * - Stripe：結帳時的 `trial_end`（`StripeSubscriptionService::trialEndFor()`）
-     * - Paddle：price 的 `trial_period`（`paddle:sync`，interval 用 day）
      *
      * 我們自己的 `next_date` 不自己算，照金流商回報的日期寫入。
      *
@@ -65,7 +61,6 @@ class Subscription extends Model
     ];
 
     public static array $paymentMethodMaps = [
-        self::PAYMENT_METHOD_PADDLE => 'Paddle',
         self::PAYMENT_METHOD_STRIPE => 'Stripe',
         self::PAYMENT_METHOD_CREEM  => 'Creem',
     ];
@@ -105,44 +100,31 @@ class Subscription extends Model
     ];
 
     /**
-     * Paddle 是否開放新結帳。只管「新的」：webhook 與取消訂閱照常處理既有的
-     * Paddle 訂閱，見 config/services.php 的 `paddle.enabled`。
-     */
-    public static function paddleEnabled(): bool
-    {
-        return (bool) config('services.paddle.enabled');
-    }
-
-    /**
-     * 目前開放新結帳的金流。
+     * 開放新結帳的金流。
+     *
+     * `subscriptions.payment_method` 裡還可能有 `paddle`（2026-10 移除的前一代
+     * 金流），那些是舊資料，不能再拿來開新結帳。
      *
      * @return array<int, string>
      */
     public static function checkoutPaymentMethods(): array
     {
-        return array_values(array_filter([
-            self::paddleEnabled() ? self::PAYMENT_METHOD_PADDLE : null,
-            self::PAYMENT_METHOD_STRIPE,
-            self::PAYMENT_METHOD_CREEM,
-        ]));
+        return [self::PAYMENT_METHOD_STRIPE, self::PAYMENT_METHOD_CREEM];
     }
 
     /**
      * 結帳沒有指定 `paymentMethod` 時要用哪一家。
      *
-     * 認不得的值不拋例外：這個變數打錯字的後果應該是「用回舊的」，不是「所有人
-     * 都結不了帳」。Paddle 開著時退回 Paddle（原本的行為）；關著時退回 Creem，
-     * 否則 PAYMENT_DEFAULT_PROVIDER 還寫著 paddle 的環境會整站結不了帳。
+     * 認不得的值不拋例外，一律退回 Creem：這個變數打錯字、或還寫著已移除的
+     * `paddle`，後果應該是「走現行金流」，不是「所有人都結不了帳」。
      */
     public static function defaultPaymentMethod(): string
     {
-        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', self::PAYMENT_METHOD_PADDLE);
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', self::PAYMENT_METHOD_CREEM);
 
-        if (in_array($configured, self::checkoutPaymentMethods(), true)) {
-            return $configured;
-        }
-
-        return self::paddleEnabled() ? self::PAYMENT_METHOD_PADDLE : self::PAYMENT_METHOD_CREEM;
+        return in_array($configured, self::checkoutPaymentMethods(), true)
+            ? $configured
+            : self::PAYMENT_METHOD_CREEM;
     }
 
     public function plan(): BelongsTo
