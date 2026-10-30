@@ -20,7 +20,6 @@ use OpenApi\Attributes as OAT;
             example: 99,
             description: 'Discounted first-period price (annual only); null when there is no intro offer. Renewals always charge `price`.'
         ),
-        new OAT\Property(property: 'paddle', ref: PaddleResource::class),
     ],
     type: 'object'
 )]

@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Models\Creem;
 use App\Models\Media;
 use App\Models\Price;
-use App\Models\Paddle;
 use App\Models\Stripe;
 use Stripe\ApiRequestor;
 use App\Models\Subscription;
@@ -47,12 +46,6 @@ class SubscriptionsControllerTest extends TestCase
             ]);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Plan::class,
-            'foreign_id'   => $this->freePlan->id,
-            'paddle_id'    => 'pro_free_plan',
-        ]);
-
         $this->freeMonthlyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
                 'plan_id' => $this->freePlan->id,
@@ -60,12 +53,6 @@ class SubscriptionsControllerTest extends TestCase
                 'price'   => 0,
             ]);
         });
-
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->freeMonthlyPrice->id,
-            'paddle_id'    => 'pri_free_monthly',
-        ]);
 
         $this->freeAnnuallyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
@@ -80,12 +67,6 @@ class SubscriptionsControllerTest extends TestCase
             return Plan::factory()->create(['title' => 'Basic']);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Plan::class,
-            'foreign_id'   => $this->basicPlan->id,
-            'paddle_id'    => 'pro_basic_plan',
-        ]);
-
         $this->basicMonthlyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
                 'plan_id' => $this->basicPlan->id,
@@ -93,12 +74,6 @@ class SubscriptionsControllerTest extends TestCase
                 'price'   => 1000,
             ]);
         });
-
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->basicMonthlyPrice->id,
-            'paddle_id'    => 'pri_basic_monthly',
-        ]);
 
         $this->basicAnnuallyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
@@ -108,13 +83,7 @@ class SubscriptionsControllerTest extends TestCase
             ]);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->basicAnnuallyPrice->id,
-            'paddle_id'    => 'pri_basic_annually',
-        ]);
-
-        // Stripe 分支讀的是 $price->stripe->stripe_id，跟 paddle 的映射並存。
+        // Stripe 分支讀的是 $price->stripe->stripe_id。
         Stripe::create([
             'foreign_type'  => Price::class,
             'foreign_id'    => $this->basicMonthlyPrice->id,

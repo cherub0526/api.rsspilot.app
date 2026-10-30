@@ -32,8 +32,6 @@ class Price extends Model
         self::UNIT_ANNUALLY  => '每年',
     ];
 
-    protected array $with = ['paddle'];
-
     protected ?string $table = 'prices';
 
     /**
@@ -54,11 +52,6 @@ class Price extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class, 'plan_id', 'id');
-    }
-
-    public function paddle(): Builder|HasOne
-    {
-        return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     public function stripe(): Builder|HasOne
@@ -97,8 +90,7 @@ class Price extends Model
     /**
      * 這個 price 送幾天免費試用；不送的話為 null。
      *
-     * 免費方案不送——$0 掛試用期沒有意義，而且會讓訂閱狀態多一種 trialing 要處理
-     * （Paddle 那條路也是這樣判，見 `Paddle\Sync::trialPeriodFor()`）。
+     * 免費方案不送——$0 掛試用期沒有意義，而且會讓訂閱狀態多一種 trialing 要處理。
      *
      * 設了首期折價的 price 也不送：那時改走折扣碼那條路，兩種優惠互斥
      * （見 `CreemSubscriptionService::grantsTrial()`）。這裡跟著回 null，定價頁

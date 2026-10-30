@@ -39,8 +39,6 @@ class Plan extends Model
         self::STATUS_INACTIVE => 'Inactive',
     ];
 
-    protected array $with = ['paddle'];
-
     protected ?string $table = 'plans';
 
     /**
@@ -91,11 +89,6 @@ class Plan extends Model
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class, 'plan_id', 'id');
-    }
-
-    public function paddle(): Builder|HasOne
-    {
-        return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     public function stripe(): Builder|HasOne

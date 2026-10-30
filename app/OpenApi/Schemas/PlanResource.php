@@ -40,7 +40,6 @@ use OpenApi\Attributes as OAT;
             type: 'array',
             items: new OAT\Items(ref: PriceResource::class)
         ),
-        new OAT\Property(property: 'paddle', ref: PaddleResource::class),
     ],
     type: 'object'
 )]
