@@ -53,7 +53,9 @@ class Feedback extends Model
 
     public function images(): HasMany
     {
-        return $this->hasMany(Image::class, 'foreign_id', 'id')
-            ->where('foreign_type', self::class);
+        $relation = $this->hasMany(Image::class, 'foreign_id', 'id');
+        $relation->getQuery()->where('foreign_type', self::class);
+
+        return $relation;
     }
 }

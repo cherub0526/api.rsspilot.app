@@ -157,7 +157,10 @@ class Media extends Model
 
     public function summary(): HasOne
     {
-        return $this->hasOne(Summary::class, 'media_id', 'id')->orderBy('created_at', 'desc');
+        $relation = $this->hasOne(Summary::class, 'media_id', 'id');
+        $relation->getQuery()->orderBy('created_at', 'desc');
+
+        return $relation;
     }
 
     public function summaries(): HasMany
