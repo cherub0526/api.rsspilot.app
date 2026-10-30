@@ -203,11 +203,11 @@ class StripeSubscriptionService
         $subscription->fill($insertData)->save();
 
         if (
-            !$subscription->transactions()->whereHas(
-                'stripe',
-                fn ($q) => $q->where('stripe_id', $invoice['id'])
-            )->exists()
+            !$subscription->transactions()->whereHas('stripe', function ($q) use ($invoice): void {
+                $q->where('stripe_id', $invoice['id']);
+            })->exists()
         ) {
+            /** @var Transaction $transaction */
             $transaction = $subscription->transactions()->create([
                 'billing_date' => Carbon::createFromTimestamp($invoice['created']),
                 'amount'       => $invoice['amount_paid'] / 100,

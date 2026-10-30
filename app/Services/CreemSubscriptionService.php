@@ -160,6 +160,7 @@ class CreemSubscriptionService
     {
         $variant = $withTrial ? Creem::VARIANT_TRIAL : Creem::VARIANT_STANDARD;
 
+        /** @var null|Creem $creem */
         $creem = $price->creem()->where('variant', $variant)->first();
 
         if (!$creem || !$creem->creem_id) {

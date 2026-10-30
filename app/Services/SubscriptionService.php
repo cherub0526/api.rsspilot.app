@@ -65,12 +65,10 @@ class SubscriptionService
 
     public function getUserSubscriptionPlan(?Subscription $subscription)
     {
-        if ($subscription) {
-            $plan = $subscription->plan()->first();
-        }
+        $plan = $subscription?->plan()->first();
 
         // 如果沒有找訂閱的方案，預設就是免費的月訂閱方案
-        if (!isset($plan) || !$plan) {
+        if (!$plan) {
             $plan = Plan::query()->whereHas('prices', function ($builder) {
                 $builder->where('unit', Price::UNIT_MONTHLY)->where('price', 0);
             })->first();
@@ -105,7 +103,9 @@ class SubscriptionService
         }
 
         $query = $source->media()
-            ->whereDoesntHave('users', fn ($q) => $q->where('id', $user->getKey()))
+            ->whereDoesntHave('users', function ($q) use ($user): void {
+                $q->where('id', $user->getKey());
+            })
             ->orderByDesc('published_at');
 
         if ($limit !== null) {

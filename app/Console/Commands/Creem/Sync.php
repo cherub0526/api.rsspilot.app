@@ -120,6 +120,7 @@ class Sync extends Command
         int $amount,
         string $label
     ): void {
+        /** @var null|Creem $existing */
         $existing = $price->creem()->where('variant', $variant)->first();
 
         if ($existing && $this->option('recreate')) {

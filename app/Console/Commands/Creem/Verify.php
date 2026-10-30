@@ -131,7 +131,7 @@ class Verify extends Command
                 continue;
             }
 
-            $rows = $price->creem()->get();
+            $rows = $price->creem;
 
             if ($rows->isEmpty()) {
                 $this->error(sprintf(

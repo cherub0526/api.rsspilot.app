@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\API\V1;
 
+use LogicException;
 use App\Models\Plan;
 use App\Models\Price;
 use Hypervel\Http\Request;
@@ -295,6 +296,8 @@ class SubscriptionsController extends AbstractController
             match ($subscription->payment_method) {
                 Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
                 Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
+                // assertHasProviderLink() 已經把其他金流（含已移除的 Paddle）擋成 422。
+                default => throw new LogicException("No cancel path for {$subscription->payment_method}"),
             };
         }
 
@@ -382,6 +385,8 @@ class SubscriptionsController extends AbstractController
         return match ($paymentMethod) {
             Subscription::PAYMENT_METHOD_STRIPE => new StripeSubscriptionService(),
             Subscription::PAYMENT_METHOD_CREEM  => new CreemSubscriptionService(),
+            // SubscriptionValidator 與 defaultPaymentMethod() 只會給出上面兩種。
+            default => throw new LogicException("No checkout path for {$paymentMethod}"),
         };
     }
 }
