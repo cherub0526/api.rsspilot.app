@@ -78,6 +78,9 @@ return [
             'creem' => [
                 'malformed_payload' => 'The Creem webhook payload is malformed.',
             ],
+            'clink' => [
+                'malformed_payload' => 'The Clink webhook payload is malformed.',
+            ],
         ],
     ],
     'auth' => [

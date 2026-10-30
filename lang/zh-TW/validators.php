@@ -78,6 +78,9 @@ return [
             'creem' => [
                 'malformed_payload' => 'Creem webhook 內容格式錯誤。',
             ],
+            'clink' => [
+                'malformed_payload' => 'Clink webhook 內容格式錯誤。',
+            ],
         ],
     ],
     'auth' => [

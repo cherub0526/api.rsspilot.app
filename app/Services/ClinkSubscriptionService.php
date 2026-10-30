@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Clink;
 use App\Models\Price;
 use RuntimeException;
 use App\Models\Subscription;
+use Hypervel\Support\Facades\Log;
 
 /**
  * Clink（Merchant of Record）這條金流的業務邏輯。公開方法的簽章與
@@ -127,6 +129,216 @@ class ClinkSubscriptionService
         }
 
         return $clink->clink_id;
+    }
+
+    /**
+     * Clink 的訂閱狀態 → 我們自己的 `status`。寫錯的下場是權限問題，不是顯示問題。
+     *
+     * - `past_due` → `active`：Clink 還在重試，這段期間停權等於卡片過期就讓付費客人斷線
+     * - `incomplete` → `paying`：首期沒付完，不給權限
+     * - `cancelled`、`incomplete_expired` 與認不得的狀態 → `canceled`（fail closed）
+     */
+    public function statusFor(string $clinkStatus): string
+    {
+        return match ($clinkStatus) {
+            'free_trial' => Subscription::STATUS_TRIAL,
+            'active', 'past_due' => Subscription::STATUS_ACTIVE,
+            'incomplete' => Subscription::STATUS_PAYING,
+            default      => Subscription::STATUS_CANCELED,
+        };
+    }
+
+    /**
+     * 照 Clink 回報的訂閱寫回我們自己的訂閱。覆寫而非累加，重跑幾次結果都一樣。
+     *
+     * @param array<string, mixed> $clinkSubscription
+     */
+    public function syncFromClink(Subscription $subscription, array $clinkSubscription): void
+    {
+        $clinkStatus = (string) ($clinkSubscription['status'] ?? '');
+        $attributes = ['status' => $this->statusFor($clinkStatus)];
+
+        if ($createdAt = self::fromMs($clinkSubscription['createTime'] ?? null)) {
+            $attributes['start_date'] = $createdAt;
+        }
+
+        // 本期終點：試用中是 trialEnd；其他看 recurringInvoiceItem.periodEnd，沒有才退
+        // currentPeriodEnd。currentPeriodStart 建立後就不變，不能拿來推算本期。
+        // 拿不到值時保留原值：寫成 null 會讓 scopeActive() 把試用當成永遠有效。
+        $recurringItem = is_array($clinkSubscription['recurringInvoiceItem'] ?? null)
+            ? $clinkSubscription['recurringInvoiceItem']
+            : [];
+        $periodEnd = $clinkStatus === 'free_trial'
+            ? self::fromMs($clinkSubscription['trialEnd'] ?? null)
+            : self::fromMs($recurringItem['periodEnd'] ?? null) ?? self::fromMs($clinkSubscription['currentPeriodEnd'] ?? null);
+
+        if ($periodEnd) {
+            $attributes['next_date'] = $periodEnd;
+        }
+
+        // 已排定期末取消或已結束時記下取消時間；兩者都不成立代表取消被撤回，清掉。
+        $attributes['cancellation_date'] = ($clinkSubscription['cancelAtPeriodEnd'] ?? false) === true || $clinkStatus === 'cancelled'
+            ? self::fromMs($clinkSubscription['canceledAt'] ?? null) ?? $subscription->cancellation_date ?? Carbon::now()
+            : null;
+
+        $subscription->fill($attributes)->save();
+    }
+
+    /**
+     * 從 webhook 的 `data.object` 找出這是我們哪一筆訂閱。順序：.
+     *
+     * 1. `metadata.subscriptionId`：結帳時塞進去的
+     * 2. `merchantReference` / `merchantReferenceId`：同一個值的另一條路
+     * 3. `clinks` 表以 `subscriptionId` 或 `sessionId` 反查：invoice 物件沒有 metadata
+     *
+     * @param array<string, mixed> $object
+     */
+    public function resolveSubscription(array $object): ?Subscription
+    {
+        $metadata = is_array($object['metadata'] ?? null) ? $object['metadata'] : [];
+
+        foreach ([$metadata['subscriptionId'] ?? null, $object['merchantReference'] ?? null, $object['merchantReferenceId'] ?? null] as $ourId) {
+            if (!is_string($ourId) || $ourId === '') {
+                continue;
+            }
+
+            /** @var null|Subscription $subscription */
+            $subscription = Subscription::query()
+                ->where('id', $ourId)
+                ->where('payment_method', Subscription::PAYMENT_METHOD_CLINK)
+                ->first();
+
+            if ($subscription) {
+                return $subscription;
+            }
+        }
+
+        $clinkIds = array_values(array_filter(
+            [$object['subscriptionId'] ?? null, $object['sessionId'] ?? null],
+            fn ($id) => is_string($id) && $id !== ''
+        ));
+
+        if ($clinkIds === []) {
+            return null;
+        }
+
+        /** @var null|Clink $clink */
+        $clink = Clink::query()
+            ->where('foreign_type', Subscription::class)
+            ->whereIn('clink_id', $clinkIds)
+            ->first();
+
+        /** @var null|Subscription */
+        return $clink ? Subscription::query()->find($clink->foreign_id) : null;
+    }
+
+    /**
+     * 所有處理中的 webhook 事件共用：**事件只當通知，狀態以 API 為準**。
+     *
+     * Clink 不保證送達順序，subscription 物件也沒有 updated_at 可以比新舊。回頭打
+     * `GET /subscription/{id}` 拿當下最新狀態再覆寫，不管事件怎麼亂序、重送幾次，
+     * 寫進去的都是同一個結果。API 失敗時例外往外拋，webhook 回 5xx，Clink 會重送。
+     *
+     * @param array<string, mixed> $object
+     */
+    public function handleEvent(Subscription $subscription, array $object): void
+    {
+        $clinkSubscriptionId = $object['subscriptionId'] ?? null;
+
+        if (!is_string($clinkSubscriptionId) || $clinkSubscriptionId === '') {
+            $clinkSubscriptionId = $this->resolveClinkSubscriptionId($subscription);
+        }
+
+        if ($clinkSubscriptionId === null) {
+            Log::warning('A Clink event matched a subscription that has no Clink subscription yet', [
+                'subscription_id' => (string) $subscription->getKey(),
+            ]);
+
+            return;
+        }
+
+        $this->syncSubscription($subscription, $clinkSubscriptionId);
+    }
+
+    /**
+     * 找出這筆訂閱在 Clink 上的訂閱 id。
+     *
+     * 結帳當下 `clinks` 列存的是 session id（那時還沒有訂閱），第一次同步後才改寫成
+     * subscription id。手上只有 session id 時回頭查 session，有訂閱就改寫並回傳；
+     * 沒付完款的 session 沒有訂閱，回 null。
+     */
+    public function resolveClinkSubscriptionId(Subscription $subscription): ?string
+    {
+        /** @var null|Clink $clink */
+        $clink = $subscription->clink()->whereNotNull('clink_id')->first();
+
+        if (!$clink || !$clink->clink_id) {
+            return null;
+        }
+
+        if (!self::isSessionId($clink->clink_id)) {
+            return $clink->clink_id;
+        }
+
+        $session = (new ClinkClient())->getCheckoutSession($clink->clink_id);
+        $clinkSubscriptionId = $session['subscriptionId'] ?? null;
+
+        if (!is_string($clinkSubscriptionId) || $clinkSubscriptionId === '') {
+            return null;
+        }
+
+        $clink->fill(['clink_id' => $clinkSubscriptionId])->save();
+
+        return $clinkSubscriptionId;
+    }
+
+    /** Checkout session id 以 sess_ 開頭；訂閱 id 是 sub_。 */
+    public static function isSessionId(string $clinkId): bool
+    {
+        return str_starts_with($clinkId, 'sess_');
+    }
+
+    private function syncSubscription(Subscription $subscription, string $clinkSubscriptionId): void
+    {
+        $clinkSubscription = (new ClinkClient())->getSubscription($clinkSubscriptionId);
+
+        $this->syncFromClink($subscription, $clinkSubscription);
+        $this->rememberClinkSubscription($subscription, $clinkSubscriptionId, $clinkSubscription);
+    }
+
+    /**
+     * 記住這筆訂閱對應的 Clink 訂閱：已有同一個 clink_id 就只刷新 detail，否則改寫
+     * 結帳時那一列（sess_ → sub_）。不另插新列，事件會反覆進來。
+     *
+     * @param array<string, mixed> $clinkSubscription
+     */
+    private function rememberClinkSubscription(Subscription $subscription, string $clinkSubscriptionId, array $clinkSubscription): void
+    {
+        /** @var null|Clink $existing */
+        $existing = $subscription->clink()->where('clink_id', $clinkSubscriptionId)->first()
+            ?? $subscription->clink()->first();
+
+        if ($existing) {
+            $existing->fill(['clink_id' => $clinkSubscriptionId, 'clink_detail' => $clinkSubscription])->save();
+
+            return;
+        }
+
+        $subscription->clink()->create([
+            'foreign_type' => Subscription::class,
+            'clink_id'     => $clinkSubscriptionId,
+            'clink_detail' => $clinkSubscription,
+        ]);
+    }
+
+    /** Clink 的時間戳一律當毫秒處理（webhook 範例全是 13 位數）。只在這一層轉換。 */
+    private static function fromMs(mixed $value): ?Carbon
+    {
+        if (is_int($value) || (is_string($value) && ctype_digit($value))) {
+            return Carbon::createFromTimestampMs((int) $value);
+        }
+
+        return null;
     }
 
     private function productIdFor(Plan $plan): string

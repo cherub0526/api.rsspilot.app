@@ -25,6 +25,7 @@ use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Users\ApiKeysController;
+use App\Http\Controllers\API\V1\Webhook\ClinkController;
 use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
@@ -509,6 +510,14 @@ Route::group('/webhook', function () {
         [
             'as'   => 'creem.store',
             'uses' => CreemController::class . '@store',
+        ]
+    );
+
+    Route::post(
+        '/clink',
+        [
+            'as'   => 'clink.store',
+            'uses' => ClinkController::class . '@store',
         ]
     );
 
