@@ -93,15 +93,14 @@ class Verify extends Command
             $this->line("  ✓ CREEM_SUCCESS_URL = {$successUrl}");
         }
 
-        $default = (string) env('PAYMENT_DEFAULT_PROVIDER', '');
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', '');
+        $effective = Subscription::defaultPaymentMethod();
+        $shown = $configured === '' ? '(未設定)' : $configured;
 
-        if ($default === Subscription::PAYMENT_METHOD_CREEM) {
-            $this->line('  ✓ PAYMENT_DEFAULT_PROVIDER = creem（新結帳會走 Creem）');
+        if ($effective === Subscription::PAYMENT_METHOD_CREEM) {
+            $this->line("  ✓ PAYMENT_DEFAULT_PROVIDER = {$shown}，實際生效 creem（新結帳會走 Creem）");
         } else {
-            $this->warn(sprintf(
-                '  ! PAYMENT_DEFAULT_PROVIDER = %s，新的結帳不會走 Creem',
-                $default !== '' ? $default : '(未設定，預設 paddle)'
-            ));
+            $this->warn("  ! PAYMENT_DEFAULT_PROVIDER = {$shown}，新的結帳不會走 Creem");
         }
 
         return $ok;
