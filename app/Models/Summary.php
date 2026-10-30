@@ -4,10 +4,25 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $media_id
+ * @property null|string $user_id
+ * @property string $locale
+ * @property null|array $text
+ * @property string $status
+ * @property null|string $config_id
+ * @property null|string $ai_model
+ * @property null|string $prompt_type
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property-read null|Media $media
+ */
 class Summary extends Model
 {
     use HasUlids;

@@ -4,12 +4,29 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasMany;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $type
+ * @property string $external_id
+ * @property null|string $title
+ * @property string $url
+ * @property null|string $thumbnail
+ * @property null|string $description
+ * @property null|array $metadata
+ * @property null|Carbon $last_synced_at
+ * @property string $status
+ * @property bool $free
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ */
 class Source extends Model
 {
     use HasUlids;

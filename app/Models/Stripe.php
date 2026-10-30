@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property int $id
+ * @property string $foreign_id
+ * @property string $foreign_type
+ * @property null|string $stripe_id
+ * @property null|array $stripe_detail
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ */
 class Stripe extends Model
 {
     use HasFactory;

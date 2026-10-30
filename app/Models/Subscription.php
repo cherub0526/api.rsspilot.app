@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Model\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
@@ -12,6 +13,26 @@ use Hypervel\Database\Eloquent\Relations\HasMany;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $user_id
+ * @property string $plan_id
+ * @property string $price_id
+ * @property string $payment_method
+ * @property null|Carbon $start_date
+ * @property null|Carbon $next_date
+ * @property null|Carbon $cancellation_date
+ * @property null|Carbon $last_charged_date
+ * @property string $status
+ * @property null|string $note
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ * @property-read null|Plan $plan
+ * @property-read null|Price $price
+ * @property-read null|Stripe $stripe
+ * @property-read null|Creem $creem
+ */
 class Subscription extends Model
 {
     use HasUlids;

@@ -4,14 +4,42 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\Builder;
 use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\SoftDeletes;
+use Hypervel\Database\Eloquent\Collection;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Relations\HasMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $title
+ * @property null|string $description
+ * @property int $channel_limit
+ * @property int $video_limit
+ * @property int $chat_limit
+ * @property int $mindmap_limit
+ * @property int $sort
+ * @property string $status
+ * @property bool $download_enabled
+ * @property bool $agent_enabled
+ * @property bool $advanced_model_enabled
+ * @property bool $custom_summary_enabled
+ * @property bool $screenshot_enabled
+ * @property bool $thinking_enabled
+ * @property bool $mcp_enabled
+ * @property bool $skill_enabled
+ * @property string $ai_quality
+ * @property null|array $ai_routing
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ * @property-read Collection<int, Price> $prices
+ * @property-read null|Stripe $stripe
+ */
 class Plan extends Model
 {
     use HasUlids;

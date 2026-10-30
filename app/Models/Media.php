@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Utils\Const\ISO6391;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasOne;
@@ -14,6 +15,22 @@ use Hyperf\Database\Model\Relations\BelongsToMany;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
 /**
+ * @property string $id
+ * @property null|string $type
+ * @property string $resource_id
+ * @property null|string $title
+ * @property null|string $description
+ * @property int $duration
+ * @property null|Carbon $published_at
+ * @property null|string $thumbnail
+ * @property string $status
+ * @property null|array $video_detail
+ * @property null|array $audio_detail
+ * @property null|string $source_id
+ * @property null|string $language
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
  * @property-read null|Source $source
  */
 class Media extends Model
@@ -202,6 +219,7 @@ class Media extends Model
     /**
      * 影片額度只算真的會被處理的影片：no_captions 的不轉錄、看不到內容，不該佔名額。
      * 手動新增、RSS 同步、用量端點三處算法必須一致，所以收在這裡。
+     * @param mixed $query
      */
     public function scopeCountsTowardQuota($query)
     {

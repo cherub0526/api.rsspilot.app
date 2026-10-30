@@ -28,6 +28,7 @@ use Hypervel\Foundation\Auth\User as Authenticatable;
  * @property null|string $avatar
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ * @property-read null|Stripe $stripe
  */
 class User extends Authenticatable
 {

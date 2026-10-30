@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hypervel\Database\Eloquent\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasMany;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $content
+ * @property string $status
+ * @property null|string $user_id
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ */
 class Feedback extends Model
 {
     use HasUlids;
