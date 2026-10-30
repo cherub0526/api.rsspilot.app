@@ -14,6 +14,8 @@ class SubscriptionService
 {
     public function getUserSubscription(string $userId)
     {
+        // 本地 scope 經 __call 解析，沒有 Larastan 的 PHPStan 看不到 scopeActive()。
+        // @phpstan-ignore method.notFound
         return Subscription::query()
             ->where('user_id', $userId)
             ->active()
