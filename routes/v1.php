@@ -29,7 +29,6 @@ use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
-use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
@@ -497,14 +496,6 @@ Route::group('/plans', function () {
 }, ['as' => 'plans']);
 
 Route::group('/webhook', function () {
-    Route::post(
-        '/paddle',
-        [
-            'as'   => 'paddle.store',
-            'uses' => PaddleController::class . '@store',
-        ]
-    );
-
     Route::post(
         '/stripe',
         [

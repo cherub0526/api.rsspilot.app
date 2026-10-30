@@ -76,11 +76,6 @@ return [
             'paddle_disabled'          => '目前暂停使用 Paddle 付款，请改用其他付款方式。',
         ],
         'webhook' => [
-            'paddle' => [
-                'transaction_not_completed' => '交易状态未完成。',
-                'sync_failed'               => '与 Paddle 同步订阅失败。',
-                'ip_not_allowed'            => '来源 IP 不在允许清单内。',
-            ],
             'creem' => [
                 'malformed_payload' => 'Creem webhook 内容格式错误。',
             ],
@@ -273,27 +268,6 @@ return [
         ],
     ],
 
-    'paddle' => [
-        'event_id' => [
-            'required' => '事件 ID 为必填项。',
-        ],
-        'event_type' => [
-            'required' => '事件类型为必填项。',
-            'in'       => '无效的事件类型。',
-        ],
-        'occurred_at' => [
-            'required' => '发生时间为必填项。',
-        ],
-        'notification_id' => [
-            'required' => '通知 ID 为必填项。',
-        ],
-        'data' => [
-            'required' => '数据字段为必填项。',
-            'id'       => [
-                'required' => '数据 ID 为必填项。',
-            ],
-        ],
-    ],
 
     'settings' => [
         'locale' => [

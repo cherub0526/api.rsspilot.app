@@ -76,11 +76,6 @@ return [
             'paddle_disabled'          => 'Paddle checkout is currently unavailable. Please choose another payment method.',
         ],
         'webhook' => [
-            'paddle' => [
-                'transaction_not_completed' => 'Transaction status is not completed.',
-                'sync_failed'               => 'Could not sync the subscription with Paddle.',
-                'ip_not_allowed'            => 'Request IP is not in the allowlist.',
-            ],
             'creem' => [
                 'malformed_payload' => 'The Creem webhook payload is malformed.',
             ],
@@ -269,28 +264,6 @@ return [
             ],
             'error' => [
                 'required' => 'The error message is required.',
-            ],
-        ],
-    ],
-
-    'paddle' => [
-        'event_id' => [
-            'required' => 'The event ID is required.',
-        ],
-        'event_type' => [
-            'required' => 'The event type is required.',
-            'in'       => 'The selected event type is invalid.',
-        ],
-        'occurred_at' => [
-            'required' => 'The occurred at timestamp is required.',
-        ],
-        'notification_id' => [
-            'required' => 'The notification ID is required.',
-        ],
-        'data' => [
-            'required' => 'The data payload is required.',
-            'id'       => [
-                'required' => 'The data ID is required.',
             ],
         ],
     ],
