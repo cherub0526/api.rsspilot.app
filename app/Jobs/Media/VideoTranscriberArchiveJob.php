@@ -46,7 +46,11 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      */
     protected const int RETRY_DELAY_SECONDS = 120;
 
-    protected const int DOWNLOAD_TIMEOUT_SECONDS = 60;
+    /**
+     * Every asset is a JSON file of a few hundred KB at most. The 60s this
+     * used to be was sized for the mp3 the job no longer touches.
+     */
+    protected const int DOWNLOAD_TIMEOUT_SECONDS = 20;
 
     /**
      * Stop starting new downloads past this point and finish the rest on the
@@ -55,10 +59,11 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      * The arithmetic this has to satisfy: the worker serving this queue runs
      * at `--timeout=300`, and in Hypervel a job that exceeds it does not fail
      * on its own — the worker SIGKILLs itself and leaves the unique lock
-     * behind (docs/lore/transcription/pitfalls.md). Six assets at 60s each
-     * is 360s worst case, past that. With this budget the worst case is
-     * one download starting at 179s and running its full 60s: 240s, inside
-     * the worker's limit. Raising either constant means re-checking that sum.
+     * behind (docs/lore/transcription/pitfalls.md). Six assets at 20s each
+     * is 120s of downloads, so the budget only bites when the S3 writes stall
+     * too; even then the worst case is one download starting at 179s and
+     * running its full 20s: 200s, inside the worker's limit. Raising either
+     * constant means re-checking that sum.
      */
     protected const int TIME_BUDGET_SECONDS = 180;
 
