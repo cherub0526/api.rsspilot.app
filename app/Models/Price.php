@@ -26,6 +26,7 @@ use Hypervel\Database\Eloquent\Factories\HasFactory;
  * @property-read null|Plan $plan
  * @property-read null|Stripe $stripe
  * @property-read Collection<int, Creem> $creem
+ * @property-read Collection<int, Clink> $clink
  */
 class Price extends Model
 {
@@ -84,6 +85,17 @@ class Price extends Model
     public function creem(): Builder|HasMany
     {
         return $this->hasMany(Creem::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /**
+     * 這個 price 在 Clink 上的 price 們（standard / trial 兩個變體）。
+     *
+     * 理由同 creem()：Clink 的試用期綁在 price 上且結帳時不可覆寫。取用時一定要帶
+     * variant 過濾，見 ClinkSubscriptionService::priceIdFor()。
+     */
+    public function clink(): Builder|HasMany
+    {
+        return $this->hasMany(Clink::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     /**

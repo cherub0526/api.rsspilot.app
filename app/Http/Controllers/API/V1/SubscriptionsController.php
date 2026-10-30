@@ -18,6 +18,7 @@ use App\Services\SubscriptionService;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\Validators\SubscriptionValidator;
+use App\Services\ClinkSubscriptionService;
 use App\Services\CreemSubscriptionService;
 use App\Exceptions\InvalidRequestException;
 use App\Services\StripeSubscriptionService;
@@ -377,15 +378,17 @@ class SubscriptionsController extends AbstractController
     }
 
     /**
-     * 建立結帳用的 service。兩家的 createCheckout() 簽章刻意一致，
+     * 建立結帳用的 service。三家的 createCheckout() 簽章刻意一致，
      * 所以這裡只挑物件，不做分支邏輯。
      */
-    private function checkoutServiceFor(string $paymentMethod): CreemSubscriptionService|StripeSubscriptionService
-    {
+    private function checkoutServiceFor(
+        string $paymentMethod
+    ): ClinkSubscriptionService|CreemSubscriptionService|StripeSubscriptionService {
         return match ($paymentMethod) {
             Subscription::PAYMENT_METHOD_STRIPE => new StripeSubscriptionService(),
             Subscription::PAYMENT_METHOD_CREEM  => new CreemSubscriptionService(),
-            // SubscriptionValidator 與 defaultPaymentMethod() 只會給出上面兩種。
+            Subscription::PAYMENT_METHOD_CLINK  => new ClinkSubscriptionService(),
+            // SubscriptionValidator 與 defaultPaymentMethod() 只會給出上面三種。
             default => throw new LogicException("No checkout path for {$paymentMethod}"),
         };
     }

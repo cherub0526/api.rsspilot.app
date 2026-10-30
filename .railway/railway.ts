@@ -124,13 +124,16 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * `CREEM_*` 四個與 `PAYMENT_DEFAULT_PROVIDER` 是接上 Creem 時直接開在面板上的
  * （2026-09-25 補），plan 提議把四個 service 上的它們全部刪掉，共 20 個破壞性
  * 變更。`PAYMENT_DEFAULT_PROVIDER` 被刪的話 `Subscription::defaultPaymentMethod()`
- * 會安靜地退回預設值 Creem；設成 stripe 的環境就會改走 Creem 而不是報錯。補進清單前已比對過 staging 四個
+ * 會安靜地退回預設值（2026-10 起是 Clink）；設成 stripe 的環境就會改走 Clink 而不是報錯。補進清單前已比對過 staging 四個
  * service 的值完全相同（比 sha256），worker 與 scheduler 改成參照 api 不會變動
  * 任何實際設定。
  *
  * `SES_*` 三個是寄信改走 AWS SES 時補的（2026-09-30）。它們刻意不跟 AWS_* 共用：
  * AWS_* 已經參照 Railway Bucket，拿去打 SES 只會認證失敗。在面板上設值前就先
  * 登記進來，否則 plan 會把剛設好的它們刪掉，MAIL_MAILER=ses 的信全部寄不出去。
+ *
+ * `CLINK_*` 五個是接上 Clink 時補的（2026-10-31），在面板上設值前就先登記，
+ * 否則 plan 會把剛設好的它們刪掉，Clink 結帳與 webhook 全部失效。
  *
  * `MEDIA_REQUIRE_PUBLIC_CAPTIONS` 是公開字幕閘門（2026-10-02）。沒設等於 false（閘門關閉）。
  * 要開啟時先在面板上設 true，再讓 plan 套用——沒登記的話 plan 會把它刪掉，閘門靜靜失效。
@@ -141,6 +144,7 @@ const ENV_KEYS = [
     "AWS_ACCESS_KEY_ID", "AWS_BUCKET", "AWS_DEFAULT_REGION", "AWS_ENDPOINT",
     "AWS_SECRET_ACCESS_KEY", "AWS_USE_PATH_STYLE_ENDPOINT",
     "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
+    "CLINK_API_KEY", "CLINK_CANCEL_URL", "CLINK_SUCCESS_URL", "CLINK_TEST_MODE", "CLINK_WEBHOOK_SECRET",
     "CREEM_API_KEY", "CREEM_SUCCESS_URL", "CREEM_TEST_MODE", "CREEM_WEBHOOK_SECRET",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
     "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",

@@ -200,14 +200,11 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 沒帶 paymentMethod 時要落在 `PAYMENT_DEFAULT_PROVIDER`，而 phpunit.xml.dist
-     * 把它釘成正式環境的 creem。
-     *
-     * 這一條同時守著兩件事：預設值真的有被讀到，以及回傳的 payload 形狀是
-     * Creem 那一種——前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條
-     * 結帳流程換掉。
+     * 預設金流在 2026-10 改成 Clink（見 Subscriptions\ClinkCheckoutTest），但
+     * `paymentMethod=creem` 仍要走得通，回傳的 payload 形狀是 Creem 那一種——
+     * 前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條結帳流程換掉。
      */
-    public function testStoreDefaultsToCreem()
+    public function testStoreCreatesCreemCheckoutWhenAsked()
     {
         $this->fakeCreemCheckout();
 
@@ -215,8 +212,9 @@ class SubscriptionsControllerTest extends TestCase
         $user = $this->fakeLogin();
 
         $this->json('POST', route('api.v1.subscriptions.store'), [
-            'planId'  => $this->basicPlan->id,
-            'priceId' => $this->basicMonthlyPrice->id,
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'creem',
         ])
             ->assertStatus(200)
             ->assertJsonPath('creem.checkout_url', 'https://tests.invalid/creem/ch_test')
@@ -583,10 +581,11 @@ class SubscriptionsControllerTest extends TestCase
 
         $this->fakeCreemCheckout();
 
-        // 走到預設金流（phpunit 釘成 creem）的結帳建立，不會被 already_subscribed 擋下
+        // 走到結帳建立，不會被 already_subscribed 擋下
         $this->json('POST', route('api.v1.subscriptions.store'), [
-            'planId'  => $this->basicPlan->id,
-            'priceId' => $this->basicMonthlyPrice->id,
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'creem',
         ])->assertStatus(200);
     }
 
@@ -716,17 +715,17 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * 正式環境的 PAYMENT_DEFAULT_PROVIDER 若還寫著 paddle，新結帳要落到 Creem，
-     * 不能讓整站結不了帳。
+     * 正式環境的 PAYMENT_DEFAULT_PROVIDER 若還寫著 paddle，新結帳要落到現行金流
+     * Clink，不能讓整站結不了帳。
      */
-    public function testDefaultPaymentMethodFallsBackToCreemWhenSetToPaddle(): void
+    public function testDefaultPaymentMethodFallsBackToClinkWhenSetToPaddle(): void
     {
         $previous = getenv('PAYMENT_DEFAULT_PROVIDER');
         putenv('PAYMENT_DEFAULT_PROVIDER=paddle');
         $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = 'paddle';
 
         try {
-            $this->assertSame(Subscription::PAYMENT_METHOD_CREEM, Subscription::defaultPaymentMethod());
+            $this->assertSame(Subscription::PAYMENT_METHOD_CLINK, Subscription::defaultPaymentMethod());
         } finally {
             putenv($previous === false ? 'PAYMENT_DEFAULT_PROVIDER' : 'PAYMENT_DEFAULT_PROVIDER=' . $previous);
             $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = $previous === false ? null : $previous;

@@ -32,6 +32,7 @@ use Hypervel\Database\Eloquent\Factories\HasFactory;
  * @property-read null|Price $price
  * @property-read null|Stripe $stripe
  * @property-read null|Creem $creem
+ * @property-read null|Clink $clink
  */
 class Subscription extends Model
 {
@@ -52,6 +53,8 @@ class Subscription extends Model
     public const string PAYMENT_METHOD_STRIPE = 'stripe';
 
     public const string PAYMENT_METHOD_CREEM = 'creem';
+
+    public const string PAYMENT_METHOD_CLINK = 'clink';
 
     public const string PAYMENT_METHOD_TRIAL = 'trial';
 
@@ -84,6 +87,7 @@ class Subscription extends Model
     public static array $paymentMethodMaps = [
         self::PAYMENT_METHOD_STRIPE => 'Stripe',
         self::PAYMENT_METHOD_CREEM  => 'Creem',
+        self::PAYMENT_METHOD_CLINK  => 'Clink',
     ];
 
     protected ?string $table = 'subscriptions';
@@ -130,22 +134,23 @@ class Subscription extends Model
      */
     public static function checkoutPaymentMethods(): array
     {
-        return [self::PAYMENT_METHOD_STRIPE, self::PAYMENT_METHOD_CREEM];
+        return [self::PAYMENT_METHOD_STRIPE, self::PAYMENT_METHOD_CREEM, self::PAYMENT_METHOD_CLINK];
     }
 
     /**
      * 結帳沒有指定 `paymentMethod` 時要用哪一家。
      *
-     * 認不得的值不拋例外，一律退回 Creem：這個變數打錯字、或還寫著已移除的
-     * `paddle`，後果應該是「走現行金流」，不是「所有人都結不了帳」。
+     * 認不得的值不拋例外，一律退回 Clink（2026-10 起的現行金流）：這個變數打錯字、
+     * 或還寫著已移除的 `paddle`，後果應該是「走現行金流」，不是「所有人都結不了帳」。
+     * 既有的 Creem 訂閱不受影響，它們的續約與取消依 `payment_method` 回到 Creem。
      */
     public static function defaultPaymentMethod(): string
     {
-        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', self::PAYMENT_METHOD_CREEM);
+        $configured = (string) env('PAYMENT_DEFAULT_PROVIDER', self::PAYMENT_METHOD_CLINK);
 
         return in_array($configured, self::checkoutPaymentMethods(), true)
             ? $configured
-            : self::PAYMENT_METHOD_CREEM;
+            : self::PAYMENT_METHOD_CLINK;
     }
 
     public function plan(): BelongsTo
@@ -172,6 +177,12 @@ class Subscription extends Model
     public function creem(): Builder|HasOne
     {
         return $this->hasOne(Creem::class, 'foreign_id', 'id')
+            ->where('foreign_type', self::class);
+    }
+
+    public function clink(): Builder|HasOne
+    {
+        return $this->hasOne(Clink::class, 'foreign_id', 'id')
             ->where('foreign_type', self::class);
     }
 

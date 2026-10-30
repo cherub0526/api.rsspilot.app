@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use LogicException;
 use RuntimeException;
 use Hypervel\Support\Facades\Log;
 use Hypervel\Support\Facades\Http;
@@ -178,9 +179,10 @@ class ClinkClient
         $request = $this->request()->asJson();
 
         $response = match ($method) {
-            'GET'  => $request->get($url),
-            'PUT'  => $request->put($url, $payload),
-            'POST' => $request->post($url, $payload),
+            'GET'   => $request->get($url),
+            'PUT'   => $request->put($url, $payload),
+            'POST'  => $request->post($url, $payload),
+            default => throw new LogicException("Unsupported Clink API method {$method}"),
         };
 
         return $this->data($response->status(), (string) $response->body(), "{$method} {$path}");

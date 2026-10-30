@@ -54,7 +54,7 @@
             測試會讀開發者本機的 .env——誰把預設切成別家，誰的測試就會紅，
             而且症狀是「store() 回 500」這種看不出原因的錯。
         -->
-        <env name="PAYMENT_DEFAULT_PROVIDER" value="creem" force="true"/>
+        <env name="PAYMENT_DEFAULT_PROVIDER" value="clink" force="true"/>
         <env name="CREEM_WEBHOOK_SECRET" value="creem_test_secret" force="true"/>
         <env name="CREEM_API_KEY" value="creem_test_api_key" force="true"/>
         <env name="CREEM_SUCCESS_URL" value="https://tests.invalid/billing/return" force="true"/>

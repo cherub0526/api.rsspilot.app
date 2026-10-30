@@ -39,6 +39,7 @@ use Hypervel\Database\Eloquent\Factories\HasFactory;
  * @property null|Carbon $deleted_at
  * @property-read Collection<int, Price> $prices
  * @property-read null|Stripe $stripe
+ * @property-read null|Clink $clink
  */
 class Plan extends Model
 {
@@ -122,6 +123,12 @@ class Plan extends Model
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /** 這個方案在 Clink 上的 product。Clink 有 product → 多 price 的階層，價格掛在它底下。 */
+    public function clink(): Builder|HasOne
+    {
+        return $this->hasOne(Clink::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     /**
