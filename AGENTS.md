@@ -6,7 +6,7 @@ This file provides guidance to Claude Code、Gemini when working with code in th
 
 This is a video assistant API built with **Hypervel** (v0.3), a Laravel-style PHP framework with native coroutine
 support built on Swoole. The application provides AI-powered video analysis, summaries, captions, and chat capabilities
-for YouTube content, with Stripe subscription management.
+for YouTube content, with Creem / Stripe subscription management.
 
 **Core functionality:**
 
@@ -14,7 +14,7 @@ for YouTube content, with Stripe subscription management.
 - Video caption extraction and AI-powered transcription (via videotranscriber.ai)
 - AI-generated video summaries via OpenRouter
 - Interactive chat with video content
-- Stripe subscription management with webhook handling
+- Creem / Stripe subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
 
 ## Project Lore
@@ -119,12 +119,6 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 - Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `invoices()`, `checkoutSessions()`
 - `StripeSubscriptionService` holds the subscription lifecycle logic the webhook dispatches into
 
-**PaddleClient** (`App\Services\PaddleClient`)
-
-- Wrapper for Paddle PHP SDK — **legacy**, kept for existing Paddle subscriptions. New work goes through Stripe.
-- Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `transactions()`
-- Respects sandbox mode via `PADDLE_SANDBOX` env var
-
 **Source syncing** (`App\Console\Commands\Sources\Sync`)
 
 - Fetches each source's YouTube XML feed (`sources.url`) and upserts the entries
@@ -208,9 +202,12 @@ __('mails.reset_password.subject')
 - Middleware: `'middleware' => ['auth']` on protected routes — 一律宣告在 routes 檔，
   不在 Controller 內設定；路由命名與 Controller 對應規則見 `.claude/rules/routes.md`
 
-### Stripe Integration
+### Payments (Creem / Stripe)
 
-Stripe is the current payment provider. Paddle code is still present for legacy subscriptions — don't extend it.
+Creem is the default payment provider (`PAYMENT_DEFAULT_PROVIDER=creem` in production, Merchant of Record);
+Stripe stays as the alternate `paymentMethod`. **Paddle was removed in 2026-10**: no SDK, routes, webhook or
+model remain. Old `subscriptions.payment_method = paddle` rows and the `paddles` table are kept as data only —
+what those subscribers get is in `docs/lore/subscription/business-rules.md`.
 
 - SDK initialized with `STRIPE_API_KEY` (`App\Services\StripeClient`)
 - Webhook at `POST /v1/webhook/stripe`, verified with `Stripe\Webhook::constructEvent()` and `STRIPE_WEBHOOK_SECRET`
@@ -218,9 +215,9 @@ Stripe is the current payment provider. Paddle code is still present for legacy 
   `invoice.payment_failed` — all dispatched into `StripeSubscriptionService`
 - Models sync to Stripe via Observers (`StripePlanObserver`, `StripePriceObserver`, `StripeUserObserver`)
 - Store Stripe entities using the polymorphic `foreign_type` / `foreign_id` pattern (`Stripe` model),
-  the same shape the `Paddle` model uses
+  the same shape the `Creem` model uses
 - **Stripe is not a Merchant of Record.** Tax collection/remittance and chargebacks are ours, unlike
-  Paddle. `prices.price` is an untaxed USD base figure — see `docs/lore/subscription/` for the
+  Creem. `prices.price` is an untaxed USD base figure — see `docs/lore/subscription/` for the
   pricing and tax rules.
 
 ## Code Conventions

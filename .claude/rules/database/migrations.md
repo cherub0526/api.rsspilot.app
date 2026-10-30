@@ -88,7 +88,8 @@ class Order extends Model
 oauths  paddles  stripes  settings  configs  chat_usages  jobs
 ```
 
-（`jobs` 是框架的佇列表，不歸我們管。）
+（`jobs` 是框架的佇列表，不歸我們管。`paddles` 在 2026-10 移除 Paddle 之後已經
+沒有程式讀寫，只留著舊資料。）
 
 **不要為了一致性去改它們。** 改主鍵型別要重建整張表、轉換既有資料、同步所有指向它的
 外鍵欄位，而這些表都已經部署在正式環境。除非有獨立的理由，維持現狀。
