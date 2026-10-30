@@ -35,6 +35,7 @@ use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
+use App\Http\Controllers\API\V1\Subscriptions\ClinkConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
 use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
@@ -465,6 +466,12 @@ Route::group('/subscriptions', function () {
     Route::post('/creem/confirm', [
         'as'         => 'creem.confirm.store',
         'uses'       => CreemConfirmController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
+    Route::post('/clink/confirm', [
+        'as'         => 'clink.confirm.store',
+        'uses'       => ClinkConfirmController::class . '@store',
         'middleware' => ['auth'],
     ]);
 

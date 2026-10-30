@@ -297,6 +297,7 @@ class SubscriptionsController extends AbstractController
             match ($subscription->payment_method) {
                 Subscription::PAYMENT_METHOD_STRIPE => (new StripeSubscriptionService())->cancel($subscription),
                 Subscription::PAYMENT_METHOD_CREEM  => (new CreemSubscriptionService())->cancel($subscription),
+                Subscription::PAYMENT_METHOD_CLINK  => (new ClinkSubscriptionService())->cancel($subscription),
                 // assertHasProviderLink() 已經把其他金流（含已移除的 Paddle）擋成 422。
                 default => throw new LogicException("No cancel path for {$subscription->payment_method}"),
             };
@@ -308,7 +309,7 @@ class SubscriptionsController extends AbstractController
         // canceled_at 覆寫），但那可能要幾秒到幾分鐘。少了這一行，使用者
         // 按完取消看到畫面毫無變化，就會以為沒成功而重按或來信。
         //
-        // 不動 status：兩家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
+        // 不動 status：三家取消都是 at_period_end，這一期已經付過的錢要讓他用完。
         $subscription->fill(['cancellation_date' => now()])->save();
 
         return response()->make(self::RESPONSE_OK);
@@ -360,6 +361,9 @@ class SubscriptionsController extends AbstractController
             // 只有 checkout id 時要回頭問 Creem 才知道有沒有訂閱，見
             // CreemSubscriptionService::resolveCreemSubscriptionId()
             Subscription::PAYMENT_METHOD_CREEM => (new CreemSubscriptionService())->resolveCreemSubscriptionId($subscription),
+            // 同一招：只有 session id 時回頭查 Clink，見
+            // ClinkSubscriptionService::resolveClinkSubscriptionId()
+            Subscription::PAYMENT_METHOD_CLINK => (new ClinkSubscriptionService())->resolveClinkSubscriptionId($subscription),
             default                            => null,
         };
 

@@ -27,6 +27,9 @@ use Hypervel\Support\Facades\Log;
  */
 class ClinkSubscriptionService
 {
+    /** Clink 取消 API 的必填理由（1 到 255 字）。我們的 app 沒有收集取消原因。 */
+    private const string CANCEL_REASON = 'Customer requested cancellation in RSSPilot';
+
     /**
      * 建立結帳。回傳形狀與 Creem 平行：`[供應商名 => [...], 'customData' => [...]]`，
      * 前端依「回應裡有哪個 key」分派。
@@ -290,6 +293,74 @@ class ClinkSubscriptionService
         $clink->fill(['clink_id' => $clinkSubscriptionId])->save();
 
         return $clinkSubscriptionId;
+    }
+
+    /**
+     * 期末取消。`reason` 是 Clink 的必填欄位；期末取消與退款政策「用到期末」一致。
+     */
+    public function cancel(Subscription $subscription): void
+    {
+        $clinkSubscriptionId = $this->resolveClinkSubscriptionId($subscription);
+
+        if ($clinkSubscriptionId === null) {
+            throw new RuntimeException(sprintf(
+                'Subscription %s has no Clink subscription to cancel.',
+                (string) $subscription->getKey()
+            ));
+        }
+
+        (new ClinkClient())->cancelSubscription($clinkSubscriptionId, self::CANCEL_REASON);
+    }
+
+    /**
+     * 付款完成、使用者被導回來時當場開通，不必等 webhook。
+     *
+     * 前端帶來的 session id **只當索引**：session 是否 completed、對應我方哪一筆訂閱、
+     * 那筆訂閱是不是這個使用者的，一律以伺服器向 Clink 查到的為準。
+     * 與 webhook 同時到也沒關係，同步是覆寫、對應列的改寫是冪等的。
+     *
+     * @return null|Subscription 開通成功的訂閱；查無、未完成、不屬於這個使用者時為 null
+     */
+    public function confirmCheckout(string $userId, string $sessionId): ?Subscription
+    {
+        if (!self::isSessionId($sessionId)) {
+            return null;
+        }
+
+        try {
+            $session = (new ClinkClient())->getCheckoutSession($sessionId);
+        } catch (RuntimeException $e) {
+            Log::warning('Could not retrieve a Clink checkout session to confirm', [
+                'session_id' => $sessionId,
+                'error'      => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        $metadata = is_array($session['metadata'] ?? null) ? $session['metadata'] : [];
+        $ourId = $metadata['subscriptionId'] ?? $session['merchantReferenceId'] ?? null;
+
+        if (!is_string($ourId) || $ourId === '') {
+            return null;
+        }
+
+        /** @var null|Subscription $subscription */
+        $subscription = Subscription::query()
+            ->where('id', $ourId)
+            ->where('user_id', $userId)
+            ->where('payment_method', Subscription::PAYMENT_METHOD_CLINK)
+            ->first();
+
+        $clinkSubscriptionId = $session['subscriptionId'] ?? null;
+
+        if (!$subscription || ($session['status'] ?? null) !== 'completed' || !is_string($clinkSubscriptionId) || $clinkSubscriptionId === '') {
+            return null;
+        }
+
+        $this->syncSubscription($subscription, $clinkSubscriptionId);
+
+        return $subscription->refresh();
     }
 
     /** Checkout session id 以 sess_ 開頭；訂閱 id 是 sub_。 */
