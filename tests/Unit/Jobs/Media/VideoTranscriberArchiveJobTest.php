@@ -75,12 +75,9 @@ class VideoTranscriberArchiveJobTest extends TestCase
         return $media;
     }
 
-    public function testStoresEveryVersionAndTheAudioUnderTheMediaFolder(): void
+    public function testStoresEveryVersionUnderTheMediaFolder(): void
     {
-        Http::fake([
-            'cdn.ng-resource.com/*.mp3' => Http::response('ID3-binary', 200),
-            'cdn.ng-resource.com/*'     => Http::response(['subtitles' => []], 200),
-        ]);
+        Http::fake(['cdn.ng-resource.com/*' => Http::response(['subtitles' => []], 200)]);
 
         $media = $this->createMediaWithPayload();
 
@@ -96,9 +93,29 @@ class VideoTranscriberArchiveJobTest extends TestCase
             $base . '/optimized.subtitle.json',
             $base . '/ai_enhanced.transcript.json',
             $base . '/ai_enhanced.subtitle.json',
-            $base . '/audio.mp3',
         ]);
-        $this->assertSame('ID3-binary', Storage::disk('s3')->get($base . '/audio.mp3'));
+    }
+
+    /**
+     * 我們不保存、不轉散影片或音訊（Creem 審核的承諾）。回應裡雖然列了
+     * 轉錄服務匯出的 mp3，歸檔只拿文字，連下載都不下載。
+     */
+    public function testNeverDownloadsOrStoresTheAudio(): void
+    {
+        Http::fake(['cdn.ng-resource.com/*' => Http::response(['subtitles' => []], 200)]);
+
+        $media = $this->createMediaWithPayload();
+
+        (new VideoTranscriberArchiveJob($media))->handle();
+
+        Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '.mp3'));
+        $this->assertSame(
+            [],
+            array_values(array_filter(
+                Storage::disk('s3')->allFiles(sprintf('videotranscriber.ai/%s', $media->id)),
+                fn (string $file): bool => !str_ends_with($file, '.json')
+            ))
+        );
     }
 
     public function testEachAssetKeepsTheContentItsOwnUrlReturned(): void
@@ -158,7 +175,6 @@ class VideoTranscriberArchiveJobTest extends TestCase
         Storage::disk('s3')->assertMissing([
             $base . '/optimized.transcript.json',
             $base . '/optimized.subtitle.json',
-            $base . '/audio.mp3',
         ]);
     }
 
@@ -191,14 +207,14 @@ class VideoTranscriberArchiveJobTest extends TestCase
      * 上游明確說「沒有這個檔案」時不重試——重試救不回一個已經不存在的東西。
      *
      * 實際踩到的情況（2026-09-18）：一支五天前的 media，逐字稿與字幕都還在、
-     * 匯出的 mp3 已經 404。舊行為會為了它整批重跑五次，在 log 裡留下五筆
-     * 一模一樣的 warning，而該抓的東西第一次就全抓完了。
+     * 當時還會歸檔的 mp3 已經 404。舊行為會為了它整批重跑五次，在 log 裡留下
+     * 五筆一模一樣的 warning，而該抓的東西第一次就全抓完了。
      */
     public function testDoesNotRetryWhenAnAssetIsGone(): void
     {
         Http::fake([
-            'cdn.ng-resource.com/*c8d2f580.mp3*' => Http::response('gone', 404),
-            'cdn.ng-resource.com/*'              => Http::response(['blocks' => []], 200),
+            'cdn.ng-resource.com/*31c0ebab*' => Http::response('gone', 404),
+            'cdn.ng-resource.com/*'          => Http::response(['blocks' => []], 200),
         ]);
 
         $media = $this->createMediaWithPayload();
@@ -214,15 +230,15 @@ class VideoTranscriberArchiveJobTest extends TestCase
         $base = sprintf('videotranscriber.ai/%s', $media->id);
         Storage::disk('s3')->assertExists($base . '/original.transcript.json');
         Storage::disk('s3')->assertExists($base . '/optimized.subtitle.json');
-        Storage::disk('s3')->assertMissing($base . '/audio.mp3');
+        Storage::disk('s3')->assertMissing($base . '/optimized.transcript.json');
     }
 
     /** 410 Gone 同理。 */
     public function testDoesNotRetryOnGone(): void
     {
         Http::fake([
-            'cdn.ng-resource.com/*c8d2f580.mp3*' => Http::response('gone', 410),
-            'cdn.ng-resource.com/*'              => Http::response(['blocks' => []], 200),
+            'cdn.ng-resource.com/*31c0ebab*' => Http::response('gone', 410),
+            'cdn.ng-resource.com/*'          => Http::response(['blocks' => []], 200),
         ]);
 
         $job = new VideoTranscriberArchiveJob($this->createMediaWithPayload());
