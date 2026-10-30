@@ -168,8 +168,20 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 - `YoutubeCaptionJob` and `YoutubeDataCaptionJob` still exist but have
   **no dispatch site** — they are referenced only from comments
 - The old YouTube→mp3 pipeline (RapidAPI downloader, `InfoJob`, `CaptionJob`,
-  `media:sync-job`, the `youtube-mp3-downloader` webhook) was deleted
+  `media:sync-job`, the `youtube-mp3-downloader` webhook) was deleted. We never
+  download, store or redistribute video or audio — `VideoTranscriberArchiveJob`
+  archives the transcript/subtitle JSON only. See
+  `docs/lore/transcription/business-rules.md`
 - Details and pitfalls: `docs/lore/transcription/`
+
+**Feature toggles** (`config/features.php`, read through `App\Enums\Feature`)
+
+- Server-wide switches, all **off by default** (the state that passes the Creem
+  account review); separate from plan entitlements (`plans.*_enabled`)
+- `FEATURE_TRANSCRIPT` → `transcript_download`: caption file download only
+- `FEATURE_CHANNEL_SKILL` → `channel_skill`: skill endpoints and `sources:skills`
+- Gate routes with the `feature:<key>` middleware (404 when off); scope and what is
+  deliberately not gated: `docs/lore/media/business-rules.md`
 
 ### Localization & Internationalization
 
