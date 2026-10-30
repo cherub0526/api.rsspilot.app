@@ -17,9 +17,12 @@ use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\InvalidRequestException;
 use App\Validators\ForgotPasswordValidator;
 use App\Http\Controllers\AbstractController;
+use App\Http\Controllers\Concerns\IssuesAccessToken;
 
 class ForgotPasswordController extends AbstractController
 {
+    use IssuesAccessToken;
+
     private const RESET_ROUTE = 'api.v1.auth.forgot-password.update';
 
     /** 重設連結的有效分鐘數，也是信裡寫給使用者看的數字。 */
@@ -128,7 +131,7 @@ class ForgotPasswordController extends AbstractController
 
         $user->fill(['password' => Hash::make(trim($params['password']))])->save();
 
-        return $this->responseAccessToken(auth('jwt')->login($user));
+        return $this->responseAccessToken($this->guard()->login($user));
     }
 
     /**
@@ -171,14 +174,5 @@ class ForgotPasswordController extends AbstractController
 
         return hash_equals((string) ($query['signature'] ?? ''), (string) $params['signature'])
             && hash_equals($this->resetToken($user), (string) $params['token']);
-    }
-
-    private function responseAccessToken(string $token): ResponseInterface
-    {
-        return response()->json([
-            'access_token' => $token,
-            'token_type'   => 'bearer',
-            'expires_in'   => config('jwt.ttl') * 60,
-        ]);
     }
 }
