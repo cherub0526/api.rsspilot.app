@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Feature;
 use Hypervel\Support\Facades\Route;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
@@ -356,7 +357,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'download',
                 'uses'       => CaptionsController::class . '@download',
-                'middleware' => ['auth'],
+                'middleware' => ['auth', 'feature:' . Feature::Transcript->value],
             ]
         );
         Route::get(
@@ -364,7 +365,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'show',
                 'uses'       => CaptionsController::class . '@show',
-                'middleware' => ['auth'],
+                'middleware' => ['auth', 'feature:' . Feature::Transcript->value],
             ]
         );
     }, ['as' => 'captions']);

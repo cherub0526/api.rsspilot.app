@@ -881,6 +881,7 @@
                     "Media"
                 ],
                 "summary": "Get caption details",
+                "description": "Responds 404 while transcripts are turned off on this server.",
                 "operationId": "api.v1.media.captions.show",
                 "parameters": [
                     {
@@ -906,6 +907,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [
@@ -921,6 +925,7 @@
                     "Media"
                 ],
                 "summary": "Download a caption as a subtitle file",
+                "description": "Responds 404 while transcripts are turned off on this server.",
                 "operationId": "api.v1.media.captions.download",
                 "parameters": [
                     {
@@ -960,6 +965,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [

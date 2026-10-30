@@ -26,6 +26,14 @@ class DownloadPlanGateTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** 逐字稿關閉時的行為見 TranscriptFeatureGateTest。 */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['features.transcript' => true]);
+    }
+
     /**
      * 建立「沒有訂閱時的預設方案」：SubscriptionService 是用「有一筆月費 0 的
      * 價格」認免費方案的，所以 fixture 必須長成那樣。

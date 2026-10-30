@@ -65,5 +65,13 @@
         <env name="CREEM_API_KEY" value="creem_test_api_key" force="true"/>
         <env name="CREEM_SUCCESS_URL" value="https://tests.invalid/billing/return" force="true"/>
         <env name="CREEM_TEST_MODE" value="true" force="true"/>
+        <!--
+            全站功能開關（config/features.php）釘成正式環境的預設值：關閉。
+            不釘的話開發者本機 .env 打開了哪個，誰的測試就會變。驗功能本身的
+            測試在 setUp 以 config(['features.<name>' => true]) 自行打開。
+        -->
+        <env name="FEATURE_TRANSCRIPT" value="false" force="true"/>
+        <env name="FEATURE_SCREENSHOT" value="false" force="true"/>
+        <env name="FEATURE_CHANNEL_SKILL" value="false" force="true"/>
     </php>
 </phpunit>
