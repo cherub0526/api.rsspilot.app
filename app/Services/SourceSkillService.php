@@ -52,6 +52,9 @@ class SourceSkillService
     /** 頻道至少要有這麼多支有共用摘要的影片才產生（spec S29）。 */
     public const MIN_SHARED_SUMMARIES = 3;
 
+    /** 輸出上限；SKILL.md 本身也只有 50,000 字元（SR-7）。`sources:skills --estimate` 也拿它當每組的輸出上限。 */
+    public const MAX_TOKENS = 8000;
+
     /** 標題轉出來的 slug 上限；加上前綴與 id 片段後仍在 Agent Skill 的 64 字元內。 */
     private const SLUG_MAX_LENGTH = 40;
 
@@ -122,9 +125,6 @@ class SourceSkillService
 
     /** 取材的影片數（spec S15）。 */
     private const SAMPLE_SIZE = 30;
-
-    /** 輸出上限；SKILL.md 本身也只有 50,000 字元（SR-7）。 */
-    private const MAX_TOKENS = 8000;
 
     /** 一次送數十支影片的摘要、要一整份 SKILL.md 回來，60 秒的預設等不到；要小於 worker 的 --timeout。 */
     private const TIMEOUT_SECONDS = 240;
@@ -269,6 +269,35 @@ class SourceSkillService
      */
     public function generateRaw(Source $source, string $language, ?array $samples = null): string
     {
+        [$template, $content] = $this->prompt($source, $language, $samples ?? $this->samples($source, $language));
+
+        return (new TemplateCompletionManager(Completion::make(), $template))
+            ->setOptions(['max_tokens' => self::MAX_TOKENS])
+            ->setTimeout(self::TIMEOUT_SECONDS)
+            ->completeAndGetContent($content);
+    }
+
+    /**
+     * 一次產生的輸入 token 估計值（`sources:skills --estimate`，T11 估成本用）。
+     *
+     * 組出跟 generateRaw() 同一份訊息再估，不呼叫模型。沒有 tokenizer：中日韓文字一字約
+     * 一個 token，其餘約四個字元一個 token，只求數量級對。
+     */
+    public function estimateInputTokens(Source $source, string $language): int
+    {
+        [$template, $content] = $this->prompt($source, $language, $this->samples($source, $language));
+        $text = implode("\n", array_column($template->buildMessages($content), 'content'));
+        $cjk = (int) preg_match_all('/[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/u', $text);
+
+        return (int) ceil($cjk + (mb_strlen($text) - $cjk) / 4);
+    }
+
+    /**
+     * @param list<array{media: Media, summary: Summary}> $samples
+     * @return array{0: ChannelSkillTemplate, 1: string}
+     */
+    private function prompt(Source $source, string $language, array $samples): array
+    {
         // 語言名稱會進 system prompt，查不到就不能把呼叫端給的字串原樣放進去
         $name = ISO6391::getNameByCode(ISO6391::normalize($language));
         if (!is_string($name)) {
@@ -281,15 +310,9 @@ class SourceSkillService
             'channel'  => mb_substr($channel, 0, self::CHANNEL_TITLE_MAX_LENGTH),
         ]);
 
-        $samples = array_map(
-            fn (array $sample) => $this->sampleText($sample['media'], $sample['summary']),
-            $samples ?? $this->samples($source, $language)
-        );
+        $texts = array_map(fn (array $sample) => $this->sampleText($sample['media'], $sample['summary']), $samples);
 
-        return (new TemplateCompletionManager(Completion::make(), $template))
-            ->setOptions(['max_tokens' => self::MAX_TOKENS])
-            ->setTimeout(self::TIMEOUT_SECONDS)
-            ->completeAndGetContent($template->wrap(implode("\n\n", $samples)));
+        return [$template, $template->wrap(implode("\n\n", $texts))];
     }
 
     private function hasSkillSubscriber(Source $source): bool
