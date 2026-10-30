@@ -14,7 +14,7 @@ Implicit knowledge that code, types, tests, and git history can't reveal — bus
 | Area | What's in it |
 |------|--------------|
 | [transcription](transcription/) | 字幕與轉錄 pipeline：videotranscriber.ai、Groq、YouTube captions、相關 queue job 與唯一鎖行為 |
-| [subscription](subscription/) | 訂閱與計費：Creem（預設金流）與 Stripe、已移除的 Paddle 留下的舊訂閱、webhook 驗簽、plan/price 同步、額度規則、方案定價的成本結構 |
+| [subscription](subscription/) | 訂閱與計費：Clink（2026-10-31 起的預設金流）、Creem（既有訂閱）與 Stripe、已移除的 Paddle 留下的舊訂閱、webhook 驗簽、plan/price 同步、額度規則、方案定價的成本結構 |
 | [media](media/) | Media 狀態流轉、RSS source 同步、summary 產生 |
 | [auth](auth/) | JWT guard、Socialite OAuth、token 與帳號綁定 |
 | [prompts](prompts/) | AI prompt 模板組裝與推論層：TemplateCompletionManager、訊息順序、回應語言來源、OpenRouter 模型路由與計價陷阱 |

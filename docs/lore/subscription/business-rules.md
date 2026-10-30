@@ -209,7 +209,7 @@ $0.50、稅外加），每個價位能負擔的 AI 成本預算是 $12.99 → $3
 
 **3. 金流成本要疊著算，不是單一費率。** Stripe 的 2.9% + $0.30 只是基本卡片費，實務上還要加 Stripe Billing 0.5%、Stripe Tax 0.5%、國際卡 1.5%（按客戶組成加權）。以一半國際客戶估，綜合約 **4.7% + $0.30**。拿 2.9% 去算毛利會高估。
 
-2026-10 起預設金流是 **Creem**（`PAYMENT_DEFAULT_PROVIDER=creem`），它和 Paddle 一樣是 MoR，所以上面三件事只在結帳走 `paymentMethod=stripe` 時成立。Paddle 已移除，`Price` / `Plan` 上只剩 `stripe()` 與 `creem()` 兩種對應。
+2026-10-31 起預設金流是 **Clink**（`PAYMENT_DEFAULT_PROVIDER=clink`），在那之前是 Creem。兩者都和 Paddle 一樣是 MoR，所以上面三件事只在結帳走 `paymentMethod=stripe` 時成立。Paddle 已移除，`Price` / `Plan` 上剩 `stripe()`、`creem()`、`clink()` 三種對應。
 
 ## Paddle 已移除，舊 Paddle 訂閱只剩資料，客服要手動收尾
 
@@ -245,8 +245,38 @@ WHERE payment_method = 'paddle' AND deleted_at IS NULL
   AND status IN ('active', 'trial');
 ```
 
-`PAYMENT_DEFAULT_PROVIDER` 若還寫著 `paddle`（或沒設、打錯），新結帳一律走 Creem，
-`creem:verify` 也照實際生效的值回報；`paymentMethod=paddle` 的結帳請求回 422。
+`PAYMENT_DEFAULT_PROVIDER` 若還寫著 `paddle`（或沒設、打錯），新結帳一律走 Clink
+（2026-10-31 之前是 Creem），`creem:verify` / `clink:verify` 也照實際生效的值回報；
+`paymentMethod=paddle` 的結帳請求回 422。
 
 做對了的樣子：上面那支 SQL 回 0 列之後，`paddles` 表與 `payment_method = 'paddle'`
 就只剩歷史意義，可以考慮 drop。
+
+## 預設金流換成 Clink，既有 Creem 訂閱留在 Creem
+
+`code:` `app/Models/Subscription.php` → `defaultPaymentMethod()`、`app/Http/Controllers/API/V1/SubscriptionsController.php` → `destroy()` · `updated:` `2026-10-31` · `status:` `active`
+
+2026-10-31 使用者定案：新結帳改走 Clink（Merchant of Record），**既有 Creem 訂閱不搬移**。
+跟 Paddle 那次不同，Creem 的程式路徑全部保留：
+
+- 續約與狀態變化仍由 `POST /v1/webhook/creem` 寫回；`CREEM_*` 變數在正式環境要繼續設著，
+  拿掉就是 Creem 訂閱者的取消與續約全部對不上。
+- app 內取消依訂閱的 `payment_method` 分流，Creem 訂閱回 Creem 取消，不碰 Clink。
+- `paymentMethod=creem` 仍是合法的結帳參數，只是不再是預設。
+
+`PAYMENT_DEFAULT_PROVIDER` 的預設值與「認不得時退回的值」都是 `clink`。切到 Clink 之前，
+對外文案（定價頁、條款、退款政策、隱私政策的處理者）要把 Creem 換成 Clink，並依 Clink
+條款 §4 寫明 Clink 是轉售者（reseller）。
+
+## Clink 結帳不做首期折價，設了就讓結帳失敗
+
+`code:` `app/Services/ClinkSubscriptionService.php` → `createCheckout()` · `updated:` `2026-10-31` · `status:` `active`
+
+Creem 那條路有「年繳首期折價」（`prices.first_period_price` + 單次折扣碼），目前沒有任何
+price 設這個欄位。Clink 版本沒有實作（Clink 做得到：coupon `durationType: once` 加隱藏預套的
+`promotionCode`），所以有資格的人結帳一個設了 `first_period_price` 的 price 時**直接拋例外**：
+寧可結帳失敗，也不要定價頁寫著首期折價、結帳卻照原價收。要啟用首期折價就要先把這條路補上。
+
+同理，`subscription.updated.plan_changed` 只同步狀態、不改 `plan_id` / `price_id`（記
+warning）。我們的 app 沒有換方案流程，Clink Customer Portal 的升級與降級要在 dashboard 關掉，
+否則客人自己換了方案，我們這邊的方案權益不會跟著變。

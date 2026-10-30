@@ -6,7 +6,7 @@ This file provides guidance to Claude Code、Gemini when working with code in th
 
 This is a video assistant API built with **Hypervel** (v0.3), a Laravel-style PHP framework with native coroutine
 support built on Swoole. The application provides AI-powered video analysis, summaries, captions, and chat capabilities
-for YouTube content, with Creem / Stripe subscription management.
+for YouTube content, with Clink / Creem / Stripe subscription management.
 
 **Core functionality:**
 
@@ -14,7 +14,7 @@ for YouTube content, with Creem / Stripe subscription management.
 - Video caption extraction and AI-powered transcription (via videotranscriber.ai)
 - AI-generated video summaries via OpenRouter
 - Interactive chat with video content
-- Creem / Stripe subscription management with webhook handling
+- Clink / Creem / Stripe subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
 
 ## Project Lore
@@ -202,12 +202,18 @@ __('mails.reset_password.subject')
 - Middleware: `'middleware' => ['auth']` on protected routes — 一律宣告在 routes 檔，
   不在 Controller 內設定；路由命名與 Controller 對應規則見 `.claude/rules/routes.md`
 
-### Payments (Creem / Stripe)
+### Payments (Clink / Creem / Stripe)
 
-Creem is the default payment provider (`PAYMENT_DEFAULT_PROVIDER=creem` in production, Merchant of Record);
-Stripe stays as the alternate `paymentMethod`. **Paddle was removed in 2026-10**: no SDK, routes, webhook or
-model remain. Old `subscriptions.payment_method = paddle` rows and the `paddles` table are kept as data only —
-what those subscribers get is in `docs/lore/subscription/business-rules.md`.
+Clink is the default payment provider since 2026-10-31 (`PAYMENT_DEFAULT_PROVIDER=clink`, Merchant of Record).
+Existing Creem subscriptions were **not migrated**: the Creem webhook, cancel path and `paymentMethod=creem`
+all stay working. Stripe stays as the alternate `paymentMethod`. **Paddle was removed in 2026-10**: no SDK,
+routes, webhook or model remain. Old `subscriptions.payment_method = paddle` rows and the `paddles` table are kept
+as data only — what those subscribers get is in `docs/lore/subscription/business-rules.md`.
+
+- Clink: `ClinkClient` + `ClinkSubscriptionService`, webhook `POST /v1/webhook/clink` (signature with a
+  millisecond timestamp, events re-fetch the subscription from the API), return-page activation
+  `POST /v1/subscriptions/clink/confirm`, catalog commands `clink:sync` / `clink:verify`. Pitfalls
+  (amounts in major units, no tax-mode field, trial bound to the price) are in `docs/lore/subscription/`
 
 - SDK initialized with `STRIPE_API_KEY` (`App\Services\StripeClient`)
 - Webhook at `POST /v1/webhook/stripe`, verified with `Stripe\Webhook::constructEvent()` and `STRIPE_WEBHOOK_SECRET`
