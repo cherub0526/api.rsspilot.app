@@ -19,14 +19,6 @@ class CaptionsControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** 逐字稿關閉時的行為見 TranscriptFeatureGateTest。 */
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config(['features.transcript' => true]);
-    }
-
     // ================================================================
     // GET /v1/media/{mediaId}/captions (index)
     // ================================================================

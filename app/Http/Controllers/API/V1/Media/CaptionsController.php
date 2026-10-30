@@ -91,7 +91,6 @@ class CaptionsController
     #[OAT\Get(
         path: '/v1/media/{mediaId}/captions/{captionId}',
         operationId: 'api.v1.media.captions.show',
-        description: 'Responds 404 while transcripts are turned off on this server.',
         summary: 'Get caption details',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
@@ -137,7 +136,7 @@ class CaptionsController
     #[OAT\Get(
         path: '/v1/media/{mediaId}/captions/{captionId}/download',
         operationId: 'api.v1.media.captions.download',
-        description: 'Responds 404 while transcripts are turned off on this server.',
+        description: 'Responds 404 while transcript downloads are turned off on this server.',
         summary: 'Download a caption as a subtitle file',
         security: [['bearerAuth' => []]],
         tags: ['Media'],

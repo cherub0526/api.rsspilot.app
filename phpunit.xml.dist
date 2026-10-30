@@ -71,7 +71,6 @@
             測試在 setUp 以 config(['features.<name>' => true]) 自行打開。
         -->
         <env name="FEATURE_TRANSCRIPT" value="false" force="true"/>
-        <env name="FEATURE_SCREENSHOT" value="false" force="true"/>
         <env name="FEATURE_CHANNEL_SKILL" value="false" force="true"/>
     </php>
 </phpunit>

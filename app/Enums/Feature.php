@@ -10,8 +10,7 @@ namespace App\Enums;
  */
 enum Feature: string
 {
-    case Transcript = 'transcript';
-    case Screenshot = 'screenshot';
+    case TranscriptDownload = 'transcript_download';
     case ChannelSkill = 'channel_skill';
 
     public function enabled(): bool

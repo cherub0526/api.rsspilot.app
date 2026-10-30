@@ -26,12 +26,12 @@ class DownloadPlanGateTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** 逐字稿關閉時的行為見 TranscriptFeatureGateTest。 */
+    /** 逐字稿下載關閉時的行為見 TranscriptFeatureGateTest。 */
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['features.transcript' => true]);
+        config(['features.transcript_download' => true]);
     }
 
     /**

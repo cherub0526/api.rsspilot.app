@@ -9,7 +9,6 @@ use Carbon\Carbon;
 use JsonException;
 use App\Models\User;
 use App\Models\Media;
-use App\Enums\Feature;
 use InvalidArgumentException;
 
 /**
@@ -39,16 +38,6 @@ class McpService
     private const int PREVIEW_CHARS = 120;
 
     /**
-     * 要等全站開關打開才存在的工具。關閉時不列在 tools/list，直接指名呼叫也當成
-     * 不存在的工具。
-     *
-     * @var array<string, Feature>
-     */
-    private const array GATED_TOOLS = [
-        'get_transcript' => Feature::Transcript,
-    ];
-
-    /**
      * 這把 key 能用的工具清單（MCP 的 tools/list）。
      *
      * description 是寫給模型看的，不是寫給人看的：它要能讓模型判斷「什麼時候該
@@ -57,15 +46,6 @@ class McpService
      * @return array<int, array<string, mixed>>
      */
     public function tools(): array
-    {
-        return array_values(array_filter(
-            $this->allTools(),
-            fn (array $tool): bool => $this->available((string) $tool['name'])
-        ));
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    private function allTools(): array
     {
         return [
             [
@@ -195,10 +175,6 @@ class McpService
      */
     public function call(User $user, string $tool, array $arguments): string
     {
-        if (!$this->available($tool)) {
-            throw new InvalidArgumentException("Unknown tool: {$tool}");
-        }
-
         return match ($tool) {
             'list_sources'        => $this->encode($this->listSources($user)),
             'list_videos'         => $this->encode($this->listVideos($user, $arguments)),
@@ -208,11 +184,6 @@ class McpService
             'get_transcript'      => $this->encode($this->getTranscript($user, $arguments)),
             default               => throw new InvalidArgumentException("Unknown tool: {$tool}"),
         };
-    }
-
-    private function available(string $tool): bool
-    {
-        return !isset(self::GATED_TOOLS[$tool]) || self::GATED_TOOLS[$tool]->enabled();
     }
 
     /** @return array<string, mixed> */

@@ -24,14 +24,6 @@ class ServerControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** 這裡的逐字稿測試驗的是功能本身；關閉時的行為見 testTranscriptToolIs*WhenTheFeatureIsOff。 */
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config(['features.transcript' => true]);
-    }
-
     /**
      * 建一個當下生效的方案。沒有訂閱的人吃的是「月費 0 元」的那個方案。
      */
@@ -161,37 +153,6 @@ class ServerControllerTest extends TestCase
             ],
             $names
         );
-    }
-
-    /** 全站關掉逐字稿時，工具清單裡就沒有 get_transcript，模型不會想去叫它。 */
-    public function testTranscriptToolIsNotListedWhenTheFeatureIsOff(): void
-    {
-        config(['features.transcript' => false]);
-        $this->createPlan();
-        $user = User::factory()->create();
-
-        $names = array_column($this->rpc($user, 'tools/list')->json('result.tools'), 'name');
-
-        $this->assertNotContains('get_transcript', $names);
-        $this->assertContains('get_summary', $names);
-    }
-
-    /** 直接指名呼叫也拿不到原話，回的是與不存在的工具相同的錯誤。 */
-    public function testTranscriptToolIsUnavailableWhenTheFeatureIsOff(): void
-    {
-        config(['features.transcript' => false]);
-        $this->createPlan();
-        $user = User::factory()->create();
-        $media = $this->videoFor($user);
-        $this->captionFor($media);
-
-        $response = $this->rpc($user, 'tools/call', [
-            'name'      => 'get_transcript',
-            'arguments' => ['media_id' => $media->id],
-        ])->assertStatus(200);
-
-        $response->assertJsonPath('error.message', 'Unknown tool: get_transcript');
-        $this->assertStringNotContainsString('第一句', (string) $response->getContent());
     }
 
     /**

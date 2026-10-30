@@ -357,7 +357,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'download',
                 'uses'       => CaptionsController::class . '@download',
-                'middleware' => ['auth', 'feature:' . Feature::Transcript->value],
+                'middleware' => ['auth', 'feature:' . Feature::TranscriptDownload->value],
             ]
         );
         Route::get(
@@ -365,7 +365,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'show',
                 'uses'       => CaptionsController::class . '@show',
-                'middleware' => ['auth', 'feature:' . Feature::Transcript->value],
+                'middleware' => ['auth'],
             ]
         );
     }, ['as' => 'captions']);
