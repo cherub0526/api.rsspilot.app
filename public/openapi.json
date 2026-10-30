@@ -2974,10 +2974,9 @@
                                         "type": "string",
                                         "enum": [
                                             "stripe",
-                                            "paddle",
                                             "creem"
                                         ],
-                                        "example": "paddle"
+                                        "example": "creem"
                                     }
                                 },
                                 "type": "object"
@@ -3027,54 +3026,6 @@
             }
         },
         "/v1/subscriptions/{subscriptionId}": {
-            "put": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Confirm subscription after successful Paddle payment",
-                "operationId": "api.v1.subscriptions.update",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/subscriptionId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "transaction_id"
-                                ],
-                                "properties": {
-                                    "transaction_id": {
-                                        "description": "Paddle transaction ID",
-                                        "type": "string",
-                                        "example": "txn_01abc..."
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            },
             "delete": {
                 "tags": [
                     "Subscriptions"
@@ -3606,81 +3557,6 @@
                 }
             }
         },
-        "/v1/webhook/paddle": {
-            "post": {
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "Receive Paddle transaction webhook callback",
-                "operationId": "api.v1.webhook.paddle.store",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "event_id",
-                                    "event_type",
-                                    "occurred_at",
-                                    "notification_id",
-                                    "data"
-                                ],
-                                "properties": {
-                                    "event_id": {
-                                        "type": "string",
-                                        "example": "evt_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                    },
-                                    "event_type": {
-                                        "type": "string",
-                                        "enum": [
-                                            "transaction.completed",
-                                            "transaction.payment_failed",
-                                            "subscription.activated",
-                                            "subscription.updated",
-                                            "subscription.canceled",
-                                            "subscription.past_due",
-                                            "subscription.paused",
-                                            "subscription.resumed"
-                                        ],
-                                        "example": "transaction.completed"
-                                    },
-                                    "occurred_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                        "example": "2024-01-01T00:00:00Z"
-                                    },
-                                    "notification_id": {
-                                        "type": "string",
-                                        "example": "ntf_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                    },
-                                    "data": {
-                                        "required": [
-                                            "id"
-                                        ],
-                                        "properties": {
-                                            "id": {
-                                                "type": "string",
-                                                "example": "txn_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/200"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    }
-                }
-            }
-        },
         "/v1/webhook/stripe": {
             "post": {
                 "tags": [
@@ -4125,15 +4001,6 @@
                 },
                 "type": "object"
             },
-            "PaddleResource": {
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "example": "pro_01abc123"
-                    }
-                },
-                "type": "object"
-            },
             "PaginatorLinks": {
                 "properties": {
                     "first": {
@@ -4252,9 +4119,6 @@
                         "items": {
                             "$ref": "#/components/schemas/PriceResource"
                         }
-                    },
-                    "paddle": {
-                        "$ref": "#/components/schemas/PaddleResource"
                     }
                 },
                 "type": "object"
@@ -4280,9 +4144,6 @@
                         "format": "float",
                         "example": 99,
                         "nullable": true
-                    },
-                    "paddle": {
-                        "$ref": "#/components/schemas/PaddleResource"
                     }
                 },
                 "type": "object"
