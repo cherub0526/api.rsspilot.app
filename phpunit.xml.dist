@@ -60,6 +60,15 @@
         <env name="CREEM_SUCCESS_URL" value="https://tests.invalid/billing/return" force="true"/>
         <env name="CREEM_TEST_MODE" value="true" force="true"/>
         <!--
+            Clink 一律走 Http::fake，這些值只是讓 ClinkClient 與驗簽走得到要測的那一段。
+            API key 用 sk_uat_ 前綴，與 CLINK_TEST_MODE=true 一致（clink:verify 會比對）。
+        -->
+        <env name="CLINK_API_KEY" value="sk_uat_clink_phpunit" force="true"/>
+        <env name="CLINK_WEBHOOK_SECRET" value="clink_phpunit_signing" force="true"/>
+        <env name="CLINK_TEST_MODE" value="true" force="true"/>
+        <env name="CLINK_SUCCESS_URL" value="https://tests.invalid/checkout/return" force="true"/>
+        <env name="CLINK_CANCEL_URL" value="https://tests.invalid/pricing" force="true"/>
+        <!--
             全站功能開關（config/features.php）釘成正式環境的預設值：關閉。
             不釘的話開發者本機 .env 打開了哪個，誰的測試就會變。驗功能本身的
             測試在 setUp 以 config(['features.<name>' => true]) 自行打開。
