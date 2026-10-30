@@ -50,7 +50,7 @@ class SkillControllerTest extends TestCase
         Queue::fake();
         Cache::flush();
         Carbon::setTestNow('2026-10-30 12:00:00');
-        config(['skills.daily_global_limit' => 1000]);
+        config(['skills.daily_global_limit' => 1000, 'features.channel_skill' => true]);
 
         $this->proPlan = Plan::withoutEvents(fn () => Plan::factory()->create(['skill_enabled' => true]));
     }
@@ -185,6 +185,23 @@ class SkillControllerTest extends TestCase
         $this->assertStringNotContainsString('FULLCONTENTX', $raw);
         $this->assertStringNotContainsString('REFERENCESX', $raw);
         $this->assertNull($response->json('skill.content'));
+    }
+
+    // ── 全站開關（config features.channel_skill）──────────
+
+    /** 關閉時 Pro 訂閱者也拿到 404，而且不會順手排一次產生。 */
+    public function testIs404AndQueuesNothingWhileTheFeatureIsOff(): void
+    {
+        config(['features.channel_skill' => false]);
+        $user = $this->pro();
+        $source = $this->channel(5, $user);
+
+        $this->show($source)
+            ->assertStatus(404)
+            ->assertExactJson(['messages' => 'Resource not found.']);
+
+        $this->assertNoJob();
+        $this->assertSame(0, $this->rows($source));
     }
 
     // ── 認證、存取權、標頭 ─────────────────────────────

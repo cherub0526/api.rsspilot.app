@@ -256,13 +256,13 @@ Route::group('/sources', function () {
         Route::get('/', [
             'as'         => 'show',
             'uses'       => SourceSkillController::class . '@show',
-            'middleware' => ['auth', 'throttle:60,1'],
+            'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:60,1'],
         ]);
         Route::group('/download', function () {
             Route::get('/', [
                 'as'         => 'index',
                 'uses'       => SourceSkillDownloadController::class . '@index',
-                'middleware' => ['auth', 'throttle:30,1'],
+                'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:30,1'],
             ]);
         }, ['as' => 'download']);
     }, ['as' => 'skill']);

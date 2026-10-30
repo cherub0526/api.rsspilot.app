@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Sources;
 
+use App\Enums\Feature;
+use App\Models\Source;
 use App\Models\AiModel;
 use Hypervel\Console\Command;
 use App\Services\SourceSkillService;
@@ -18,6 +20,9 @@ use App\Services\SourceSkill\SkillScheduler;
  *
  * `--dry-run` 只列出這一輪會排入的組；`--estimate` 估算全部待排組的 token 與金額
  * （T11 用來估成本）。兩者都不派工、不寫 DB、不動每日計數器。
+ *
+ * 全站開關（config features.channel_skill）關閉時什麼都不做。排程登記刻意留著，
+ * 開關打開就恢復，不必改 Kernel。
  */
 class Skills extends Command
 {
@@ -33,6 +38,12 @@ class Skills extends Command
 
     public function handle(SkillScheduler $scheduler, SourceSkillService $service): int
     {
+        if (!Feature::ChannelSkill->enabled()) {
+            $this->info('Channel skills are turned off (FEATURE_CHANNEL_SKILL); nothing queued.');
+
+            return self::SUCCESS;
+        }
+
         $candidates = $scheduler->candidates();
         $batch = array_slice($candidates, 0, (int) config('skills.batch_size'));
 
@@ -61,7 +72,7 @@ class Skills extends Command
         return self::SUCCESS;
     }
 
-    /** @param list<array{source: \App\Models\Source, language: string, kind: string, subscribers: int}> $candidates */
+    /** @param list<array{source: Source, language: string, kind: string, subscribers: int}> $candidates */
     private function estimate(array $candidates, SourceSkillService $service): void
     {
         $kinds = array_count_values(array_column($candidates, 'kind'));

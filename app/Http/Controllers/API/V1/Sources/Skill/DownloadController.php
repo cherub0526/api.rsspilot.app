@@ -36,7 +36,8 @@ class DownloadController extends AbstractController
     #[OAT\Get(
         path: '/v1/sources/{sourceId}/skill/download',
         operationId: 'api.v1.sources.skill.download.index',
-        description: 'Download the channel skill in the user AI language. Every successful download is recorded. Playlists are 404.',
+        description: 'Download the channel skill in the user AI language. Every successful download is recorded. Playlists are 404, '
+            . 'and so is every request while channel skills are turned off on this server.',
         summary: 'Download the channel skill',
         security: [['bearerAuth' => []]],
         tags: ['Sources'],

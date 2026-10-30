@@ -51,6 +51,7 @@ class SkillDownloadTest extends TestCase
 
         Cache::flush();
         Carbon::setTestNow('2026-10-30 12:00:00');
+        config(['features.channel_skill' => true]);
         $this->proPlan = Plan::withoutEvents(fn () => Plan::factory()->create(['skill_enabled' => true]));
     }
 
@@ -160,6 +161,20 @@ class SkillDownloadTest extends TestCase
     }
 
     // ── S02 zip ──────────────────────────────────────
+
+    public function testIs404WhileTheFeatureIsOff(): void
+    {
+        config(['features.channel_skill' => false]);
+        $user = $this->pro();
+        $source = $this->channel($user);
+        $this->version($source);
+
+        $this->download($source)
+            ->assertStatus(404)
+            ->assertExactJson(['messages' => 'Resource not found.']);
+
+        $this->assertSame(0, $this->downloads());
+    }
 
     public function testS02ProUsersDownloadTheZip(): void
     {

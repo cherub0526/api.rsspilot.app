@@ -61,7 +61,7 @@ class SkillsTest extends TestCase
         Queue::fake();
         Cache::flush();
         Carbon::setTestNow('2026-10-30 12:00:00');
-        config(['skills.daily_global_limit' => 1000, 'skills.batch_size' => 20]);
+        config(['skills.daily_global_limit' => 1000, 'skills.batch_size' => 20, 'features.channel_skill' => true]);
         $this->pro = $this->plan(true);
     }
 
@@ -160,6 +160,21 @@ class SkillsTest extends TestCase
     private function generatingRows(): int
     {
         return SourceSkill::query()->where('status', SourceSkill::STATUS_GENERATING)->count();
+    }
+
+    // ── 全站開關（config features.channel_skill）──────────
+
+    /** 關閉時排程照跑，但一組都不排、也不建資料列：排程登記留著，開關打開就恢復。 */
+    public function testQueuesNothingWhileTheFeatureIsOff(): void
+    {
+        config(['features.channel_skill' => false]);
+        $source = $this->channel();
+        $this->subscriber($source, 'zh-TW', $this->pro);
+
+        $this->artisan('sources:skills')->assertExitCode(0);
+
+        Queue::assertNotPushed(GenerateSourceSkillJob::class);
+        $this->assertSame(0, SourceSkill::query()->count());
     }
 
     // ── S10：合格組與語言集合 ───────────────────────────

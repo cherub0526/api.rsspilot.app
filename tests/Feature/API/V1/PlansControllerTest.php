@@ -69,6 +69,8 @@ class PlansControllerTest extends TestCase
      */
     public function testS06IndexExposesSkillEnabled(): void
     {
+        config(['features.channel_skill' => true]);
+
         $pro = Plan::withoutEvents(fn () => Plan::factory()->create([
             'status'        => Plan::STATUS_ACTIVE,
             'sort'          => 1,

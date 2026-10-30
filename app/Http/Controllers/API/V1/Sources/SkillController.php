@@ -26,7 +26,8 @@ class SkillController extends AbstractController
         path: '/v1/sources/{sourceId}/skill',
         operationId: 'api.v1.sources.skill.show',
         description: 'Status and content of the channel skill in the user AI language. '
-            . 'May queue a generation as a side effect (at most 10 per user per UTC day). Playlists are 404.',
+            . 'May queue a generation as a side effect (at most 10 per user per UTC day). Playlists are 404, '
+            . 'and so is every request while channel skills are turned off on this server.',
         summary: 'Get the channel skill',
         security: [['bearerAuth' => []]],
         tags: ['Sources'],
