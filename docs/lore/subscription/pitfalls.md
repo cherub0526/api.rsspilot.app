@@ -69,7 +69,9 @@ Stripe API 對這兩種物件的刪除支援，比直覺想的少很多：
 
 ## Paddle 建 price 不指定 tax_mode，會落在 location 而不是 external
 
-`code:` `app/Console/Commands/Paddle/Sync.php` → `handle` · `updated:` `2026-09-11` · `status:` `active`
+`code:` `app/Console/Commands/Paddle/Sync.php` → `handle` · `updated:` `2026-10-31` · `status:` `obsolete`
+
+> 2026-10 起不再適用：Paddle 整合與 `paddle:sync` 已移除。留著是因為「稅外加要明寫、不要吃預設」這個判斷延續到了 Creem（`creem:sync` 的 `TAX_MODE = exclusive`）。
 
 `CreatePrice` 的 `taxMode` 是選填，不帶的時候 Paddle **不是**給你 `account_setting`，實測回來的是 `location`——依買家所在地的顯示慣例決定含不含稅。2026-09-11 第一次跑 `paddle:sync` 建出來的六筆 price，`tax_mode` 全是 `location`。
 
