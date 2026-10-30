@@ -2741,6 +2741,67 @@
                 ]
             }
         },
+        "/v1/subscriptions/clink/confirm": {
+            "post": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Activate a Clink subscription right after the customer returns from checkout",
+                "operationId": "api.v1.subscriptions.clink.confirm.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "session_id"
+                                ],
+                                "properties": {
+                                    "session_id": {
+                                        "description": "The sessionId Clink appends to the success URL",
+                                        "type": "string",
+                                        "example": "sess_8Kq2LmN4pR7sT1vW"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Subscription activated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "subscription_id": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "trial"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "description": "Session not found, not completed, or not yours"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/subscriptions/creem/confirm": {
             "post": {
                 "tags": [
@@ -2974,9 +3035,10 @@
                                         "type": "string",
                                         "enum": [
                                             "stripe",
-                                            "creem"
+                                            "creem",
+                                            "clink"
                                         ],
-                                        "example": "creem"
+                                        "example": "clink"
                                     }
                                 },
                                 "type": "object"
@@ -2986,11 +3048,57 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Checkout initialization payload",
+                        "description": "Checkout initialization payload. Exactly one provider key is present, matching the payment method used.",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
+                                        "clink": {
+                                            "properties": {
+                                                "checkout_url": {
+                                                    "description": "Hosted checkout page to redirect the customer to",
+                                                    "type": "string",
+                                                    "example": "https://uat-checkout.clinkbill.com/pay/sess_8Kq2LmN4pR7sT1vW"
+                                                },
+                                                "session_id": {
+                                                    "type": "string",
+                                                    "example": "sess_8Kq2LmN4pR7sT1vW"
+                                                },
+                                                "test_mode": {
+                                                    "description": "true when the Clink sandbox is in use",
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "creem": {
+                                            "properties": {
+                                                "checkout_url": {
+                                                    "type": "string",
+                                                    "example": "https://checkout.creem.io/ch_4l0N34kxo16AhRKUHFUuXr"
+                                                },
+                                                "checkout_id": {
+                                                    "type": "string",
+                                                    "example": "ch_4l0N34kxo16AhRKUHFUuXr"
+                                                },
+                                                "test_mode": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "customData": {
+                                            "description": "Present for clink and creem",
+                                            "properties": {
+                                                "subscriptionId": {
+                                                    "type": "string",
+                                                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
                                         "stripe": {
                                             "properties": {
                                                 "publishable_key": {
@@ -3454,6 +3562,23 @@
                         "bearerAuth": []
                     }
                 ]
+            }
+        },
+        "/v1/webhook/clink": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Clink webhook events",
+                "operationId": "api.v1.webhook.clink.store",
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "422": {
+                        "description": "Invalid signature, malformed payload, or unknown subscription"
+                    }
+                }
             }
         },
         "/v1/webhook/creem": {

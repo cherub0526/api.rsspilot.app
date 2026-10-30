@@ -175,8 +175,8 @@ class SubscriptionsController extends AbstractController
                         property: 'paymentMethod',
                         description: 'Payment gateway. Defaults to PAYMENT_DEFAULT_PROVIDER.',
                         type: 'string',
-                        enum: ['stripe', 'creem'],
-                        example: 'creem'
+                        enum: ['stripe', 'creem', 'clink'],
+                        example: 'clink'
                     ),
                 ]
             )
@@ -185,9 +185,46 @@ class SubscriptionsController extends AbstractController
         responses: [
             new OAT\Response(
                 response: 200,
-                description: 'Checkout initialization payload',
+                description: 'Checkout initialization payload. Exactly one provider key is present, '
+                    . 'matching the payment method used.',
                 content: new OAT\JsonContent(
                     properties: [
+                        new OAT\Property(
+                            property: 'clink',
+                            properties: [
+                                new OAT\Property(
+                                    property: 'checkout_url',
+                                    description: 'Hosted checkout page to redirect the customer to',
+                                    type: 'string',
+                                    example: 'https://uat-checkout.clinkbill.com/pay/sess_8Kq2LmN4pR7sT1vW'
+                                ),
+                                new OAT\Property(property: 'session_id', type: 'string', example: 'sess_8Kq2LmN4pR7sT1vW'),
+                                new OAT\Property(
+                                    property: 'test_mode',
+                                    description: 'true when the Clink sandbox is in use',
+                                    type: 'boolean',
+                                    example: false
+                                ),
+                            ],
+                            type: 'object'
+                        ),
+                        new OAT\Property(
+                            property: 'creem',
+                            properties: [
+                                new OAT\Property(property: 'checkout_url', type: 'string', example: 'https://checkout.creem.io/ch_4l0N34kxo16AhRKUHFUuXr'),
+                                new OAT\Property(property: 'checkout_id', type: 'string', example: 'ch_4l0N34kxo16AhRKUHFUuXr'),
+                                new OAT\Property(property: 'test_mode', type: 'boolean', example: false),
+                            ],
+                            type: 'object'
+                        ),
+                        new OAT\Property(
+                            property: 'customData',
+                            description: 'Present for clink and creem',
+                            properties: [
+                                new OAT\Property(property: 'subscriptionId', type: 'string', example: '01JCXYZ123456789ABCDEFGHIJ'),
+                            ],
+                            type: 'object'
+                        ),
                         new OAT\Property(
                             property: 'stripe',
                             properties: [
