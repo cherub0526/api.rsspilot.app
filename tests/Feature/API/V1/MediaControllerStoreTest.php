@@ -70,7 +70,7 @@ class MediaControllerStoreTest extends TestCase
     /**
      * @param null|array $urlInfo null 代表 getUrlInfo 會拋例外
      * @param null|bool|string $captionTracks 公開字幕檢查（hasCaptionTracks）的回傳；
-     *        'unset' 代表不預期被呼叫——閘門關閉時連查都不該查
+     *                                        'unset' 代表不預期被呼叫——閘門關閉時連查都不該查
      */
     private function fakeExternals(
         ?array $urlInfo = null,

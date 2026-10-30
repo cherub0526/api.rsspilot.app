@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Services;
 
+use Carbon\Carbon;
 use Tests\TestCase;
 use App\Models\Source;
-use Carbon\Carbon;
 use App\Utils\Const\ISO6391;
 use Hypervel\Support\Facades\Log;
 use Hypervel\Support\Facades\Cache;
@@ -85,6 +85,7 @@ class SourceSkillDispatchTest extends TestCase
 
         Queue::assertNotPushed(GenerateSourceSkillJob::class);
     }
+
     public function testEveryLanguageTheSettingsPageOffersCanBeDispatched(): void
     {
         $codes = array_values(array_unique(ISO6391::LANGUAGES));

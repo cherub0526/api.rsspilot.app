@@ -10,5 +10,6 @@ class ChatTokenEvent
         public readonly string $token,
         public readonly string $userId,
         public readonly string $mediaId,
-    ) {}
+    ) {
+    }
 }

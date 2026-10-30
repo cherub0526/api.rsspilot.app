@@ -16,7 +16,7 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(
             property: 'status',
             type: 'string',
-            description: '處理進度，見 App\\Models\\Media 的 STATUS_* 常數',
+            description: '處理進度，見 App\Models\Media 的 STATUS_* 常數',
             enum: [
                 'created', 'progress', 'transcribing', 'transcribed', 'transcribe_failed',
                 'summarizing', 'summarized', 'summarize_failed', 'ready', 'cancelled', 'failed',

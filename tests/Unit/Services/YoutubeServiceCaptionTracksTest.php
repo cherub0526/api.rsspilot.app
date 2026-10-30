@@ -6,10 +6,10 @@ namespace Tests\Unit\Services;
 
 use Mockery;
 use Exception;
-use ReflectionProperty;
 use Tests\TestCase;
-use App\Services\YoutubeService;
+use ReflectionProperty;
 use Google\Service\YouTube;
+use App\Services\YoutubeService;
 use Google\Service\YouTube\Caption;
 use Google\Service\YouTube\CaptionSnippet;
 use Google\Service\YouTube\Resource\Captions;
@@ -30,7 +30,7 @@ class YoutubeServiceCaptionTracksTest extends TestCase
     private const VIDEO_ID = '9bZkp7q19f0';
 
     /**
-     * @param list<array{0: string, 1?: string}>|Exception $tracks 每條是 [trackKind, status]
+     * @param Exception|list<array{0: string, 1?: string}> $tracks 每條是 [trackKind, status]
      */
     private function service(array|Exception $tracks): YoutubeService
     {

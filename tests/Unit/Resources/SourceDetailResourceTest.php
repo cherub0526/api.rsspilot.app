@@ -6,8 +6,8 @@ namespace Tests\Unit\Resources;
 
 use Tests\TestCase;
 use App\Models\Source;
-use Hypervel\Foundation\Testing\RefreshDatabase;
 use App\Http\Resources\SourceDetailResource;
+use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
  * @internal

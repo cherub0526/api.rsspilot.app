@@ -10,5 +10,6 @@ class ChatErrorEvent
         public readonly string $message,
         public readonly string $userId,
         public readonly string $mediaId,
-    ) {}
+    ) {
+    }
 }

@@ -6,9 +6,9 @@ namespace App\Jobs\Media;
 
 use Exception;
 use App\Models\Media;
-use App\Services\PublicCaptionGate;
 use Hypervel\Queue\Queueable;
 use App\Models\VideoTranscription;
+use App\Services\PublicCaptionGate;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Exceptions\VideoTranscriberAuthException;
@@ -59,18 +59,6 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
     public int $uniqueFor = 3600;
 
-    /**
-     * 用時間上限取代次數上限。
-     *
-     * 塞車時要退回重試幾次是無法預先知道的——取決於前面那些轉錄多久跑完。
-     * 用次數當預算會讓「排隊太久」被誤判成「這筆轉錄失敗」，而其實什麼都
-     * 沒壞。時間上限才貼近「等到有名額為止」的語意。
-     */
-    public function retryUntil(): int
-    {
-        return time() + self::RETRY_UNTIL_SECONDS;
-    }
-
     protected Media $media;
 
     /**
@@ -81,6 +69,18 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         $this->media = $media;
 
         $this->queue = 'videotranscriber.start';
+    }
+
+    /**
+     * 用時間上限取代次數上限。
+     *
+     * 塞車時要退回重試幾次是無法預先知道的——取決於前面那些轉錄多久跑完。
+     * 用次數當預算會讓「排隊太久」被誤判成「這筆轉錄失敗」，而其實什麼都
+     * 沒壞。時間上限才貼近「等到有名額為止」的語意。
+     */
+    public function retryUntil(): int
+    {
+        return time() + self::RETRY_UNTIL_SECONDS;
     }
 
     /**

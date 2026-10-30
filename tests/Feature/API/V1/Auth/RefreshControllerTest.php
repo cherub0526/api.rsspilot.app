@@ -26,7 +26,7 @@ class RefreshControllerTest extends TestCase
     private function payload(string $token): array
     {
         $segment = explode('.', $token)[1] ?? '';
-        $json    = base64_decode(strtr($segment, '-_', '+/'), true);
+        $json = base64_decode(strtr($segment, '-_', '+/'), true);
 
         return json_decode((string) $json, true) ?: [];
     }
@@ -39,10 +39,10 @@ class RefreshControllerTest extends TestCase
 
     public function testRefreshWithToken()
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $token = auth('jwt')->login($user);
 
-        $uri      = route('api.v1.auth.refresh.store');
+        $uri = route('api.v1.auth.refresh.store');
         $response = $this->withToken($token)->json('POST', $uri);
 
         $response->assertStatus(200)
@@ -87,11 +87,11 @@ class RefreshControllerTest extends TestCase
      */
     public function testRefreshedTokenCarriesExpiration()
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $token = auth('jwt')->login($user);
 
-        $uri     = route('api.v1.auth.refresh.store');
-        $issued  = Carbon::now();
+        $uri = route('api.v1.auth.refresh.store');
+        $issued = Carbon::now();
         $payload = $this->payload(
             $this->withToken($token)->json('POST', $uri)->json('access_token')
         );
@@ -109,7 +109,7 @@ class RefreshControllerTest extends TestCase
 
     public function testRefreshedTokenIsAccepted()
     {
-        $user  = User::factory()->create();
+        $user = User::factory()->create();
         $token = auth('jwt')->login($user);
 
         $refreshed = $this->withToken($token)

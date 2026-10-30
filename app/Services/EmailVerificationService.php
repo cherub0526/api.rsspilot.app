@@ -72,7 +72,7 @@ class EmailVerificationService
             throw InvalidRequestException::withCode(
                 'resend_throttled',
                 ['retry_after' => $left],
-                ['email' => [__('validators.controllers.auth.resend_throttled')]]
+                ['email'       => [__('validators.controllers.auth.resend_throttled')]]
             );
         }
 
@@ -107,7 +107,7 @@ class EmailVerificationService
             throw InvalidRequestException::withCode(
                 'code_invalid',
                 ['attempts_left' => $record->fresh()->attemptsLeft()],
-                ['code' => [__('validators.controllers.auth.code_invalid')]]
+                ['code'          => [__('validators.controllers.auth.code_invalid')]]
             );
         }
 

@@ -152,7 +152,7 @@ class VerifyControllerTest extends TestCase
         Mail::fake();
 
         $user = $this->pendingUser();
-        $old  = $this->codeFor($user, [], Carbon::now()->subMinutes(5));
+        $old = $this->codeFor($user, [], Carbon::now()->subMinutes(5));
 
         $this->json('POST', route('api.v1.auth.verify.resend.store'), [
             'email' => 'pending@example.com',
