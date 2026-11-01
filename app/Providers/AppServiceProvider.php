@@ -14,6 +14,7 @@ use App\Observers\StripeUserObserver;
 use Hypervel\Support\ServiceProvider;
 use App\Observers\StripePriceObserver;
 use App\Services\SwooleStripeHttpClient;
+use App\Database\RetryingPostgresConnector;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,5 +36,6 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
+        $this->app->bind('db.connector.pgsql', RetryingPostgresConnector::class);
     }
 }
