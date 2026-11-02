@@ -7,9 +7,12 @@ namespace App\Console\Commands\VideoTranscriber;
 use App\Models\Media;
 use Hypervel\Bus\UniqueLock;
 use Hypervel\Console\Command;
+use Hypervel\Support\Facades\Log;
+use App\Models\VideoTranscription;
 use App\Jobs\Media\VideoTranscriberStartJob;
 use Hypervel\Cache\Contracts\Factory as CacheFactory;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
+use App\Services\VideoTranscriber\OpenApiTranscriptionProvider;
 
 class Start extends Command
 {
@@ -30,28 +33,19 @@ class Start extends Command
      */
     public function handle(VideoTranscriberClient $client): int
     {
-        // 派工之前先確認那組共用帳號還登得進去。帳號被踢掉時（只允許單一裝置
-        // 登入，見 docs/lore/transcription/pitfalls.md）這裡不擋的話，指令會照樣
-        // 對每一筆 media 印出 "Starting transcription"、退出碼 0，而真正的失敗
-        // 要到 worker 才發生——每一筆各自撞 auth、退避 300 秒重試到時限為止，
-        // 指令這一側完全看不出來。
-        //
-        // ensureAuthenticated() 驗不過就會自己重新登入一次（跟
-        // videotranscriber:login 同一條路），所以順帶把過期的 token 續上。
-        if (!$user = $client->ensureAuthenticated()) {
-            $this->error(
-                'videotranscriber.ai authentication failed. '
-                . 'Run `videotranscriber:login` and check services.videotranscriber credentials.'
-            );
+        // 設定值打錯時不派工：派下去的 job 會各自撞同一個設定錯誤（S22）
+        $provider = OpenApiTranscriptionProvider::configured();
+
+        if (!OpenApiTranscriptionProvider::isKnown($provider)) {
+            Log::error('Unknown videotranscriber provider; dispatched nothing.');
+            $this->error('services.videotranscriber.provider must be "legacy" or "openapi".');
 
             return 1;
         }
 
-        $this->line(sprintf(
-            'Authenticated as %s <%s>.',
-            $user['user_name'] ?? '?',
-            $user['email'] ?? '?'
-        ));
+        if ($provider === OpenApiTranscriptionProvider::LEGACY && !$this->ensureLegacyLogin($client)) {
+            return 1;
+        }
 
         $query = Media::query();
 
@@ -60,6 +54,7 @@ class Start extends Command
         // already left `created`, e.g. one stuck on `transcribe_failed`.
         if ($id = $this->option('id')) {
             $query->where('id', $id);
+            $this->forgetIdempotencyKey((string) $id);
         } else {
             $query->where('status', Media::STATUS_CREATED);
         }
@@ -114,6 +109,54 @@ class Start extends Command
         }
 
         return 0;
+    }
+
+    /**
+     * legacy 用共用帳號的 cookie 登入；openapi 用 API key，不需要這一步（S13）。
+     */
+    private function ensureLegacyLogin(VideoTranscriberClient $client): bool
+    {
+        // 派工之前先確認那組共用帳號還登得進去。帳號被踢掉時（只允許單一裝置
+        // 登入，見 docs/lore/transcription/pitfalls.md）這裡不擋的話，指令會照樣
+        // 對每一筆 media 印出 "Starting transcription"、退出碼 0，而真正的失敗
+        // 要到 worker 才發生——每一筆各自撞 auth、退避 300 秒重試到時限為止，
+        // 指令這一側完全看不出來。
+        //
+        // ensureAuthenticated() 驗不過就會自己重新登入一次（跟
+        // videotranscriber:login 同一條路），所以順帶把過期的 token 續上。
+        if (!$user = $client->ensureAuthenticated()) {
+            $this->error(
+                'videotranscriber.ai authentication failed. '
+                . 'Run `videotranscriber:login` and check services.videotranscriber credentials.'
+            );
+
+            return false;
+        }
+
+        $this->line(sprintf(
+            'Authenticated as %s <%s>.',
+            $user['user_name'] ?? '?',
+            $user['email'] ?? '?'
+        ));
+
+        return true;
+    }
+
+    /**
+     * `--id=` 是人工重送：清掉上一次保存的 Idempotency-Key，讓這次送出建立新任務（S15）。
+     * 排程重派不清，沒拿到任務 id 的 key 會被沿用（S24）。
+     */
+    private function forgetIdempotencyKey(string $mediaId): void
+    {
+        $record = VideoTranscription::query()->where('media_id', $mediaId)->first();
+        $start = $record?->getAttribute('start_transcription');
+
+        if (!is_array($start) || !array_key_exists(VideoTranscriberStartJob::IDEMPOTENCY_KEY, $start)) {
+            return;
+        }
+
+        unset($start[VideoTranscriberStartJob::IDEMPOTENCY_KEY]);
+        $record->fill(['start_transcription' => $start])->save();
     }
 
     /**
