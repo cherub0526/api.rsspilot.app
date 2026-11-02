@@ -86,9 +86,9 @@ class CaptionsControllerTest extends TestCase
     /**
      * 存取權以 media 為準，訂閱來源本身不再直接授權。
      *
-     * 正常流程下訂閱會由 SubscriptionService::syncSourceMediaToUserables() 把
-     * 該來源的影片寫進使用者的影片庫，所以這個狀態不常見；但那個方法受 30 天
-     * 影片額度限制，額度用完時一列都不會寫——那些影片就不在影片庫裡，也就不
+     * 訂閱來源只會把使用者勾選的影片、以及同步時間點之後才出現的新影片寫進
+     * 影片庫（SourceSubscriptionService），而且受 30 天影片額度限制，所以這個
+     * 狀態很常見：來源的舊影片、額度用完時跳過的新影片都不在影片庫裡，也就不
      * 該讀得到字幕。
      */
     public function testIndexReturns404WhenSubscribedButTheMediaIsNotInTheLibrary(): void

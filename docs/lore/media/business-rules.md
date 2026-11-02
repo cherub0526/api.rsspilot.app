@@ -34,9 +34,9 @@ The rule, the reasoning, and edge cases.
 
 ## 手動加入影片會建出頻道 source，但不等於訂閱該頻道
 
-`code:` `app/Services/SourceService.php` → `firstOrCreateYoutubeChannel()`、`app/Console/Commands/Sources/Sync.php` → `handle()` · `updated:` `2026-09-03` · `status:` `active`
+`code:` `app/Services/SourceService.php` → `firstOrCreateYoutubeChannel()`、`app/Console/Commands/Sources/Sync.php` → `handle()` · `updated:` `2026-11-02` · `status:` `active`
 
-`POST /v1/media` 建立 media 時會一併建立（或重用）該影片所屬頻道的 source，讓手動加入的影片跟 RSS 收進來的一樣掛得到來源——列表能顯示頻道、關鍵字能搜到頻道名、日後真的訂閱該頻道時 `syncSourceMediaToUserables()` 也接得起來。
+`POST /v1/media` 建立 media 時會一併建立（或重用）該影片所屬頻道的 source，讓手動加入的影片跟 RSS 收進來的一樣掛得到來源——列表能顯示頻道、關鍵字能搜到頻道名、日後真的訂閱該頻道時，這支影片也算是「該來源既有的 media」，訂閱時可以勾選（`SourceSubscriptionService::subscribe()`）。
 
 **但使用者不會因此被寫進 `user_sources`。** 訂閱會吃掉方案的 `channel_limit`，只加一支影片不該偷偷佔掉一個頻道名額。「擁有影片」與「訂閱來源」是兩個樞紐，混用出過事（見〈影片的存取權以 userables 為準〉）。
 
@@ -48,15 +48,45 @@ The rule, the reasoning, and edge cases.
 
 ## 影片額度是滾動 30 天，兩條加入路徑共用同一個池子
 
-`code:` `app/Http/Controllers/API/V1/MediaController.php` → `assertVideoQuota()`、`app/Services/SubscriptionService.php` → `syncSourceMediaToUserables()` · `updated:` `2026-08-15` · `status:` `active`
+`code:` `app/Http/Controllers/API/V1/MediaController.php` → `assertVideoQuota()`、`app/Services/SubscriptionService.php` → `remainingVideoQuota()` · `updated:` `2026-11-02` · `status:` `active`
 
-`plans.video_limit` 算的是「過去 30 天內加進 `userables` 的筆數」，`0` = 不限制。RSS 同步與手動貼網址數的是同一個數字——分開計算的話，手動加入就成了繞過 RSS 上限的後門。
+`plans.video_limit` 算的是「過去 30 天內加進 `userables` 的筆數」，`0` = 不限制。訂閱來源時勾選的影片、`sources:sync` 收進來的新影片、手動貼網址，三條路數的是同一個數字——分開計算的話，手動加入就成了繞過 RSS 上限的後門。
+
+訂閱時勾選的影片（扣掉已在影片庫的）超過剩餘額度，整筆訂閱回 422、不建立；同步時額度不夠則跳過，見〈訂閱只收同步時間點之後的影片〉。
+
+注意兩處的窗口不完全相同：`MediaController::assertVideoQuota()` 用 `subDays(29)`（兩端含，剛好 30 個日期），`remainingVideoQuota()` 與用量端點沿用 `subDays(30)`。
 
 `userables` 只增不減（`syncWithoutDetaching`），所以「加了再刪」無法把額度洗回來。
 
 已經在自己影片庫裡的影片再貼一次是 no-op，不佔額度，額度就算滿了也放行——因為它不會新增 `userables` 資料列。
 
 額度滿了回 **422**（`validators.controllers.media.video_limit_reached`），跟 `channel_limit` 同型；不是 chat 那種每日重置的 429。兩者性質不同：這裡是容量滿了，不是速率超標。
+
+## 訂閱只收同步時間點之後的影片
+
+`code:` `app/Services/SourceSubscriptionService.php` → `subscribe()`、`deliverNewMedia()`、`app/Console/Commands/Sources/Sync.php` · `updated:` `2026-11-02` · `status:` `active`
+
+每筆訂閱（`user_sources`）有一個同步時間點 `synced_at`：
+
+- **訂閱時**：只把使用者在預覽（`GET /v1/sources/preview`）勾選的影片加進影片庫，預設一支都不勾，不勾也能訂閱。新訂閱的 `synced_at` = 送出當下；對已訂閱的來源再送一次只改 `notify`，**不重設** `synced_at`（勾選的影片照常加入）。
+- **同步時**：`sources:sync` 對每位訂閱者只加入 `media.created_at` 落在 `(synced_at, 本次同步時間]`、且還不在影片庫的影片，依 `published_at` 新到舊、受剩餘額度限制，然後把 `synced_at` 推到本次同步時間。每次同步都推，不管有沒有新影片。
+
+2026-11-02 之前的規則是「該來源的影片只要還不在影片庫就補進去」（已刪除的 `syncSourceMediaToUserables()`），舊影片會佔掉額度，而且額度一空出來又被補回去，使用者無法預期影片庫會多出什麼。四個取捨都是使用者決定的：
+
+1. **時間基準是系統第一次看到影片的時間（`media.created_at`），不是 `published_at`。** YouTube RSS 會延遲，發布時間早於訂閱、但訂閱後才出現在 RSS 的影片若比照發布時間就永遠收不到。
+2. **額度用完就跳過，之後不補，`synced_at` 照樣往前推。** 補的話又回到「額度空出來就塞舊影片」的老問題。
+3. **既有訂閱的 `synced_at` 設為 migration 執行時間**（`2026_11_02_100000_add_synced_at_to_user_sources_table`），上線後不再補舊影片。release note 要寫。
+4. **預設全不勾，可以零支。** 影片庫只該出現使用者明確要的東西。
+
+### 訂閱時要把 RSS 現有影片全部寫進 media
+
+時間基準是 `media.created_at`，所以訂閱時 RSS 裡**沒勾**的影片如果還沒有 media 列，下一次同步才建出來，`created_at` 會晚於 `synced_at`，就被當成新影片補進影片庫。`subscribe()` 因此先把目前 RSS 的每一支都 upsert 成 media（`status = created`，照常由排程送去轉錄——同步本來也會建），再寫 `synced_at`。
+
+### 勾選的影片必須屬於這個來源
+
+`video_ids` 是 11 碼 YouTube ID，`media.resource_id` 存的是 RSS entry id `yt:video:<videoId>`，比對前要加前綴。每個 ID 必須在目前的 RSS 清單裡，**或已是該來源既有的 media**——預覽到送出之間 RSS 可能更新，後者避免誤擋。都不是就 422（`validators.controllers.sources.video_not_in_source`），不建立訂閱。
+
+YouTube RSS 只有最新 15 筆，更舊的影片只能用手動貼網址加入。舊版桌面 app 不送 `video_ids`，訂閱後影片庫不會多影片。
 
 ## 手動加入的影片：驗證分兩段，補資料是 best-effort
 
@@ -85,7 +115,7 @@ The rule, the reasoning, and edge cases.
 
 ## 影片的存取權以 userables 為準，不是來源訂閱
 
-`code:` `app/Models/Media.php` → `isAccessibleBy()` · `updated:` `2026-08-29` · `status:` `active`
+`code:` `app/Models/Media.php` → `isAccessibleBy()` · `updated:` `2026-11-02` · `status:` `active`
 
 判斷只有兩條，任一成立即可存取：
 
@@ -111,7 +141,7 @@ The rule, the reasoning, and edge cases.
 
 使用者可以**不訂閱任何來源、直接把單支影片加進影片庫**。那種影片在 `user_sources` 裡沒有對應的列，用來源訂閱判斷會誤判成無權存取。
 
-反過來也不對稱：訂閱來源時 `SubscriptionService::syncSourceMediaToUserables()` 會把該來源的影片寫進影片庫，**但受 30 天影片額度限制**——額度用完就一列都不寫。那些影片本來就沒進使用者的影片庫，自然也不該讀得到字幕或摘要。
+反過來也不對稱：訂閱來源**不會**把該來源的影片全部寫進影片庫——只寫使用者訂閱時勾選的、以及同步時間點之後才出現的新影片，而且受 30 天影片額度限制（見〈訂閱只收同步時間點之後的影片〉）。來源的舊影片、額度用完被跳過的新影片都不在使用者的影片庫裡，自然也不該讀得到字幕或摘要。
 
 ### 用詞陷阱
 

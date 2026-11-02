@@ -7,23 +7,20 @@ namespace App\Http\Controllers\API\V1;
 use App\Models\Source;
 use Hypervel\Http\Request;
 use OpenApi\Attributes as OAT;
-use App\Services\SourceService;
-use App\Services\YoutubeService;
 use App\OpenApi\Responses\HttpOk;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
 use App\OpenApi\Responses\Http404;
-use Hypervel\Support\Facades\Http;
+use App\OpenApi\Responses\Http422;
 use App\Validators\SourceValidator;
-use App\Services\SubscriptionService;
 use App\Http\Resources\SourceResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Exceptions\NotFoundHttpException;
 use App\OpenApi\Parameters\Path\SourceId;
 use App\Exceptions\InvalidRequestException;
+use App\Services\SourceSubscriptionService;
 use App\Http\Controllers\AbstractController;
 use App\Http\Resources\SourceDetailResource;
-use Hypervel\HttpClient\ConnectionException;
 use App\OpenApi\Schemas\SourceResource as SourceSchema;
 use Hypervel\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -90,6 +87,14 @@ class SourcesController extends AbstractController
                         type: 'boolean',
                         example: true
                     ),
+                    new OAT\Property(
+                        property: 'video_ids',
+                        description: 'Videos from the source\'s current RSS feed (GET /v1/sources/preview) to add to the library. '
+                            . 'Defaults to none; only videos first seen after subscribing are added later.',
+                        type: 'array',
+                        items: new OAT\Items(type: 'string', pattern: '^[A-Za-z0-9_-]{11}$', example: 'dQw4w9WgXcQ'),
+                        maxItems: 50
+                    ),
                 ]
             )
         ),
@@ -100,8 +105,8 @@ class SourcesController extends AbstractController
                 description: 'Source subscribed successfully',
                 content: new OAT\JsonContent(ref: SourceSchema::class)
             ),
-            new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http422::class, response: 422),
         ]
     )]
     /**
@@ -109,7 +114,7 @@ class SourcesController extends AbstractController
      */
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['url', 'type', 'notify']);
+        $params = $request->only(['url', 'type', 'notify', 'video_ids']);
 
         $v = new SourceValidator($params);
         $v->setStoreRules();
@@ -118,51 +123,15 @@ class SourcesController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        $notify = (bool) ($params['notify'] ?? true);
-        $youtubeService = app(YoutubeService::class);
-
-        if ($params['type'] === 'channel') {
-            [$externalId, $title, $dbType, $thumbnail] = $this->resolveChannel($params['url'], $youtubeService);
-        } else {
-            [$externalId, $title, $dbType, $thumbnail] = $this->resolvePlaylist($params['url'], $youtubeService);
-        }
-
-        $source = app(SourceService::class)->firstOrCreate($dbType, $externalId, $title, $thumbnail);
-
-        if ($dbType === Source::TYPE_YOUTUBE_CHANNEL && empty($source->metadata['subscriber_count'])) {
-            $stats = $youtubeService->getChannelStatistics($externalId);
-            if ($stats) {
-                $source->metadata = array_merge($source->metadata ?? [], $stats);
-                $source->save();
-            }
-        }
-
         $user = $request->user();
-        $alreadySubscribed = (bool) $user->sources()->find($source->id);
+        $service = app(SourceSubscriptionService::class);
 
-        if (!$alreadySubscribed) {
-            $subscriptionService = app(SubscriptionService::class);
-            $plan = $subscriptionService->getUserSubscriptionPlan(
-                $subscriptionService->getUserSubscription($user->id)
-            );
-
-            if ($plan !== null && $plan->channel_limit > 0 && $user->sources()->count() >= $plan->channel_limit) {
-                throw new InvalidRequestException(
-                    ['source' => [__('validators.controllers.sources.channel_limit_reached')]]
-                );
-            }
-        }
-
-        if ($alreadySubscribed) {
-            $user->sources()->updateExistingPivot($source->id, ['notify' => $notify]);
-        } else {
-            $user->sources()->attach($source->id, ['notify' => $notify]);
-        }
-
-        // Sync existing media from this source into userables so the 30-day
-        // quota is tracked correctly. Records are only added, never removed,
-        // preventing the add-then-delete exploit.
-        app(SubscriptionService::class)->syncSourceMediaToUserables($user, $source);
+        $source = $service->subscribe(
+            $user,
+            $service->resolve($params['type'], $params['url']),
+            (bool) ($params['notify'] ?? true),
+            array_values($params['video_ids'] ?? [])
+        );
 
         $attached = $user->sources()->find($source->id);
 
@@ -307,64 +276,5 @@ class SourcesController extends AbstractController
         $request->user()->sources()->detach($sourceId);
 
         return response()->make(self::RESPONSE_OK);
-    }
-
-    /**
-     * @return array{0: string, 1: string, 2: string, 3: null|string}
-     * @throws InvalidRequestException
-     */
-    private function resolveChannel(string $url, YoutubeService $youtubeService): array
-    {
-        $channelId = $youtubeService->getChannelIdFromUrl($url);
-
-        if (!$channelId) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        $rssUrl = app(SourceService::class)->buildRssUrl(Source::TYPE_YOUTUBE_CHANNEL, $channelId);
-
-        try {
-            $response = Http::get($rssUrl);
-            // PendingRequest::get() 會拋 ConnectionException（它的 @throws 有寫），但 Http
-            // facade 的 @method 沒帶 @throws，PHPStan 因此誤判成死碼。
-            // @phpstan-ignore catch.neverThrown
-        } catch (ConnectionException) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        if (!$response->successful()) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        $xml = simplexml_load_string($response->body());
-
-        if ($xml === false) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        $thumbnail = $youtubeService->getChannelThumbnail($channelId);
-
-        return [$channelId, (string) ($xml->title ?? 'No Title'), Source::TYPE_YOUTUBE_CHANNEL, $thumbnail];
-    }
-
-    /**
-     * @return array{0: string, 1: string, 2: string, 3: null|string}
-     * @throws InvalidRequestException
-     */
-    private function resolvePlaylist(string $url, YoutubeService $youtubeService): array
-    {
-        $playlistId = $youtubeService->getPlaylistIdFromUrl($url);
-
-        if (!$playlistId) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        $details = $youtubeService->getPlaylistDetails($playlistId);
-
-        if (!$details) {
-            throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
-        }
-
-        return [$playlistId, $details['title'], Source::TYPE_YOUTUBE_PLAYLIST, $details['thumbnail']];
     }
 }

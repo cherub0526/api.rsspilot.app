@@ -67,7 +67,7 @@ $media->summaries()
 
 ## `rss` 表已停用，別跟「YouTube RSS feed」搞混
 
-`code:` `database/migrations/2025_10_30_170450_create_rss_table.php` · `code:` `app/Services/RssFeedAsapService.php` · `updated:` `2026-09-10` · `status:` `active`
+`code:` `database/migrations/2025_10_30_170450_create_rss_table.php` · `code:` `app/Services/RssFeedAsapService.php` · `updated:` `2026-11-02` · `status:` `active`
 
 **`rss` 這張表是第一代的訂閱來源儲存，已經停用，由 `sources` 取代。不要再對它寫入、不要擴充它、也不要把殘留的 7 筆資料遷移過去。**
 
@@ -96,7 +96,7 @@ sources : id, type, external_id, title, url, thumbnail, description,
 「RSS」在這個專案有兩個完全無關的意思，混用會讓人以為某段程式碼碰到了停用的表：
 
 - **`rss` 表** —— 停用的第一代儲存（本條）
-- **YouTube 的 XML feed** —— `https://www.youtube.com/feeds/videos.xml?channel_id=...`，存在 `sources.url`，由 `Sources\Sync::fetchRssEntries()` 以 `Http::get()` 抓回來解析成 `media`。**這條路是活的，而且跟 `rss` 表零交集**——整個 `Sync` 指令裡一個 `rss` 字樣都沒有。
+- **YouTube 的 XML feed** —— `https://www.youtube.com/feeds/videos.xml?channel_id=...`，存在 `sources.url`，由 `App\Services\YoutubeRssFeed` 以 `Http::get()` 抓回來解析成 `media`（`sources:sync`、新增來源的預覽與訂閱共用）。**這條路是活的，而且跟 `rss` 表零交集**——整個 `Sync` 指令裡一個 `rss` 字樣都沒有。
 
 討論「RSS 同步」時指的一律是後者。
 

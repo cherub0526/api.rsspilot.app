@@ -103,7 +103,7 @@ class User extends Authenticatable
             $this->getKeyName(),
             $instance->getKeyName(),
             'sources'
-        ))->withTimestamps()->withPivot('notify');
+        ))->withTimestamps()->withPivot('notify', 'synced_at');
     }
 
     public function watchHistory(): HasMany

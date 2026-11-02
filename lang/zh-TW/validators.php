@@ -62,6 +62,7 @@ return [
             'invalid_url'           => '無效的 YouTube 網址。',
             'not_found'             => '找不到指定的來源。',
             'channel_limit_reached' => '已達到方案允許的頻道訂閱上限。',
+            'video_not_in_source'   => '勾選的影片有些不在這個來源目前的清單裡，請重新載入清單再試一次。',
         ],
         'subscription' => [
             'plan_not_found'           => '找不到指定的方案。',
@@ -217,6 +218,11 @@ return [
         'notify' => [
             'required' => '通知設定為必填。',
             'boolean'  => '通知設定必須是布林值。',
+        ],
+        'video_ids' => [
+            'array' => '勾選的影片必須是陣列。',
+            'max'   => '最多只能勾選 50 支影片。',
+            'regex' => '勾選的影片必須是 11 碼的 YouTube 影片 ID。',
         ],
     ],
     'subscription' => [

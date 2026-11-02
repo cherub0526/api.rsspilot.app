@@ -17,10 +17,12 @@ class UserSource extends Model
         'user_id',
         'source_id',
         'notify',
+        'synced_at',
     ];
 
     protected array $casts = [
-        'notify' => 'boolean',
+        'notify'    => 'boolean',
+        'synced_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
