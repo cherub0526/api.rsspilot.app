@@ -89,6 +89,30 @@ dispatch 而不是由指令撈狀態派工：
 `ai_model` 反推（`VideoTranscriberClient::SUMMARY_MODEL` 產的是來源摘要、
 OpenRouter 模型產的是翻譯），而且改標之後同一支 media 可能出現兩列 `en`。
 
+## 轉錄走哪組 API 記在每筆 media 上，取回時跟著記錄走
+
+`code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `startOpenApi` · `code:` `app/Jobs/Media/VideoTranscriberFetchJob.php` → `handle` · `code:` `app/Console/Commands/VideoTranscriber/Start.php` → `forgetIdempotencyKey` · `code:` `app/Services/VideoTranscriber/OpenApiTranscriptionProvider.php` · `updated:` `2026-11-03` · `status:` `active`
+
+`VIDEOTRANSCRIBER_PROVIDER`（`legacy`／`openapi`）**只在 StartJob 送出那一刻讀**，送出時把名稱寫進
+`video_transcriptions.start_transcription.provider`。FetchJob 與 ArchiveJob 只看這個記錄，不看設定：
+
+- 送出到取回之間改了設定，已送出的影片照原本的 provider 取回，新設定只影響之後送出的影片
+  （使用者 2026-11-03 決定）。兩組 API 的任務 id 互不相通，改用新設定去查一定查不到。
+- 沒有 `provider` 的舊資料一律當 legacy。
+- 設定是空字串時也當 legacy（pm 裁定），避免 Railway 上留了空變數就讓轉錄整個停擺；
+  其他不認得的值，`videotranscriber:start` 記 error log 並以非 0 結束、不派工。
+
+**Idempotency-Key（官方 OpenAPI）的保存與換新**：key 在送出**之前**就寫進
+`start_transcription.idempotency_key`。下一次送出（release 重試或排程重派）時，若該筆還沒有
+`data.audio_id` 就沿用同一個 key；拿到任務 id 之後，或 `videotranscriber:start --id=` 手動重送
+（指令會先清掉 key）才換新。
+
+- 為什麼先存：連線在送出後中斷時，對方可能已經建立任務並預留額度。沿用 key 會拿回同一個任務，
+  換新 key 等於再扣一次額度。
+- 為什麼 `--id` 要換：同一個 key 加同一個 body，對方會回原本那個（已失敗的）任務，人工重試就永遠
+  重試不了。key 若綁在 `video_transcriptions.id` 這種每筆 media 固定的值上，就會掉進這個坑。
+- 遇到 `insufficient_quota`、`idempotency_conflict` 一律標失敗，**不可**自動換 key 重送。
+
 ## 新增 queue 一定要同步開 worker，兩邊都要
 
 `code:` `.railway/railway.ts` · `code:` `supervisor/` · `updated:` `2026-09-13` · `status:` `active`

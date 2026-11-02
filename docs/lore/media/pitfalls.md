@@ -40,7 +40,10 @@ What breaks, why, and what to do instead.
 
 ## videotranscriber:start 沒有排進 schedule
 
-`code:` `app/Console/Kernel.php` → `schedule()` · `updated:` `2026-08-15` · `status:` `active`
+`code:` `app/Console/Kernel.php` → `schedule()` · `updated:` `2026-11-03` · `status:` `resolved`
+
+> 已解決：`Kernel::schedule()` 現在每分鐘跑 `videotranscriber:start`（以及 fetch、summarize），
+> 停在 `created` 的 media 會被排程撿起。新的建立路徑不必再自己 dispatch。以下保留當時的情況。
 
 `Kernel::schedule()` 目前只排了 `sources.sync`（每日 00:00）。`videotranscriber:start` 雖然會撈所有 `status = created` 的 media 送去轉錄，但**沒有任何排程會呼叫它**，只能手動執行。
 
