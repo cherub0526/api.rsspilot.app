@@ -6,8 +6,8 @@ namespace App\Console\Commands\Sources;
 
 use App\Models\User;
 use App\Models\Source;
-use App\Services\YoutubeRssFeed;
 use Hypervel\Console\Command;
+use App\Services\YoutubeRssFeed;
 use App\Services\SourceSubscriptionService;
 
 class Sync extends Command

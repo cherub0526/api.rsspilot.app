@@ -42,6 +42,7 @@ use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
+use App\Http\Controllers\API\V1\Sources\PreviewController as SourcePreviewController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\FollowUpsController as ChatFollowUpsController;
 use App\Http\Controllers\API\V1\Subscriptions\UsageController as SubscriptionUsageController;
@@ -229,6 +230,11 @@ Route::group('/sources', function () {
         'as'         => 'store',
         'uses'       => SourcesController::class . '@store',
         'middleware' => ['auth'],
+    ]);
+    Route::get('/preview', [
+        'as'         => 'preview.index',
+        'uses'       => SourcePreviewController::class . '@index',
+        'middleware' => ['auth', 'throttle:30,1'],
     ]);
     Route::get('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'         => 'show',

@@ -62,6 +62,7 @@ return [
             'invalid_url'           => 'Invalid YouTube URL.',
             'not_found'             => 'Source not found.',
             'channel_limit_reached' => 'You have reached the channel subscription limit for your plan.',
+            'video_not_in_source'   => 'Some selected videos are not in this source\'s current feed. Reload the list and try again.',
         ],
         'subscription' => [
             'plan_not_found'           => 'Plan not found.',
@@ -217,6 +218,11 @@ return [
         'notify' => [
             'required' => 'Notify setting is required.',
             'boolean'  => 'Notify setting must be a boolean.',
+        ],
+        'video_ids' => [
+            'array' => 'Selected videos must be a list.',
+            'max'   => 'You can select at most 50 videos.',
+            'regex' => 'Each selected video must be an 11-character YouTube video ID.',
         ],
     ],
     'subscription' => [

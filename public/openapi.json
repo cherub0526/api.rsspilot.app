@@ -2209,6 +2209,135 @@
                 ]
             }
         },
+        "/v1/sources/preview": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Preview the videos currently in a channel or playlist RSS feed before subscribing",
+                "operationId": "api.v1.sources.preview.index",
+                "parameters": [
+                    {
+                        "name": "url",
+                        "in": "query",
+                        "description": "YouTube channel or playlist URL",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "example": "https://www.youtube.com/@googledevelopers"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Source type",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "channel",
+                                "playlist"
+                            ],
+                            "example": "channel"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Source info, its RSS videos (newest first) and the remaining 30-day video quota",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "source": {
+                                            "properties": {
+                                                "title": {
+                                                    "type": "string",
+                                                    "example": "Google Developers"
+                                                },
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "channel",
+                                                        "playlist"
+                                                    ],
+                                                    "example": "channel"
+                                                },
+                                                "thumbnail": {
+                                                    "type": "string",
+                                                    "example": "https://yt3.ggpht.com/...",
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "videos": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "video_id": {
+                                                        "type": "string",
+                                                        "example": "dQw4w9WgXcQ"
+                                                    },
+                                                    "title": {
+                                                        "type": "string",
+                                                        "example": "EP710"
+                                                    },
+                                                    "thumbnail": {
+                                                        "type": "string",
+                                                        "example": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+                                                    },
+                                                    "published_at": {
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "example": "2026-11-01T10:00:00+00:00",
+                                                        "nullable": true
+                                                    },
+                                                    "in_library": {
+                                                        "description": "Already in the user's library",
+                                                        "type": "boolean",
+                                                        "example": false
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "quota": {
+                                            "description": "Both null when the plan has no video limit",
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "integer",
+                                                    "example": 30,
+                                                    "nullable": true
+                                                },
+                                                "remaining": {
+                                                    "type": "integer",
+                                                    "example": 12,
+                                                    "nullable": true
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/sources/{sourceId}/skill/download": {
             "get": {
                 "tags": [
@@ -2454,6 +2583,16 @@
                                         "description": "Enable email notification for new videos",
                                         "type": "boolean",
                                         "example": true
+                                    },
+                                    "video_ids": {
+                                        "description": "Videos from the source's current RSS feed (GET /v1/sources/preview) to add to the library. Defaults to none; only videos first seen after subscribing are added later.",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "pattern": "^[A-Za-z0-9_-]{11}$",
+                                            "example": "dQw4w9WgXcQ"
+                                        },
+                                        "maxItems": 50
                                     }
                                 },
                                 "type": "object"
@@ -2472,11 +2611,11 @@
                             }
                         }
                     },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
                     }
                 },
                 "security": [

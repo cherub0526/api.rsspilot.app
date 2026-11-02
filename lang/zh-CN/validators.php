@@ -62,6 +62,7 @@ return [
             'invalid_url'           => '无效的 YouTube 网址。',
             'not_found'             => '找不到指定的来源。',
             'channel_limit_reached' => '已达到方案允许的频道订阅上限。',
+            'video_not_in_source'   => '勾选的视频有些不在这个来源目前的列表里，请重新加载列表再试一次。',
         ],
         'subscription' => [
             'plan_not_found'           => '找不到指定的方案。',
@@ -217,6 +218,11 @@ return [
         'notify' => [
             'required' => '通知设置为必填。',
             'boolean'  => '通知设置必须是布尔值。',
+        ],
+        'video_ids' => [
+            'array' => '勾选的视频必须是数组。',
+            'max'   => '最多只能勾选 50 个视频。',
+            'regex' => '勾选的视频必须是 11 位的 YouTube 视频 ID。',
         ],
     ],
     'subscription' => [
