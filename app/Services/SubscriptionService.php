@@ -80,6 +80,27 @@ class SubscriptionService
     }
 
     /**
+     * 滾動 30 天影片額度還剩幾支；方案不限影片數（或查不到方案）回 null。
+     *
+     * 訂閱來源、`sources:sync` 與新增來源的預覽共用這個數字。
+     */
+    public function remainingVideoQuota(User $user): ?int
+    {
+        $plan = $this->getUserSubscriptionPlan($this->getUserSubscription($user->id));
+
+        if ($plan === null || $plan->video_limit <= 0) {
+            return null;
+        }
+
+        $usedCount = $user->media()
+            ->countsTowardQuota()
+            ->whereBetween('userables.created_at', [now()->subDays(30)->startOfDay(), now()->endOfDay()])
+            ->count();
+
+        return max(0, $plan->video_limit - $usedCount);
+    }
+
+    /**
      * Write media from a source into a user's userables, respecting their
      * 30-day video quota. Only new entries are inserted — existing ones are
      * never removed — so unsubscribing a source cannot reduce usage count.
