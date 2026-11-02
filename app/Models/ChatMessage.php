@@ -4,10 +4,20 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $session_id
+ * @property string $role
+ * @property string $content
+ * @property null|array $parts
+ * @property null|Carbon $created_at
+ * @property-read null|ChatSession $session
+ */
 class ChatMessage extends Model
 {
     use HasUlids;

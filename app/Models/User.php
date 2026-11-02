@@ -28,6 +28,7 @@ use Hypervel\Foundation\Auth\User as Authenticatable;
  * @property null|string $avatar
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ * @property-read null|Stripe $stripe
  */
 class User extends Authenticatable
 {
@@ -62,8 +63,6 @@ class User extends Authenticatable
     public const int NAME_MAX_LENGTH = 255;
 
     public const int AVATAR_MAX_LENGTH = 255;
-
-    protected array $with = ['paddle'];
 
     protected ?string $table = 'users';
 
@@ -130,11 +129,6 @@ class User extends Authenticatable
             'user_id',
             'media_id'
         )->withTimestamps();
-    }
-
-    public function paddle(): Builder|HasOne
-    {
-        return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     public function stripe(): Builder|HasOne

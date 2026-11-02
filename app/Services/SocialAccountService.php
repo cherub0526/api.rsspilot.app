@@ -48,7 +48,7 @@ class SocialAccountService
     private function firstOrCreateUser(string $provider, SocialiteUser $socialUser): User
     {
         $providerId = (string) $socialUser->getId();
-        $email      = $socialUser->getEmail();
+        $email = $socialUser->getEmail();
 
         $user = User::query()
             ->where('social_type', $provider)
@@ -72,7 +72,7 @@ class SocialAccountService
 
             if ($existing) {
                 $existing->update([
-                    'provider_id'       => $existing->provider_id ?? $providerId,
+                    'provider_id' => $existing->provider_id ?? $providerId,
                     // provider 驗過這個信箱，補上驗證時間讓他不必再跑一次驗證碼
                     'email_verified_at' => $existing->email_verified_at ?? now(),
                 ]);
@@ -84,13 +84,13 @@ class SocialAccountService
         // 密碼欄位不可為 null，但社群帳號永遠不會走密碼登入；沿用 GoogleController
         // 既有做法以 provider_id 雜湊填充，讓兩支端點建出來的使用者形狀一致。
         return User::create([
-            'account'           => $providerId,
-            'password'          => bcrypt($providerId),
-            'name'              => $this->truncate($socialUser->getName(), User::NAME_MAX_LENGTH),
-            'email'             => $email,
-            'social_type'       => $provider,
-            'provider_id'       => $providerId,
-            'avatar'            => $this->truncate($socialUser->getAvatar(), User::AVATAR_MAX_LENGTH),
+            'account'     => $providerId,
+            'password'    => bcrypt($providerId),
+            'name'        => $this->truncate($socialUser->getName(), User::NAME_MAX_LENGTH),
+            'email'       => $email,
+            'social_type' => $provider,
+            'provider_id' => $providerId,
+            'avatar'      => $this->truncate($socialUser->getAvatar(), User::AVATAR_MAX_LENGTH),
             // 社群註冊不需要走驗證碼——provider 已經驗過信箱
             'email_verified_at' => now(),
         ]);

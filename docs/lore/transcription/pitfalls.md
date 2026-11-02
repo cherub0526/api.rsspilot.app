@@ -175,7 +175,8 @@ API 說 not found 之後照樣抓得到：`transcript_url`、`origin_transcript_
 
 **例外是匯出的 mp3。**2026-09-18 實測另一支五天前的 media：逐字稿與字幕全部照抓，
 `extra_data.video_audio_data.audio_url` 卻回 404。所以這一則的結論要收窄成「**字幕與
-逐字稿留得住，匯出的音檔不保證**」——要靠歸檔重建音檔的話，那條路可能是斷的。
+逐字稿留得住，匯出的音檔不保證**」。（2026-10-31 起歸檔已經不碰音檔，見
+`business-rules.md`〈不下載、不保存、不轉散影片或音訊〉。）
 
 （`VideoTranscriberArchiveJob` 因此把 404／410 當成「這個資產沒了」而不是失敗，不然
 整批會為了一個永遠抓不到的檔案重試到 `MAX_ATTEMPTS` 為止。）

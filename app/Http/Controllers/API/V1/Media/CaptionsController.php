@@ -10,6 +10,7 @@ use OpenApi\Attributes as OAT;
 use App\OpenApi\Parameters\Path;
 use App\OpenApi\Responses\Http400;
 use App\OpenApi\Responses\Http401;
+use App\OpenApi\Responses\Http404;
 use App\Http\Resources\CaptionResource;
 use Psr\Http\Message\ResponseInterface;
 use App\Services\Export\CaptionExporter;
@@ -105,6 +106,7 @@ class CaptionsController
             ),
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
         ]
     )]
     public function show(Request $request, string $mediaId, string $captionId): CaptionResource
@@ -134,6 +136,7 @@ class CaptionsController
     #[OAT\Get(
         path: '/v1/media/{mediaId}/captions/{captionId}/download',
         operationId: 'api.v1.media.captions.download',
+        description: 'Responds 404 while transcript downloads are turned off on this server.',
         summary: 'Download a caption as a subtitle file',
         security: [['bearerAuth' => []]],
         tags: ['Media'],
@@ -155,6 +158,7 @@ class CaptionsController
             ),
             new OAT\Response(ref: Http400::class, response: 400),
             new OAT\Response(ref: Http401::class, response: 401),
+            new OAT\Response(ref: Http404::class, response: 404),
         ]
     )]
     public function download(Request $request, string $mediaId, string $captionId): ResponseInterface

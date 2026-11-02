@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature\API\V1\Media;
 
-use App\Models\ChatMessage;
-use Hypervel\Foundation\Testing\RefreshDatabase;
-use Hypervel\Support\Facades\DB;
 use Tests\TestCase;
+use App\Models\ChatMessage;
+use Hypervel\Support\Facades\DB;
+use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
  * 訊息片段結構。功能（thinking / tool_call 的實際產生）尚未實作，

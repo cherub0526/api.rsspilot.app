@@ -4,11 +4,21 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use App\Relations\UlidBelongsToMany;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $user_id
+ * @property string $title
+ * @property string $content
+ * @property null|string $model_id
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ */
 class CustomPrompt extends Model
 {
     use HasUlids;

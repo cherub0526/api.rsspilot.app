@@ -1,12 +1,10 @@
 # Supervisor configs
 
-One file per queue. Supervisor programs address **queues**, not job classes, so
-`media.caption` gets a single file even though two jobs share it.
+One file per queue. Supervisor programs address **queues**, not job classes.
 
 | File | Queue | Job(s) | `--timeout` |
 |------|-------|--------|-------------|
-| `media-info.conf` | `media.info` | `InfoJob` | 120 |
-| `media-caption.conf` | `media.caption` | `CaptionJob`, `YoutubeCaptionJob` | 120 |
+| `media-caption.conf` | `media.caption` | `YoutubeCaptionJob` | 120 |
 | `media-youtube-data-caption.conf` | `media.youtube-data-caption` | `YoutubeDataCaptionJob` | 120 |
 | `media-summary.conf` | `media.summary` | `SummaryJob` | 300 |
 | `media-summary-translation.conf` | `media.summary-translation` | `SummaryTranslationJob` | 120 |
@@ -15,6 +13,7 @@ One file per queue. Supervisor programs address **queues**, not job classes, so
 | `videotranscriber-fetch.conf` | `videotranscriber.fetch` | `VideoTranscriberFetchJob` | 120 |
 | `videotranscriber-smart-summary.conf` | `videotranscriber.smart-summary` | `VideoTranscriberSmartSummaryJob` | 300 |
 | `videotranscriber-archive.conf` | `videotranscriber.archive` | `VideoTranscriberArchiveJob` | 300 |
+| `sources-skill.conf` | `sources.skill` | `GenerateSourceSkillJob` | 300 |
 
 ## The two rules that must hold
 

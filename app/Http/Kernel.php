@@ -9,6 +9,7 @@ use App\Http\Middleware\Authenticate;
 use Hypervel\Auth\Middleware\Authorize;
 use Hypervel\Http\Middleware\HandleCors;
 use App\Http\Middleware\ValidateSignature;
+use App\Http\Middleware\EnsureFeatureEnabled;
 use Hypervel\Router\Middleware\ThrottleRequests;
 use Hypervel\Foundation\Http\Kernel as HttpKernel;
 use Hypervel\Router\Middleware\SubstituteBindings;
@@ -63,6 +64,7 @@ class Kernel extends HttpKernel
         'throttle' => ThrottleRequests::class,
         'bindings' => SubstituteBindings::class,
         'signed'   => ValidateSignature::class,
+        'feature'  => EnsureFeatureEnabled::class,
     ];
 
     /**

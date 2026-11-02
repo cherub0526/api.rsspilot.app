@@ -131,6 +131,27 @@ trait ResolvesUserPlan
     }
 
     /**
+     * 頻道 Skill 的完整內容、下載與安裝是 Pro 以上的功能。
+     *
+     * 判準與其他旗標相同，用 plans.skill_enabled 而不是方案名稱。沒有方案時一併
+     * 擋下：無從判斷權益的預設是不給。
+     *
+     * @throws InvalidRequestException
+     */
+    protected function assertSkillEnabled(Request $request): void
+    {
+        $plan = $this->userPlan($request);
+
+        if ($plan !== null && (bool) $plan->getAttribute('skill_enabled')) {
+            return;
+        }
+
+        throw new InvalidRequestException(
+            ['plan' => [__('validators.controllers.source_skill.plan_required')]]
+        );
+    }
+
+    /**
      * 送進來的模型必須存在、開放選用，而且是這個使用者的方案有授權的，
      * 否則一律回 null 當成「不指定」。
      *

@@ -23,15 +23,20 @@ return [
             'name'          => 'API key 名稱必填，且不可超過 60 個字。',
             'limit'         => '最多只能建立 :max 把 API key，請先刪除不用的。',
         ],
+        'source_skill' => [
+            'plan_required' => '下載頻道 Skill 需要升級方案。',
+            'not_ready'     => '這個 Skill 還沒準備好，產生完成後就能下載。',
+            'format'        => '不支援這個下載格式。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自訂 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '試跑失敗，請稍後再試或調整提示內容。',
         ],
         'media' => [
-            'not_found'           => '找不到指定的媒體。',
-            'caption_not_found'   => '找不到指定的字幕。',
-            'invalid_url'         => '無效的 YouTube 影片網址。',
-            'video_limit_reached' => '已達到方案允許的影片數量上限。',
+            'not_found'             => '找不到指定的媒體。',
+            'caption_not_found'     => '找不到指定的字幕。',
+            'invalid_url'           => '無效的 YouTube 影片網址。',
+            'video_limit_reached'   => '已達到方案允許的影片數量上限。',
             'no_public_captions'    => '這支影片在 YouTube 上沒有公開字幕，暫時無法加入。',
             'captions_check_failed' => '目前無法確認這支影片是否有公開字幕，請稍後再試。',
         ],
@@ -68,16 +73,13 @@ return [
             'checkout_not_confirmable' => '目前無法確認這筆結帳。若已完成付款，方案稍後會自動更新。',
             'already_subscribed'       => '你已經有訂閱中的方案。如需更換方案，請聯絡客服。',
             'cancel_unavailable'       => '找不到此訂閱在金流商的紀錄，請聯絡客服處理。',
-            'paddle_disabled'          => '目前暫停使用 Paddle 付款，請改用其他付款方式。',
         ],
         'webhook' => [
-            'paddle' => [
-                'transaction_not_completed' => '交易狀態未完成。',
-                'sync_failed'               => '與 Paddle 同步訂閱失敗。',
-                'ip_not_allowed'            => '來源 IP 不在允許清單內。',
-            ],
             'creem' => [
                 'malformed_payload' => 'Creem webhook 內容格式錯誤。',
+            ],
+            'clink' => [
+                'malformed_payload' => 'Clink webhook 內容格式錯誤。',
             ],
         ],
     ],
@@ -267,27 +269,6 @@ return [
             ],
         ],
     ],
-    'paddle' => [
-        'event_id' => [
-            'required' => '事件 ID 為必填項。',
-        ],
-        'event_type' => [
-            'required' => '事件類型為必填項。',
-            'in'       => '無效的事件類型。',
-        ],
-        'occurred_at' => [
-            'required' => '發生時間為必填項。',
-        ],
-        'notification_id' => [
-            'required' => '通知 ID 為必填項。',
-        ],
-        'data' => [
-            'required' => '資料欄位為必填項。',
-            'id'       => [
-                'required' => '資料 ID 為必填項。',
-            ],
-        ],
-    ],
 
     'settings' => [
         'locale' => [
@@ -299,23 +280,6 @@ return [
             'language' => [
                 'required' => 'ai.language 欄位為必填項。',
                 'in'       => '所選的 ai.language 無效。',
-            ],
-        ],
-    ],
-
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'status 欄位為必填項。',
-            'in'       => '所選的 status 無效。',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'data.status 欄位為必填項。',
-                'in'       => '所選的 data.status 無效。',
-            ],
-            'link' => [
-                'required'   => 'data.link 欄位為必填項。',
-                'active_url' => 'data.link 不是有效的可存取網址。',
             ],
         ],
     ],

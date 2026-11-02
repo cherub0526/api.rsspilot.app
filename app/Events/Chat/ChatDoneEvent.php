@@ -9,5 +9,6 @@ class ChatDoneEvent
     public function __construct(
         public readonly string $userId,
         public readonly string $mediaId,
-    ) {}
+    ) {
+    }
 }

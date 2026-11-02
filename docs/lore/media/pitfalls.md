@@ -32,7 +32,7 @@ What breaks, why, and what to do instead.
 
 `code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `handle()`、`app/Jobs/Media/YoutubeCaptionJob.php` → `handle()` · `updated:` `2026-08-15` · `status:` `active`
 
-`VideoTranscriberStartJob`、`YoutubeCaptionJob`、`InfoJob` 與 `MediaResource` 都以 `$media->video_detail['yt:videoId']` 取影片 ID，前三者**沒有 null 檢查**。
+`VideoTranscriberStartJob`、`YoutubeCaptionJob` 與 `MediaResource` 都以 `$media->video_detail['yt:videoId']` 取影片 ID，前兩者**沒有 null 檢查**。
 
 也就是說：任何新的 media 建立途徑，`video_detail` 都必須至少帶 `yt:videoId`，否則 job 一跑就 crash，而且是在 queue 裡炸、不是在請求裡。`MediaController::store()` 因此把 `video_detail` 組成與 RSS 相容的形狀，不是為了好看。
 

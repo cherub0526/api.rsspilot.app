@@ -14,8 +14,13 @@ use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 
 /**
- * Pull every asset videotranscriber.ai produced for a media onto our own S3,
- * next to the response that lists them.
+ * Pull the transcript and subtitle files videotranscriber.ai produced for a
+ * media onto our own S3, next to the response that lists them.
+ *
+ * **Never the audio.** The response also lists an exported mp3
+ * (`extra_data.video_audio_data.audio_url`); we do not download, store or
+ * redistribute video or audio, so that URL is left alone
+ * (docs/lore/transcription/business-rules.md).
  *
  * Why this is worth a job of its own: the service drops a transcription record
  * after roughly a month — `getTranscription()` then answers `100027 not
@@ -26,8 +31,8 @@ use Hypervel\Queue\Contracts\ShouldBeUnique;
  * Why not inside VideoTranscriberFetchJob: that job already spends 3-4 external
  * calls per run and a timeout there does not kill the job, it SIGKILLs the
  * whole worker and leaves an orphaned unique lock behind
- * (docs/lore/transcription/pitfalls.md). Seven more downloads, one of them a
- * ~13MB mp3, would make that a routine event instead of a rare one.
+ * (docs/lore/transcription/pitfalls.md). Six more downloads would make that
+ * a routine event instead of a rare one.
  */
 class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
 {
@@ -42,10 +47,10 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
     protected const int RETRY_DELAY_SECONDS = 120;
 
     /**
-     * Generous because of the audio: a full episode's mp3 runs to tens of MB,
-     * which is a different order of transfer from the JSON files.
+     * Every asset is a JSON file of a few hundred KB at most. The 60s this
+     * used to be was sized for the mp3 the job no longer touches.
      */
-    protected const int DOWNLOAD_TIMEOUT_SECONDS = 60;
+    protected const int DOWNLOAD_TIMEOUT_SECONDS = 20;
 
     /**
      * Stop starting new downloads past this point and finish the rest on the
@@ -54,10 +59,11 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      * The arithmetic this has to satisfy: the worker serving this queue runs
      * at `--timeout=300`, and in Hypervel a job that exceeds it does not fail
      * on its own — the worker SIGKILLs itself and leaves the unique lock
-     * behind (docs/lore/transcription/pitfalls.md). Seven assets at 60s each
-     * is 420s worst case, well past that. With this budget the worst case is
-     * one download starting at 179s and running its full 60s: 240s, inside
-     * the worker's limit. Raising either constant means re-checking that sum.
+     * behind (docs/lore/transcription/pitfalls.md). Six assets at 20s each
+     * is 120s of downloads, so the budget only bites when the S3 writes stall
+     * too; even then the worst case is one download starting at 179s and
+     * running its full 20s: 200s, inside the worker's limit. Raising either
+     * constant means re-checking that sum.
      */
     protected const int TIME_BUDGET_SECONDS = 180;
 
@@ -77,8 +83,6 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
     protected const string BASE_PATH = 'videotranscriber.ai/%s';
 
     protected const string PAYLOAD_FILE = 'transcribe.json';
-
-    protected const string AUDIO_FILE = 'audio.mp3';
 
     /**
      * Every version the service exposes, archived regardless of which one the
@@ -223,12 +227,6 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
             }
         }
 
-        $audioUrl = $data['extra_data']['video_audio_data']['audio_url'] ?? null;
-
-        if (is_string($audioUrl) && $audioUrl !== '') {
-            $assets[self::AUDIO_FILE] = $audioUrl;
-        }
-
         return $assets;
     }
 
@@ -248,7 +246,7 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
             if (in_array($response->status(), self::GONE_STATUSES, true)) {
                 // 重試救不回一個已經不存在的檔案。不當成失敗，否則整批會為了它
                 // 重跑到 MAX_ATTEMPTS 為止（實測 2026-09-18：一支五天前的 media，
-                // 逐字稿與字幕都還在、匯出的 mp3 已經 404，於是整批重試五次、
+                // 逐字稿與字幕都還在、當時還會歸檔的 mp3 已經 404，於是整批重試五次、
                 // 在 log 裡留下五筆一模一樣的 warning，而該抓的東西第一次就抓完了）。
                 Log::warning('A videotranscriber.ai asset is gone; archiving without it.', [
                     'media_id' => $this->media->id,

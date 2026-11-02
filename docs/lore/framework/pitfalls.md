@@ -302,7 +302,7 @@ singleton / static / 容器層的狀態，那一層兩個 runner 條件相同，
 
 ## request body 的 stream 不能 seek，凡是 `rewind()` 的第三方程式碼都會炸
 
-`code:` `app/Http/Controllers/API/V1/Webhook/PaddleController.php` → `assertValidSignature` · `updated:` `2026-09-10` · `status:` `active`
+`code:` `app/Http/Controllers/API/V1/Webhook/CreemController.php` → `store` · `updated:` `2026-10-31` · `status:` `active`
 
 Swoole 的請求 body 是 `Hyperf\HttpMessage\Stream\SwooleStream`，**不可 seek**。任何對它呼叫 `rewind()` / `seek()` 的程式碼都會拿到：
 
@@ -310,15 +310,15 @@ Swoole 的請求 body 是 `Hyperf\HttpMessage\Stream\SwooleStream`，**不可 se
 RuntimeException: Cannot seek a SwooleStream
 ```
 
-實際踩到的是 Paddle SDK 的官方驗簽器 `Paddle\SDK\Notifications\Verifier`——它在算雜湊之前會 `$request->getBody()->rewind()`，而 `Hypervel\Http\Request` 確實實作了 PSR-7 的 `RequestInterface`，型別上完全吃得下，所以問題不會在編譯期出現，而是**每一個 webhook 都變成 500**。
+實際踩到的是 Paddle SDK 的官方驗簽器 `Paddle\SDK\Notifications\Verifier`（Paddle 整合已於 2026-10 移除，教訓仍適用）——它在算雜湊之前會 `$request->getBody()->rewind()`，而 `Hypervel\Http\Request` 確實實作了 PSR-7 的 `RequestInterface`，型別上完全吃得下，所以問題不會在編譯期出現，而是**每一個 webhook 都變成 500**。
 
-**能用的寫法是直接讀，不要 rewind**：`(string) $request->getBody()` 沒有問題（`Webhook\StripeController` 一直都是這樣拿 raw payload 的）。Paddle 那邊改成用 SDK 的底層 `PaddleSignature::parse()` + `->verify($rawBody, $secret)`，雜湊與演算法協商仍由 SDK 負責，只有「怎麼拿 body」自己處理。
+**能用的寫法是直接讀，不要 rewind**：`(string) $request->getBody()` 沒有問題（`Webhook\StripeController` 與 `Webhook\CreemController` 都是這樣拿 raw payload 的）。當時 Paddle 那邊改成用 SDK 的底層 `PaddleSignature::parse()` + `->verify($rawBody, $secret)`，只有「怎麼拿 body」自己處理。
 
 判準：**引入任何吃 PSR-7 request 的第三方函式庫之前，先確認它有沒有 rewind body。** 型別相容不代表能跑。
 
 ## `$this->json('POST', ...)` 送的不是 JSON，是 form-urlencoded
 
-`code:` `tests/Feature/API/V1/Webhook/PaddleControllerTest.php` → `send` · `updated:` `2026-09-10` · `status:` `active`
+`code:` `tests/Feature/API/V1/Webhook/CreemControllerTest.php` → `send` · `updated:` `2026-10-31` · `status:` `active`
 
 `MakesHttpRequests::json($method, $uri, $data, $headers)` 會轉呼叫 `$client->{$method}(...)`，也就是 **`TestClient::post()`**，而它送的是 `form_params`——body 最後是 `http_build_query($data)`：
 

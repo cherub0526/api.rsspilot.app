@@ -83,7 +83,7 @@ return new class extends BaseMigration {
         }
 
         if ($driver !== 'pgsql') {
-            throw new \RuntimeException(
+            throw new RuntimeException(
                 "custom_prompts.id 仍是整數，但這支 migration 只實作了 Postgres 的轉換（目前 driver：{$driver}）。"
             );
         }

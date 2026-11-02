@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\API\V1\Users;
 
-use App\Models\ChatMessage;
-use App\Models\ChatSession;
+use Tests\TestCase;
+use App\Models\User;
 use App\Models\Media;
 use App\Models\Source;
-use App\Models\User;
+use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use Hypervel\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
 /**
  * @internal
@@ -52,7 +52,7 @@ class SessionsControllerTest extends TestCase
     public function testIndexOnlyReturnsCurrentUserSessions(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $other = User::factory()->create();
         $media = Media::factory()->create();
 
@@ -71,7 +71,7 @@ class SessionsControllerTest extends TestCase
     public function testIndexReturnsByCreatedAtDesc(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $media = Media::factory()->create();
 
         $older = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'Older']);
@@ -92,9 +92,9 @@ class SessionsControllerTest extends TestCase
     public function testIndexReturnsExpectedStructure(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $source  = Source::factory()->create(['free' => true]);
-        $media   = Media::factory()->create(['source_id' => $source->id]);
+        $user = $this->fakeLogin();
+        $source = Source::factory()->create(['free' => true]);
+        $media = Media::factory()->create(['source_id' => $source->id]);
         $session = ChatSession::create([
             'user_id'  => $user->id,
             'media_id' => $media->id,
@@ -102,7 +102,7 @@ class SessionsControllerTest extends TestCase
         ]);
 
         ChatMessage::create(['session_id' => $session->id, 'role' => 'user', 'content' => 'Hello', 'created_at' => now()]);
-        ChatMessage::create(['session_id' => $session->id, 'role' => 'ai',   'content' => 'World', 'created_at' => now()->addSecond()]);
+        ChatMessage::create(['session_id' => $session->id, 'role' => 'ai', 'content' => 'World', 'created_at' => now()->addSecond()]);
 
         $this->json('GET', route('api.v1.users.sessions.index'))
             ->assertStatus(200)
@@ -124,8 +124,8 @@ class SessionsControllerTest extends TestCase
     public function testIndexReturnsLastTwoMessagesOnly(): void
     {
         /** @var User $user */
-        $user    = $this->fakeLogin();
-        $media   = Media::factory()->create();
+        $user = $this->fakeLogin();
+        $media = Media::factory()->create();
         $session = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
         foreach (range(1, 5) as $i) {
@@ -151,7 +151,7 @@ class SessionsControllerTest extends TestCase
     public function testIndexIncludesMediaInfo(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $media = Media::factory()->create(['title' => 'My Video']);
         ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id]);
 
@@ -179,7 +179,7 @@ class SessionsControllerTest extends TestCase
     public function testDestroyDeletesAllUserSessionsAndReturns204(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $media = Media::factory()->create();
 
         $session1 = ChatSession::create(['user_id' => $user->id, 'media_id' => $media->id, 'title' => 'S1']);
@@ -209,7 +209,7 @@ class SessionsControllerTest extends TestCase
     public function testDestroyDoesNotAffectOtherUsersSessions(): void
     {
         /** @var User $user */
-        $user  = $this->fakeLogin();
+        $user = $this->fakeLogin();
         $other = User::factory()->create();
         $media = Media::factory()->create();
 

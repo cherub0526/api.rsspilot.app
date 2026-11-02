@@ -325,6 +325,9 @@ class SourcesController extends AbstractController
 
         try {
             $response = Http::get($rssUrl);
+            // PendingRequest::get() 會拋 ConnectionException（它的 @throws 有寫），但 Http
+            // facade 的 @method 沒帶 @throws，PHPStan 因此誤判成死碼。
+            // @phpstan-ignore catch.neverThrown
         } catch (ConnectionException) {
             throw new InvalidRequestException(['url' => [__('validators.controllers.sources.invalid_url')]]);
         }

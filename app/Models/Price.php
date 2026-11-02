@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\Builder;
+use Hypervel\Database\Eloquent\Collection;
 use Hypervel\Database\Eloquent\SoftDeletes;
 use Hypervel\Database\Eloquent\Relations\HasOne;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
@@ -12,6 +14,20 @@ use Hypervel\Database\Eloquent\Relations\HasMany;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property string $plan_id
+ * @property string $unit
+ * @property string $price
+ * @property null|string $first_period_price
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ * @property-read null|Plan $plan
+ * @property-read null|Stripe $stripe
+ * @property-read Collection<int, Creem> $creem
+ * @property-read Collection<int, Clink> $clink
+ */
 class Price extends Model
 {
     use HasUlids;
@@ -31,8 +47,6 @@ class Price extends Model
         self::UNIT_QUARTERLY => '每季',
         self::UNIT_ANNUALLY  => '每年',
     ];
-
-    protected array $with = ['paddle'];
 
     protected ?string $table = 'prices';
 
@@ -56,11 +70,6 @@ class Price extends Model
         return $this->belongsTo(Plan::class, 'plan_id', 'id');
     }
 
-    public function paddle(): Builder|HasOne
-    {
-        return $this->hasOne(Paddle::class, 'foreign_id', 'id')->where('foreign_type', self::class);
-    }
-
     public function stripe(): Builder|HasOne
     {
         return $this->hasOne(Stripe::class, 'foreign_id', 'id')->where('foreign_type', self::class);
@@ -76,6 +85,17 @@ class Price extends Model
     public function creem(): Builder|HasMany
     {
         return $this->hasMany(Creem::class, 'foreign_id', 'id')->where('foreign_type', self::class);
+    }
+
+    /**
+     * 這個 price 在 Clink 上的 price 們（standard / trial 兩個變體）。
+     *
+     * 理由同 creem()：Clink 的試用期綁在 price 上且結帳時不可覆寫。取用時一定要帶
+     * variant 過濾，見 ClinkSubscriptionService::priceIdFor()。
+     */
+    public function clink(): Builder|HasMany
+    {
+        return $this->hasMany(Clink::class, 'foreign_id', 'id')->where('foreign_type', self::class);
     }
 
     /**
@@ -97,8 +117,7 @@ class Price extends Model
     /**
      * 這個 price 送幾天免費試用；不送的話為 null。
      *
-     * 免費方案不送——$0 掛試用期沒有意義，而且會讓訂閱狀態多一種 trialing 要處理
-     * （Paddle 那條路也是這樣判，見 `Paddle\Sync::trialPeriodFor()`）。
+     * 免費方案不送——$0 掛試用期沒有意義，而且會讓訂閱狀態多一種 trialing 要處理。
      *
      * 設了首期折價的 price 也不送：那時改走折扣碼那條路，兩種優惠互斥
      * （見 `CreemSubscriptionService::grantsTrial()`）。這裡跟著回 null，定價頁

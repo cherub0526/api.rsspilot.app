@@ -63,4 +63,32 @@ class PlansControllerTest extends TestCase
         $ids = collect($response->json('data'))->pluck('id')->values();
         $this->assertEquals($first->id, $ids->first());
     }
+
+    /**
+     * channel-skill S06 前置：定價表與前端閘門讀 skill_enabled 判斷誰能用頻道 Skill。
+     */
+    public function testS06IndexExposesSkillEnabled(): void
+    {
+        config(['features.channel_skill' => true]);
+
+        $pro = Plan::withoutEvents(fn () => Plan::factory()->create([
+            'status'        => Plan::STATUS_ACTIVE,
+            'sort'          => 1,
+            'skill_enabled' => true,
+        ]));
+        Price::withoutEvents(fn () => Price::factory()->create(['plan_id' => $pro->id]));
+
+        $free = Plan::withoutEvents(fn () => Plan::factory()->create([
+            'status' => Plan::STATUS_ACTIVE,
+            'sort'   => 0,
+        ]));
+        Price::withoutEvents(fn () => Price::factory()->create(['plan_id' => $free->id]));
+
+        $plans = collect(
+            $this->json('GET', route('api.v1.plans.index'))->assertStatus(200)->json('data')
+        )->keyBy('id');
+
+        $this->assertTrue($plans[$pro->id]['skill_enabled']);
+        $this->assertFalse($plans[$free->id]['skill_enabled']);
+    }
 }

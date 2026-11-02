@@ -23,15 +23,20 @@ return [
             'name'          => 'API key 名称必填，且不可超过 60 个字。',
             'limit'         => '最多只能创建 :max 把 API key，请先删除不用的。',
         ],
+        'source_skill' => [
+            'plan_required' => '下载频道 Skill 需要升级方案。',
+            'not_ready'     => '这个 Skill 还没准备好，生成完成后即可下载。',
+            'format'        => '不支持这个下载格式。',
+        ],
         'custom_prompts' => [
             'plan_required'  => '自定义 AI 摘要需要 Pro 以上的方案。',
             'preview_failed' => '试跑失败，请稍后再试或调整提示内容。',
         ],
         'media' => [
-            'not_found'           => '找不到指定的媒体。',
-            'caption_not_found'   => '找不到指定的字幕。',
-            'invalid_url'         => '无效的 YouTube 影片网址。',
-            'video_limit_reached' => '已达到方案允许的影片数量上限。',
+            'not_found'             => '找不到指定的媒体。',
+            'caption_not_found'     => '找不到指定的字幕。',
+            'invalid_url'           => '无效的 YouTube 影片网址。',
+            'video_limit_reached'   => '已达到方案允许的影片数量上限。',
             'no_public_captions'    => '这个视频在 YouTube 上没有公开字幕，暂时无法添加。',
             'captions_check_failed' => '目前无法确认这个视频是否有公开字幕，请稍后再试。',
         ],
@@ -68,16 +73,13 @@ return [
             'checkout_not_confirmable' => '目前无法确认这笔结账。若已完成付款，方案稍后会自动更新。',
             'already_subscribed'       => '你已经有订阅中的方案。如需更换方案，请联系客服。',
             'cancel_unavailable'       => '找不到此订阅在支付服务商的记录，请联系客服处理。',
-            'paddle_disabled'          => '目前暂停使用 Paddle 付款，请改用其他付款方式。',
         ],
         'webhook' => [
-            'paddle' => [
-                'transaction_not_completed' => '交易状态未完成。',
-                'sync_failed'               => '与 Paddle 同步订阅失败。',
-                'ip_not_allowed'            => '来源 IP 不在允许清单内。',
-            ],
             'creem' => [
                 'malformed_payload' => 'Creem webhook 内容格式错误。',
+            ],
+            'clink' => [
+                'malformed_payload' => 'Clink webhook 内容格式错误。',
             ],
         ],
     ],
@@ -268,28 +270,6 @@ return [
         ],
     ],
 
-    'paddle' => [
-        'event_id' => [
-            'required' => '事件 ID 为必填项。',
-        ],
-        'event_type' => [
-            'required' => '事件类型为必填项。',
-            'in'       => '无效的事件类型。',
-        ],
-        'occurred_at' => [
-            'required' => '发生时间为必填项。',
-        ],
-        'notification_id' => [
-            'required' => '通知 ID 为必填项。',
-        ],
-        'data' => [
-            'required' => '数据字段为必填项。',
-            'id'       => [
-                'required' => '数据 ID 为必填项。',
-            ],
-        ],
-    ],
-
     'settings' => [
         'locale' => [
             'required' => '请选择界面语系。',
@@ -300,23 +280,6 @@ return [
             'language' => [
                 'required' => 'ai.language 字段为必填项。',
                 'in'       => '所选的 ai.language 无效。',
-            ],
-        ],
-    ],
-
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'status 字段为必填项。',
-            'in'       => '所选的 status 无效。',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'data.status 字段为必填项。',
-                'in'       => '所选的 data.status 无效。',
-            ],
-            'link' => [
-                'required'   => 'data.link 字段为必填项。',
-                'active_url' => 'data.link 不是有效的可访问网址。',
             ],
         ],
     ],

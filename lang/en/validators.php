@@ -23,15 +23,20 @@ return [
             'name'          => 'A name is required and must not exceed 60 characters.',
             'limit'         => 'You can keep at most :max API keys. Delete one you no longer use.',
         ],
+        'source_skill' => [
+            'plan_required' => 'Downloading channel skills requires an upgrade.',
+            'not_ready'     => 'This skill isn\'t ready yet. You can download it once it\'s generated.',
+            'format'        => 'This download format isn\'t supported.',
+        ],
         'custom_prompts' => [
             'plan_required'  => 'Custom AI summaries require a Pro plan or above.',
             'preview_failed' => 'The test run failed, please retry or adjust the prompt.',
         ],
         'media' => [
-            'not_found'           => 'Media not found.',
-            'caption_not_found'   => 'Caption not found.',
-            'invalid_url'         => 'Invalid YouTube video URL.',
-            'video_limit_reached' => 'You have reached the video limit for your plan.',
+            'not_found'             => 'Media not found.',
+            'caption_not_found'     => 'Caption not found.',
+            'invalid_url'           => 'Invalid YouTube video URL.',
+            'video_limit_reached'   => 'You have reached the video limit for your plan.',
             'no_public_captions'    => 'This video has no public captions on YouTube, so it cannot be added yet.',
             'captions_check_failed' => 'We could not check whether this video has public captions. Please try again later.',
         ],
@@ -68,16 +73,13 @@ return [
             'checkout_not_confirmable' => 'We could not confirm this checkout yet. If you completed payment, your plan will update shortly.',
             'already_subscribed'       => 'You already have an active subscription. To change plans, please contact support.',
             'cancel_unavailable'       => 'We could not find this subscription with the payment provider. Please contact support.',
-            'paddle_disabled'          => 'Paddle checkout is currently unavailable. Please choose another payment method.',
         ],
         'webhook' => [
-            'paddle' => [
-                'transaction_not_completed' => 'Transaction status is not completed.',
-                'sync_failed'               => 'Could not sync the subscription with Paddle.',
-                'ip_not_allowed'            => 'Request IP is not in the allowlist.',
-            ],
             'creem' => [
                 'malformed_payload' => 'The Creem webhook payload is malformed.',
+            ],
+            'clink' => [
+                'malformed_payload' => 'The Clink webhook payload is malformed.',
             ],
         ],
     ],
@@ -268,28 +270,6 @@ return [
         ],
     ],
 
-    'paddle' => [
-        'event_id' => [
-            'required' => 'The event ID is required.',
-        ],
-        'event_type' => [
-            'required' => 'The event type is required.',
-            'in'       => 'The selected event type is invalid.',
-        ],
-        'occurred_at' => [
-            'required' => 'The occurred at timestamp is required.',
-        ],
-        'notification_id' => [
-            'required' => 'The notification ID is required.',
-        ],
-        'data' => [
-            'required' => 'The data payload is required.',
-            'id'       => [
-                'required' => 'The data ID is required.',
-            ],
-        ],
-    ],
-
     'settings' => [
         'locale' => [
             'required' => 'The locale field is required.',
@@ -300,23 +280,6 @@ return [
             'language' => [
                 'required' => 'The ai.language field is required.',
                 'in'       => 'The selected ai.language is invalid.',
-            ],
-        ],
-    ],
-
-    'youtube_mp3_downloader' => [
-        'status' => [
-            'required' => 'The status field is required.',
-            'in'       => 'The selected status is invalid.',
-        ],
-        'data' => [
-            'status' => [
-                'required' => 'The data.status field is required.',
-                'in'       => 'The selected data.status is invalid.',
-            ],
-            'link' => [
-                'required'   => 'The data.link field is required.',
-                'active_url' => 'The data.link is not a valid active URL.',
             ],
         ],
     ],

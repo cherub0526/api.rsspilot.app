@@ -147,7 +147,7 @@ class MindmapController
         $user = $request->user();
 
         $summary = $media->summaryFor($user, true);
-        $input = $summary instanceof Summary ? $this->buildInput($summary) : '';
+        $input = $summary instanceof Summary ? $summary->aiInput() : '';
 
         // 心智圖的輸入是摘要而不是逐字稿，所以摘要沒完成就沒有東西可以產。
         // errorCode 讓前端能分支到「等摘要完成」的提示，而不是顯示一般錯誤。
@@ -283,42 +283,5 @@ class MindmapController
             ->where('summary_id', (string) $summary->getKey())
             ->where('language', $language)
             ->first();
-    }
-
-    /**
-     * 餵給模型的文字：摘要正文 + 重點條列 + 關鍵字。
-     *
-     * key_points 是現成的條列骨架，直接對應 ## / ### 的階層；只給 content 那段散文
-     * 而要求四層結構，等於請模型編造。short_summary 刻意不放——它與 content 內容
-     * 重複，會讓模型產出重複的分支。
-     */
-    private function buildInput(Summary $summary): string
-    {
-        $text = $summary->getAttribute('text');
-        $text = is_array($text) ? $text : [];
-        $long = is_array($text['long_summary'] ?? null) ? $text['long_summary'] : [];
-
-        $parts = [];
-
-        $content = trim((string) ($long['content'] ?? ''));
-        if ($content !== '') {
-            $parts[] = $content;
-        }
-
-        $keyPoints = array_filter(
-            array_map('strval', is_array($long['key_points'] ?? null) ? $long['key_points'] : [])
-        );
-        if ($keyPoints !== []) {
-            $parts[] = "Key points:\n- " . implode("\n- ", $keyPoints);
-        }
-
-        $keywords = array_filter(
-            array_map('strval', is_array($long['keywords'] ?? null) ? $long['keywords'] : [])
-        );
-        if ($keywords !== []) {
-            $parts[] = 'Keywords: ' . implode(', ', $keywords);
-        }
-
-        return trim(implode("\n\n", $parts));
     }
 }

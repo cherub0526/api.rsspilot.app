@@ -6,6 +6,7 @@ namespace App\Jobs\Media;
 
 use Throwable;
 use App\Models\Media;
+use App\Models\Caption;
 use App\Models\Summary;
 use App\Utils\AI\Completion;
 use App\Utils\Const\ISO6391;
@@ -41,6 +42,7 @@ class SummaryJob implements ShouldQueue
 
         $this->media->update(['status' => Media::STATUS_SUMMARIZING]);
 
+        /** @var null|Caption $caption */
         $caption = $this->media->captions()->where('primary', true)->first();
 
         if (!$caption) {
@@ -48,6 +50,7 @@ class SummaryJob implements ShouldQueue
             return;
         }
 
+        /** @var Summary $summary */
         $summary = $this->media->summaries()->firstOrCreate([
             'user_id' => null,
             'locale'  => ISO6391::normalize((string) $caption->locale),

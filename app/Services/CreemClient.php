@@ -15,8 +15,7 @@ use Hypervel\Support\Facades\Http;
  * Hypervel 的 Http facade 包一層就夠，不必引入額外相依。
  *
  * 認證是 `x-api-key` 標頭（不是 Bearer）。test 與 production 是**兩個完全隔離的
- * 環境**，API key 不通用、資料不互通，切換只靠 CREEM_TEST_MODE 換 base URL——這點
- * 與 Paddle 的 PADDLE_SANDBOX 是同一個模式。
+ * 環境**，API key 不通用、資料不互通，切換只靠 CREEM_TEST_MODE 換 base URL。
  */
 class CreemClient
 {
@@ -38,8 +37,8 @@ class CreemClient
     }
 
     /**
-     * 建立 product。Creem 的價格與試用期都綁在 product 上，沒有 Paddle 那種
-     * product → 多 price 的階層，所以我們每個 price 會對到一個（或兩個）product。
+     * 建立 product。Creem 的價格與試用期都綁在 product 上，沒有 product → 多 price
+     * 的階層，所以我們每個 price 會對到一個（或兩個）product。
      *
      * @param array<string, mixed> $payload
      * @return array<string, mixed>
@@ -96,7 +95,7 @@ class CreemClient
 
     /**
      * 建立結帳，回傳帶 checkout_url 的結果——Creem 是**轉址型**結帳，
-     * 不像 Paddle 有 overlay SDK，所以前端拿到的是一個要跳過去的網址。
+     * 沒有 overlay SDK，所以前端拿到的是一個要跳過去的網址。
      *
      * @param array<string, mixed> $payload
      * @return array<string, mixed>
@@ -130,7 +129,7 @@ class CreemClient
      *
      * mode 只接受 `scheduled` 與 `immediate`（查證自官方 SDK 的
      * CancelSubscriptionRequestEntity；文件沒列，傳別的值回 400）。預設 `scheduled`
-     * ——與 Paddle / Stripe 兩條路一致：使用者付過的那一期要讓他用完。`immediate`
+     * ——與 Stripe 那條路一致：使用者付過的那一期要讓他用完。`immediate`
      * 會當場斷，退款政策寫的是「用到期末」，不要違背。
      *
      * @return array<string, mixed>

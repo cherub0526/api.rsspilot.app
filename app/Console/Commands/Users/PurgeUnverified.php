@@ -32,7 +32,7 @@ class PurgeUnverified extends Command
 
     public function handle(): int
     {
-        $dryRun   = (bool) $this->option('dry-run');
+        $dryRun = (bool) $this->option('dry-run');
         $deadline = Carbon::now()->subHours(self::RETENTION_HOURS);
 
         $query = User::query()

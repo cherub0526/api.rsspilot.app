@@ -189,3 +189,31 @@ The rule, the reasoning, and edge cases.
 **歷史裡的截圖不受影響。** `ChatMessageResource` 簽 URL 時不看方案：降級之後回頭看舊對話仍該看得到圖，讓歷史破圖不是權益該有的表達方式。`ScreenshotPlanGateTest::testDowngradedUserStillSeesScreenshotsInHistory` 釘住這件事。
 
 前端的 `captureLocked` 只是把鈕變灰、掛上 Advance 標記（刻意不隱藏——藏起來使用者就不知道有這個功能，也不會想升級），真正的判定在伺服器。
+
+## 全站功能開關：預設關閉就是送審狀態
+
+`code:` `config/features.php` · `code:` `app/Enums/Feature.php` · `code:` `app/Http/Middleware/EnsureFeatureEnabled.php` · `updated:` `2026-10-31` · `status:` `active`
+
+`config/features.php` 是「這台伺服器有沒有這個功能」，與方案權益（`plans.*_enabled`）是兩回事，
+兩者都開才給。預設全部關閉，關閉的樣子就是通過 Creem 帳號審核的樣子；要開哪一項由使用者決定。
+
+| config key | env | 關閉時 |
+|---|---|---|
+| `transcript_download` | `FEATURE_TRANSCRIPT` | `GET /v1/media/{id}/captions/{captionId}/download` 回 404 |
+| `channel_skill` | `FEATURE_CHANNEL_SKILL` | `GET /v1/sources/{id}/skill` 與 `/skill/download` 回 404；`sources:skills` 什麼都不做；`PlanResource.skill_enabled` 回 false |
+
+範圍是使用者 2026-10-31 指定的，有幾處刻意**沒有**擋：
+
+- **逐字稿只擋「匯出成檔案」。** App 內檢視（`captions/{id}` 回完整 segments）與 MCP 的
+  `get_transcript`（一次最多 500 段原文）都照舊，仍然輸出完整原文。env 名稱是使用者指定的
+  `FEATURE_TRANSCRIPT`，config key 用比較準確的 `transcript_download`。
+- **截圖不做開關**，照舊只看 `plans.screenshot_enabled`。
+- **對話與摘要本來就讀字幕**：使用者在對話裡要求「把逐字稿貼出來」時，模型可能照做。這是
+  開關蓋不到的地方。
+
+路由上的寫法是 `'feature:' . Feature::X->value`，排在 `auth` 之後（沒登入照樣 401）、
+`throttle` 之前（關閉的功能不吃額度）。404 而不是 403：關閉的功能在這台伺服器上就是不存在。
+
+`phpunit.xml.dist` 把開關釘成 false；驗功能本身的測試在 `setUp` 用
+`config(['features.<key>' => true])` 自己打開，關閉時的行為各有獨立測試。
+

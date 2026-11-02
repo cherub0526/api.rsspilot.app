@@ -104,7 +104,7 @@ class TrialEligibilityTest extends TestCase
     }
 
     /**
-     * 取消之後再訂閱不能重領。Paddle 取消時我們的 status 不會被改寫，所以這裡
+     * 取消之後再訂閱不能重領。金流商取消時我們的 status 不一定會被改寫，所以這裡
      * 同時要守住「留下過交易紀錄」這個判準。
      */
     public function testACanceledSubscriptionStillConsumesTheTrial(): void
@@ -120,7 +120,7 @@ class TrialEligibilityTest extends TestCase
     {
         $user = User::factory()->create();
 
-        // status 停在 paying（Paddle 取消不會改寫狀態），但扣款發生過。
+        // status 停在 paying（取消沒有改寫到狀態），但扣款發生過。
         $subscription = $this->subscriptionFor($user, Subscription::STATUS_PAYING);
         $subscription->transactions()->create([
             'billing_date' => now()->subMonths(3),
@@ -189,7 +189,7 @@ class TrialEligibilityTest extends TestCase
         return $user->subscriptions()->create([
             'plan_id'        => $this->paidPlan->id,
             'price_id'       => $this->paidMonthlyPrice->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'payment_method' => Subscription::PAYMENT_METHOD_CREEM,
             'status'         => $status,
             'start_date'     => now(),
         ]);

@@ -54,7 +54,7 @@ dispatch 而不是由指令撈狀態派工：
 **代價是兩支都沒有自動補派的機制**：只在「這次剛做完」的那一刻被派一次。
 
 - 歸檔要補跑舊資料用 `videotranscriber:archive --id=`。這支指令刻意不排進 scheduler，
-  也刻意不支援批次，因為每支 media 會拉一份十幾 MB 的 mp3。
+  也刻意不支援批次：每支 media 要從 CDN 拉六個檔案，總量沒有上限。
 - 翻譯**連補跑的指令都還沒有**：這個功能上線前就摘要完的 media 一律沒有翻譯，
   要補得另外寫。判斷「要不要補」時記得它是靠 `available_locales` 展開的——
   之後多開一個語系，同樣只有新影片會有，既有的全部缺。
@@ -137,3 +137,37 @@ YouTube 上已經有字幕軌才會進入轉錄：作者上傳的 `standard` 或
 
 作者事後補上字幕不會自動回來：`no_captions` 不在任何排程的查詢條件裡，要用
 `videotranscriber:start --id=` 手動重送（`public_captions` 是 false 時會重新查）。
+
+## 不下載、不保存、不轉散影片或音訊
+
+`code:` `app/Jobs/Media/VideoTranscriberArchiveJob.php` → `collectAssets()` · `updated:` `2026-10-31` · `status:` `active`
+
+這是我們對 Creem（merchant of record）帳號審核的書面承諾：不保存、不重新上傳、不轉散影片或
+音訊，客戶拿到的是我們自己寫的摘要，不是原內容的副本。Creem 禁止「違反平台條款的第三方內容
+下載器」與未授權轉散，審核被拒是終局，所以這條比方便更重要。
+
+落實到程式的樣子：
+
+- `VideoTranscriberArchiveJob` 只歸檔各版本的 transcript／subtitle（六個 JSON）。轉錄服務的回應
+  裡仍列著匯出的 mp3（`extra_data.video_audio_data.audio_url`），**刻意不下載**，測試
+  `testNeverDownloadsOrStoresTheAudio` 釘住「不對 mp3 發請求、資料夾裡只有 JSON」。
+- 舊的 YouTube→mp3 管線（RapidAPI 下載器、`InfoJob`、`CaptionJob`、`media:sync-job`、
+  `youtube-mp3-downloader` webhook、GroqTranscribe Lambda）已整條刪除，不是暫停。
+  要重新接任何會取得音訊的來源，先回頭確認這條承諾。
+- **供應商那一端我們管不了**：videotranscriber.ai 拿 YouTube 網址自己抓音訊做 STT。我們送出的
+  參數（`VideoTranscriberClient::startTranscription()`）沒有看得出是「要求匯出音檔」的選項，
+  匯出的 mp3 是對方流程的副產品。對外說法要寫成「供應商從公開網址取音訊做轉錄，我們不保留」。
+
+2026-10-31 之前歸檔過的 media 在 S3 上仍有 `videotranscriber.ai/<mediaId>/audio.mp3`，
+刪除要使用者核准。列出這些物件（唯讀）：
+
+```bash
+# 用部署環境的 S3 設定
+php artisan tinker --execute="collect(Storage::disk('s3')->allFiles('videotranscriber.ai'))->filter(fn (\$f) => str_ends_with(\$f, '/audio.mp3'))->each(fn (\$f) => print(\$f . PHP_EOL));"
+# 或 AWS CLI
+aws s3 ls s3://<AWS_BUCKET>/videotranscriber.ai/ --recursive | grep '/audio\.mp3$'
+```
+
+做對的樣子：`git grep -niE "audio_url|AUDIO_FILE"` 在 `app/` 底下只剩這支 job 的說明註解，
+S3 上新歸檔的 media 資料夾裡沒有 `.mp3`。
+

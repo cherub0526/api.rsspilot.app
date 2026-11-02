@@ -31,8 +31,8 @@ class Archive extends Command
      * VideoTranscriberFetchJob already queues the archiving of anything it
      * transcribes, so this exists for the leftovers — a media transcribed
      * before archiving existed, or one whose downloads gave up. A bulk mode
-     * would mean pulling a multi-MB mp3 per media with nothing capping the
-     * total, which is a decision to take on purpose rather than by default.
+     * would mean six CDN downloads per media with nothing capping the total,
+     * which is a decision to take on purpose rather than by default.
      */
     public function handle(): void
     {

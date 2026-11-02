@@ -30,6 +30,9 @@ class TemplateCompletionManager
      */
     private array $options = [];
 
+    /** HTTP 逾時秒數；null 用 Completion 的預設值。 */
+    private ?int $timeout = null;
+
     /**
      * 這次推論屬於哪位使用者；null 代表全站共用的產物。
      *
@@ -78,6 +81,16 @@ class TemplateCompletionManager
     }
 
     /**
+     * 放寬單次請求的 HTTP 逾時。只給非串流的 complete() 用；值必須小於跑這個請求的
+     * worker 的 --timeout，否則逾時時被砍的是整個 worker。
+     */
+    public function setTimeout(int $seconds): self
+    {
+        $this->timeout = $seconds;
+        return $this;
+    }
+
+    /**
      * 執行完成請求
      *
      * @param string $userContent 使用者內容
@@ -106,7 +119,9 @@ class TemplateCompletionManager
         );
 
         // 呼叫 OpenAI API
-        return $this->completion->completions($model, $messages, $options);
+        return $this->timeout === null
+            ? $this->completion->completions($model, $messages, $options)
+            : $this->completion->completions($model, $messages, $options, $this->timeout);
     }
 
     /**

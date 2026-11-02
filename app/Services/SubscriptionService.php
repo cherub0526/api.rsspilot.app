@@ -14,6 +14,8 @@ class SubscriptionService
 {
     public function getUserSubscription(string $userId)
     {
+        // 本地 scope 經 __call 解析，沒有 Larastan 的 PHPStan 看不到 scopeActive()。
+        // @phpstan-ignore method.notFound
         return Subscription::query()
             ->where('user_id', $userId)
             ->active()
@@ -32,9 +34,9 @@ class SubscriptionService
      *
      * 規則是**終生一次**：只要曾經有一筆訂閱真的成立過（走完結帳、或留下過交易
      * 紀錄），之後再訂閱一律當場計費。用「成立過」而不是「目前有沒有在訂閱」是
-     * 因為 Paddle 取消訂閱時我們自己的 `subscriptions.status` 不會被改寫（只有
-     * Stripe 的 webhook 會寫 `canceled`），拿當下狀態判斷會讓「訂閱 → 取消 →
-     * 再訂閱」變成無限續杯的手法。
+     * 因為取消後 `subscriptions.status` 不一定會被改寫成 `canceled`（要等金流商
+     * 的 webhook），拿當下狀態判斷會讓「訂閱 → 取消 → 再訂閱」變成無限續杯的
+     * 手法。前一代金流 Paddle 留下的訂閱列也照樣算進來。
      *
      * 排除兩種紀錄：
      *
@@ -65,12 +67,10 @@ class SubscriptionService
 
     public function getUserSubscriptionPlan(?Subscription $subscription)
     {
-        if ($subscription) {
-            $plan = $subscription->plan()->first();
-        }
+        $plan = $subscription?->plan()->first();
 
         // 如果沒有找訂閱的方案，預設就是免費的月訂閱方案
-        if (!isset($plan) || !$plan) {
+        if (!$plan) {
             $plan = Plan::query()->whereHas('prices', function ($builder) {
                 $builder->where('unit', Price::UNIT_MONTHLY)->where('price', 0);
             })->first();
@@ -105,7 +105,9 @@ class SubscriptionService
         }
 
         $query = $source->media()
-            ->whereDoesntHave('users', fn ($q) => $q->where('id', $user->getKey()))
+            ->whereDoesntHave('users', function ($q) use ($user): void {
+                $q->where('id', $user->getKey());
+            })
             ->orderByDesc('published_at');
 
         if ($limit !== null) {

@@ -173,7 +173,7 @@ public function users(): BelongsToMany
 
 本專案的多型關聯**不用 Laravel 的 `morphTo()` 命名慣例**，而是統一以
 `foreign_type` / `foreign_id` 兩欄搭配 `belongsTo($this->foreign_type, 'foreign_id', 'id')`
-表達（見 `Paddle`、`Stripe`、`Image` 三個 Model）。新增同類需求時沿用這個形狀。
+表達（見 `Stripe`、`Creem`、`Image` 三個 Model）。新增同類需求時沿用這個形狀。
 
 ```php
 public function foreign(): BelongsTo

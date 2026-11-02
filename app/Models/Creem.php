@@ -4,9 +4,20 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hypervel\Database\Eloquent\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property int $id
+ * @property string $foreign_id
+ * @property string $foreign_type
+ * @property null|string $creem_id
+ * @property null|array $creem_detail
+ * @property string $variant
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ */
 class Creem extends Model
 {
     use HasFactory;

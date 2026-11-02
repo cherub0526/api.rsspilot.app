@@ -6,6 +6,7 @@ namespace App\Services;
 
 use DateTimeInterface;
 use Hypervel\Support\Facades\Storage;
+use Hypervel\Filesystem\FilesystemAdapter;
 
 class StorageService
 {
@@ -53,6 +54,9 @@ class StorageService
      */
     public function getTemporaryUrl(string $path, DateTimeInterface $expiration): string
     {
-        return Storage::disk('s3')->temporaryUrl($path, $expiration);
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('s3');
+
+        return $disk->temporaryUrl($path, $expiration);
     }
 }

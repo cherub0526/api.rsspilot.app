@@ -36,8 +36,8 @@ class ArchiveTest extends TestCase
 
         Media::factory()->create(['status' => Media::STATUS_TRANSCRIBED]);
 
-        // Without --id this would be a bulk backfill, and every media pulls a
-        // multi-MB mp3 — that has to be asked for, not defaulted into.
+        // Without --id this would be a bulk backfill of six downloads per
+        // media — that has to be asked for, not defaulted into.
         $this->artisan('videotranscriber:archive')->run();
 
         Queue::assertNothingPushed();

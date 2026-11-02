@@ -11,7 +11,7 @@ use App\Services\CreemSubscriptionService;
 /**
  * Creem 訂閱狀態 → 我們自己的 `status` 的對照。
  *
- * 與 PaddleSubscriptionStatusTest 同一套判準：`Subscription::scopeActive()` 只認
+ * `Subscription::scopeActive()` 只認
  * `active` 與未到期的 `trial`，所以這個 match 寫錯的下場是權限問題——「沒付錢的人
  * 有權限」或「還在付錢的人被停權」——而不是顯示問題。
  *

@@ -31,13 +31,14 @@ class SeedSubscriber extends Command
         $email = (string) $this->option('email');
         $password = (string) $this->option('password');
 
+        /** @var User $user */
         $user = User::query()->where('email', $email)->first()
-            ?? User::factory()->create(['email' => $email]);
+            ?? User::factory()->createOne(['email' => $email]);
 
         $user->fill(['password' => Hash::make($password), 'email_verified_at' => now()])->save();
 
         if ($this->option('purge')) {
-            foreach ($user->subscriptions()->withTrashed()->get() as $s) {
+            foreach (Subscription::withTrashed()->where('user_id', $user->id)->get() as $s) {
                 $s->forceDelete();
             }
             $user->forceDelete();
@@ -47,10 +48,12 @@ class SeedSubscriber extends Command
         }
 
         $plan = Plan::query()->where('title', 'Pro')->first();
+        /** @var null|Price $price */
         $price = $plan?->prices()->where('unit', Price::UNIT_MONTHLY)->first();
 
         $user->subscriptions()->delete();
 
+        /** @var Subscription $subscription */
         $subscription = $user->subscriptions()->create([
             'plan_id'           => $plan->id,
             'price_id'          => $price->id,

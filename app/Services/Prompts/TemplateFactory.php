@@ -24,6 +24,7 @@ class TemplateFactory
         'customPrompt'        => CustomPromptTemplate::class,
         'follow_up_questions' => FollowUpQuestionsTemplate::class,
         'mindmap'             => MindMapTemplate::class,
+        'channel_skill'       => ChannelSkillTemplate::class,
     ];
 
     /**

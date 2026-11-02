@@ -4,11 +4,25 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\BelongsTo;
 use Hypervel\Database\Eloquent\Concerns\HasUlids;
 use Hypervel\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * @property string $id
+ * @property null|string $media_id
+ * @property string $locale
+ * @property bool $primary
+ * @property null|string $text
+ * @property null|array $segments
+ * @property null|array $word_segments
+ * @property null|Carbon $created_at
+ * @property null|Carbon $updated_at
+ * @property null|Carbon $deleted_at
+ * @property-read null|Media $media
+ */
 class Caption extends Model
 {
     use HasUlids;

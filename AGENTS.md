@@ -6,7 +6,7 @@ This file provides guidance to Claude Code、Gemini when working with code in th
 
 This is a video assistant API built with **Hypervel** (v0.3), a Laravel-style PHP framework with native coroutine
 support built on Swoole. The application provides AI-powered video analysis, summaries, captions, and chat capabilities
-for YouTube content, with Stripe subscription management.
+for YouTube content, with Clink / Creem / Stripe subscription management.
 
 **Core functionality:**
 
@@ -14,7 +14,7 @@ for YouTube content, with Stripe subscription management.
 - Video caption extraction and AI-powered transcription (via videotranscriber.ai)
 - AI-generated video summaries via OpenRouter
 - Interactive chat with video content
-- Stripe subscription management with webhook handling
+- Clink / Creem / Stripe subscription management with webhook handling
 - OAuth authentication (local, Facebook, Google) with JWT tokens
 
 ## Project Lore
@@ -96,8 +96,7 @@ docker compose exec hypervel php artisan server:watch
 docker compose exec hypervel php artisan queue:work
 
 # Process specific queue
-docker compose exec hypervel php artisan queue:work --queue=media.caption
-docker compose exec hypervel php artisan queue:work --queue=media.info
+docker compose exec hypervel php artisan queue:work --queue=videotranscriber.fetch
 ```
 
 ## Framework-Specific Notes
@@ -119,12 +118,6 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 - Wrapper for the Stripe PHP SDK, initialized with `STRIPE_API_KEY`
 - Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `invoices()`, `checkoutSessions()`
 - `StripeSubscriptionService` holds the subscription lifecycle logic the webhook dispatches into
-
-**PaddleClient** (`App\Services\PaddleClient`)
-
-- Wrapper for Paddle PHP SDK — **legacy**, kept for existing Paddle subscriptions. New work goes through Stripe.
-- Methods: `customers()`, `products()`, `prices()`, `subscriptions()`, `transactions()`
-- Respects sandbox mode via `PADDLE_SANDBOX` env var
 
 **Source syncing** (`App\Console\Commands\Sources\Sync`)
 
@@ -166,13 +159,23 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
   submits and `VideoTranscriberFetchJob` collects the result
 - **Groq is receive-only**: `POST /v1/webhook/groq/{mediaId}` accepts a callback,
   but nothing in `app/` calls Groq or reads `GROQ_API_KEY`
-- `YoutubeCaptionJob`, `YoutubeDataCaptionJob` and `CaptionJob` still exist but
-  have **no dispatch site** — they are referenced only from comments
+- `YoutubeCaptionJob` and `YoutubeDataCaptionJob` still exist but have
+  **no dispatch site** — they are referenced only from comments
+- The old YouTube→mp3 pipeline (RapidAPI downloader, `InfoJob`, `CaptionJob`,
+  `media:sync-job`, the `youtube-mp3-downloader` webhook) was deleted. We never
+  download, store or redistribute video or audio — `VideoTranscriberArchiveJob`
+  archives the transcript/subtitle JSON only. See
+  `docs/lore/transcription/business-rules.md`
 - Details and pitfalls: `docs/lore/transcription/`
 
-**YoutubeMediaDownloader** (`App\Services\RapidApi\YoutubeMediaDownloader`)
+**Feature toggles** (`config/features.php`, read through `App\Enums\Feature`)
 
-- RapidAPI client for fetching YouTube video details and audio info
+- Server-wide switches, all **off by default** (the state that passes the Creem
+  account review); separate from plan entitlements (`plans.*_enabled`)
+- `FEATURE_TRANSCRIPT` → `transcript_download`: caption file download only
+- `FEATURE_CHANNEL_SKILL` → `channel_skill`: skill endpoints and `sources:skills`
+- Gate routes with the `feature:<key>` middleware (404 when off); scope and what is
+  deliberately not gated: `docs/lore/media/business-rules.md`
 
 ### Localization & Internationalization
 
@@ -199,9 +202,18 @@ __('mails.reset_password.subject')
 - Middleware: `'middleware' => ['auth']` on protected routes — 一律宣告在 routes 檔，
   不在 Controller 內設定；路由命名與 Controller 對應規則見 `.claude/rules/routes.md`
 
-### Stripe Integration
+### Payments (Clink / Creem / Stripe)
 
-Stripe is the current payment provider. Paddle code is still present for legacy subscriptions — don't extend it.
+Clink is the default payment provider since 2026-10-31 (`PAYMENT_DEFAULT_PROVIDER=clink`, Merchant of Record).
+Existing Creem subscriptions were **not migrated**: the Creem webhook, cancel path and `paymentMethod=creem`
+all stay working. Stripe stays as the alternate `paymentMethod`. **Paddle was removed in 2026-10**: no SDK,
+routes, webhook or model remain. Old `subscriptions.payment_method = paddle` rows and the `paddles` table are kept
+as data only — what those subscribers get is in `docs/lore/subscription/business-rules.md`.
+
+- Clink: `ClinkClient` + `ClinkSubscriptionService`, webhook `POST /v1/webhook/clink` (signature with a
+  millisecond timestamp, events re-fetch the subscription from the API), return-page activation
+  `POST /v1/subscriptions/clink/confirm`, catalog commands `clink:sync` / `clink:verify`. Pitfalls
+  (amounts in major units, no tax-mode field, trial bound to the price) are in `docs/lore/subscription/`
 
 - SDK initialized with `STRIPE_API_KEY` (`App\Services\StripeClient`)
 - Webhook at `POST /v1/webhook/stripe`, verified with `Stripe\Webhook::constructEvent()` and `STRIPE_WEBHOOK_SECRET`
@@ -209,9 +221,9 @@ Stripe is the current payment provider. Paddle code is still present for legacy 
   `invoice.payment_failed` — all dispatched into `StripeSubscriptionService`
 - Models sync to Stripe via Observers (`StripePlanObserver`, `StripePriceObserver`, `StripeUserObserver`)
 - Store Stripe entities using the polymorphic `foreign_type` / `foreign_id` pattern (`Stripe` model),
-  the same shape the `Paddle` model uses
+  the same shape the `Creem` model uses
 - **Stripe is not a Merchant of Record.** Tax collection/remittance and chargebacks are ours, unlike
-  Paddle. `prices.price` is an untaxed USD base figure — see `docs/lore/subscription/` for the
+  Creem. `prices.price` is an untaxed USD base figure — see `docs/lore/subscription/` for the
   pricing and tax rules.
 
 ## Code Conventions

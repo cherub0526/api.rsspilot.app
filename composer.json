@@ -15,6 +15,7 @@
   "require": {
     "php": ">=8.3",
     "ext-simplexml": "*",
+    "ext-zip": "*",
     "barryvdh/laravel-ide-helper": "^3.6",
     "friendsofhyperf/tinker": "~3.1.0",
     "google/apiclient": "^2.19",
@@ -24,9 +25,9 @@
     "hypervel/socialite": "^0.3.8",
     "league/flysystem-aws-s3-v3": "^3.0",
     "neuron-core/neuron-ai": "^3.16",
-    "paddlehq/paddle-php-sdk": "^1.14",
     "php-http/guzzle7-adapter": "^1.1",
     "stripe/stripe-php": "^20.2",
+    "symfony/uid": "^7.4",
     "zircote/swagger-php": "^6.0"
   },
   "require-dev": {

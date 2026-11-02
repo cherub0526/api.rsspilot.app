@@ -7,6 +7,7 @@ namespace App\Utils\AI;
 use App\Models\Config;
 use App\Jobs\Media\SummaryTranslationJob;
 use App\Services\Prompts\SummaryTemplate;
+use App\Services\Prompts\ChannelSkillTemplate;
 use App\Services\Prompts\CustomPromptTemplate;
 use App\Services\FollowUpQuestions\NeuronFollowUpQuestions;
 
@@ -44,6 +45,7 @@ class OpenRouterModels
         SummaryTemplate::class,
         CustomPromptTemplate::class,
         SummaryTranslationJob::class,
+        ChannelSkillTemplate::class,
     ];
 
     /**

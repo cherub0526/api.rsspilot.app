@@ -38,8 +38,7 @@ class StripeSubscriptionService
 
         // 第一次訂閱的人送 `Subscription::TRIAL_DAYS` 天免費試用：Stripe 當下仍然
         // 收取付款方式、但不扣款，試用結束才開第一張帳單，付費週期也從那天起算。
-        // Paddle 那邊的同一件事是設在 price 上的 trial_period（見
-        // PaddleSubscriptionService）、Creem 是 product 上的 trial_period_days。
+        // Creem 那邊的同一件事是 product 上的 trial_period_days。
         if ($trialEnd = $this->trialEndFor($user)) {
             $params['subscription_data'] = ['trial_end' => $trialEnd->getTimestamp()];
         }
@@ -153,7 +152,7 @@ class StripeSubscriptionService
         ]);
 
         // 試用期間記成 trial，首次扣款成功（invoice.paid）後才轉 active，跟
-        // Paddle 那條路一致——前端的 Trial 徽章與 trial_ends_at 都讀這個狀態。
+        // Creem 那條路一致——前端的 Trial 徽章與 trial_ends_at 都讀這個狀態。
         $insertData = [
             'status' => $stripeSub->status === 'trialing'
                 ? Subscription::STATUS_TRIAL
@@ -204,11 +203,11 @@ class StripeSubscriptionService
         $subscription->fill($insertData)->save();
 
         if (
-            !$subscription->transactions()->whereHas(
-                'stripe',
-                fn ($q) => $q->where('stripe_id', $invoice['id'])
-            )->exists()
+            !$subscription->transactions()->whereHas('stripe', function ($q) use ($invoice): void {
+                $q->where('stripe_id', $invoice['id']);
+            })->exists()
         ) {
+            /** @var Transaction $transaction */
             $transaction = $subscription->transactions()->create([
                 'billing_date' => Carbon::createFromTimestamp($invoice['created']),
                 'amount'       => $invoice['amount_paid'] / 100,

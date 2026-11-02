@@ -60,7 +60,7 @@ class MediasController extends AbstractController
             throw new NotFoundHttpException();
         }
 
-        $limit = min((int) ($request->query('limit', 12)), 50);
+        $limit = min((int) $request->query('limit', 12), 50);
 
         $media = Media::query()
             ->where('source_id', $sourceId)

@@ -14,9 +14,9 @@ return [
     'mode'    => SWOOLE_PROCESS,
     'servers' => [
         [
-            'name'      => 'http',
-            'type'      => Server::SERVER_HTTP,
-            'host'      => env('HTTP_SERVER_HOST', '0.0.0.0'),
+            'name' => 'http',
+            'type' => Server::SERVER_HTTP,
+            'host' => env('HTTP_SERVER_HOST', '0.0.0.0'),
             // PORT 是雲端平台（Railway 等）注入的慣例名稱，容器要聽在它指定的
             // port 才收得到流量。多這一層 fallback，部署時就不必記得再設一個
             // HTTP_SERVER_PORT——忘記設會讓程式聽在 9501、平台卻往別的 port

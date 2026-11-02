@@ -7,13 +7,14 @@ namespace Tests\Feature\API\V1;
 use Tests\TestCase;
 use App\Models\Plan;
 use App\Models\User;
+use App\Models\Creem;
 use App\Models\Media;
 use App\Models\Price;
-use App\Models\Paddle;
 use App\Models\Stripe;
 use Stripe\ApiRequestor;
 use App\Models\Subscription;
-use Hypervel\Support\Facades\Config;
+use Hypervel\Support\Facades\DB;
+use Hypervel\Support\Facades\Http;
 use Tests\Support\FakeStripeHttpClient;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
@@ -45,12 +46,6 @@ class SubscriptionsControllerTest extends TestCase
             ]);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Plan::class,
-            'foreign_id'   => $this->freePlan->id,
-            'paddle_id'    => 'pro_free_plan',
-        ]);
-
         $this->freeMonthlyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
                 'plan_id' => $this->freePlan->id,
@@ -58,12 +53,6 @@ class SubscriptionsControllerTest extends TestCase
                 'price'   => 0,
             ]);
         });
-
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->freeMonthlyPrice->id,
-            'paddle_id'    => 'pri_free_monthly',
-        ]);
 
         $this->freeAnnuallyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
@@ -78,12 +67,6 @@ class SubscriptionsControllerTest extends TestCase
             return Plan::factory()->create(['title' => 'Basic']);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Plan::class,
-            'foreign_id'   => $this->basicPlan->id,
-            'paddle_id'    => 'pro_basic_plan',
-        ]);
-
         $this->basicMonthlyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
                 'plan_id' => $this->basicPlan->id,
@@ -91,12 +74,6 @@ class SubscriptionsControllerTest extends TestCase
                 'price'   => 1000,
             ]);
         });
-
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->basicMonthlyPrice->id,
-            'paddle_id'    => 'pri_basic_monthly',
-        ]);
 
         $this->basicAnnuallyPrice = Price::withoutEvents(function () {
             return Price::factory()->create([
@@ -106,13 +83,7 @@ class SubscriptionsControllerTest extends TestCase
             ]);
         });
 
-        Paddle::factory()->create([
-            'foreign_type' => Price::class,
-            'foreign_id'   => $this->basicAnnuallyPrice->id,
-            'paddle_id'    => 'pri_basic_annually',
-        ]);
-
-        // Stripe 分支讀的是 $price->stripe->stripe_id，跟 paddle 的映射並存。
+        // Stripe 分支讀的是 $price->stripe->stripe_id。
         Stripe::create([
             'foreign_type'  => Price::class,
             'foreign_id'    => $this->basicMonthlyPrice->id,
@@ -226,53 +197,32 @@ class SubscriptionsControllerTest extends TestCase
             'messages.paymentMethod.0',
             __('validators.subscription.paymentMethod.in')
         );
-
-        // Valid request with explicit paymentMethod=paddle
-        $params = ['planId' => $this->basicPlan->id, 'priceId' => $this->basicMonthlyPrice->id, 'paymentMethod' => 'paddle'];
-        $this->json('POST', $uri, $params)
-            ->assertStatus(200)
-            ->assertJsonStructure([
-                'paddle' => ['client_token', 'environment'],
-                'items',
-                'customer'   => ['name', 'email'],
-                'customData' => ['subscriptionId'],
-            ])
-            ->assertJsonPath('items.0', 'pri_basic_monthly')
-            ->assertJsonPath('customer.email', $user->email);
-
-        $this->assertDatabaseHas('subscriptions', [
-            'user_id'        => $user->id,
-            'plan_id'        => $this->basicPlan->id,
-            'price_id'       => $this->basicMonthlyPrice->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
-            'status'         => Subscription::STATUS_PAYING,
-        ]);
     }
 
     /**
-     * 沒帶 paymentMethod 時要落在 `PAYMENT_DEFAULT_PROVIDER`，而 phpunit.xml.dist
-     * 把它釘成 paddle。
-     *
-     * 這一條同時守著兩件事：預設值真的有被讀到，以及回傳的 payload 形狀是
-     * Paddle 那一種——前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條
-     * 結帳流程換掉。
+     * 預設金流在 2026-10 改成 Clink（見 Subscriptions\ClinkCheckoutTest），但
+     * `paymentMethod=creem` 仍要走得通，回傳的 payload 形狀是 Creem 那一種——
+     * 前端靠「回傳裡有哪個 key」分派金流，形狀換掉就是整條結帳流程換掉。
      */
-    public function testStoreDefaultsToPaddle()
+    public function testStoreCreatesCreemCheckoutWhenAsked()
     {
+        $this->fakeCreemCheckout();
+
         /** @var User $user */
         $user = $this->fakeLogin();
 
         $this->json('POST', route('api.v1.subscriptions.store'), [
-            'planId'  => $this->basicPlan->id,
-            'priceId' => $this->basicMonthlyPrice->id,
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'creem',
         ])
             ->assertStatus(200)
-            ->assertJsonStructure(['paddle' => ['client_token', 'environment'], 'items'])
-            ->assertJsonPath('items.0', 'pri_basic_monthly');
+            ->assertJsonPath('creem.checkout_url', 'https://tests.invalid/creem/ch_test')
+            ->assertJsonPath('creem.checkout_id', 'ch_test');
 
         $this->assertDatabaseHas('subscriptions', [
             'user_id'        => $user->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
+            'payment_method' => Subscription::PAYMENT_METHOD_CREEM,
             'status'         => Subscription::STATUS_PAYING,
         ]);
     }
@@ -488,116 +438,6 @@ class SubscriptionsControllerTest extends TestCase
     }
 
     /**
-     * Only the reachable-without-a-live-Paddle-call surface is covered here.
-     * PaddleSubscriptionService::confirm() always constructs a real
-     * Paddle\SDK\Client (`new PaddleClient()`, not container-resolved), so a
-     * genuine "confirmed" success path can't be exercised without a real
-     * network call to Paddle. Same constraint as PaddleControllerTest.
-     */
-    public function testUpdate()
-    {
-        // Unauthenticated
-        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => 'nonexistent']))
-            ->assertStatus(401);
-
-        /** @var User $user */
-        $user = $this->fakeLogin();
-
-        // Subscription not found / not owned by the current user
-        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => 'nonexistent']), ['transaction_id' => 'txn_123'])
-            ->assertStatus(422)
-            ->assertJsonPath('messages.subscriptionId.0', __('validators.controllers.subscription.not_found'));
-
-        $otherUser = User::factory()->create();
-        $subscription = Subscription::factory()->create([
-            'user_id'  => $otherUser->id,
-            'plan_id'  => $this->basicPlan->id,
-            'price_id' => $this->basicMonthlyPrice->id,
-            'status'   => Subscription::STATUS_PAYING,
-        ]);
-
-        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => $subscription->id]), ['transaction_id' => 'txn_123'])
-            ->assertStatus(422)
-            ->assertJsonPath('messages.subscriptionId.0', __('validators.controllers.subscription.not_found'));
-    }
-
-    /**
-     * Paddle 關閉時，明確指定 paddle 的結帳要被驗證擋下，也不能留下一筆
-     * paying 的訂閱。
-     */
-    public function testStoreRejectsPaddleWhenPaddleIsDisabled(): void
-    {
-        Config::set('services.paddle.enabled', false);
-
-        /** @var User $user */
-        $user = $this->fakeLogin();
-
-        $this->json('POST', route('api.v1.subscriptions.store'), [
-            'planId'        => $this->basicPlan->id,
-            'priceId'       => $this->basicMonthlyPrice->id,
-            'paymentMethod' => 'paddle',
-        ])
-            ->assertStatus(422)
-            ->assertJsonPath('messages.paymentMethod.0', __('validators.subscription.paymentMethod.in'));
-
-        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
-    }
-
-    /**
-     * PAYMENT_DEFAULT_PROVIDER 還寫著 paddle（phpunit 釘的就是 paddle）但 Paddle
-     * 已關閉時，預設要退到 Creem，而不是讓沒帶 paymentMethod 的結帳走進 Paddle。
-     */
-    public function testDefaultPaymentMethodFallsBackToCreemWhenPaddleIsDisabled(): void
-    {
-        $this->assertSame(Subscription::PAYMENT_METHOD_PADDLE, Subscription::defaultPaymentMethod());
-
-        Config::set('services.paddle.enabled', false);
-
-        $this->assertSame(Subscription::PAYMENT_METHOD_CREEM, Subscription::defaultPaymentMethod());
-        $this->assertNotContains(Subscription::PAYMENT_METHOD_PADDLE, Subscription::checkoutPaymentMethods());
-    }
-
-    public function testUpdateRefusesWhenPaddleIsDisabled(): void
-    {
-        Config::set('services.paddle.enabled', false);
-
-        /** @var User $user */
-        $user = $this->fakeLogin();
-
-        $subscription = Subscription::factory()->create([
-            'user_id'        => $user->id,
-            'plan_id'        => $this->basicPlan->id,
-            'price_id'       => $this->basicMonthlyPrice->id,
-            'payment_method' => Subscription::PAYMENT_METHOD_PADDLE,
-            'status'         => Subscription::STATUS_PAYING,
-        ]);
-
-        $this->json('PUT', route('api.v1.subscriptions.update', ['subscriptionId' => $subscription->id]), ['transaction_id' => 'txn_123'])
-            ->assertStatus(422)
-            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.paddle_disabled'));
-    }
-
-    /**
-     * Paddle 關閉時，更新已綁 Paddle customer 的使用者不能再打 Paddle API。
-     * PaddleClient 不經容器、測試裡的金鑰是假的——真的打出去就會拋例外。
-     */
-    public function testUpdatingAUserDoesNotCallPaddleWhenPaddleIsDisabled(): void
-    {
-        Config::set('services.paddle.enabled', false);
-
-        $user = User::factory()->create();
-        Paddle::factory()->create([
-            'foreign_type' => User::class,
-            'foreign_id'   => $user->id,
-            'paddle_id'    => 'ctm_test',
-        ]);
-
-        $user->update(['name' => 'Renamed']);
-
-        $this->assertSame('Renamed', $user->fresh()->name);
-    }
-
-    /**
      * 方案管理區塊要的三個欄位。
      *
      * 前端靠它們畫出「目前方案 / 下次續費日 / 取消按鈕」，其中 subscription_id
@@ -647,10 +487,9 @@ class SubscriptionsControllerTest extends TestCase
 
     /**
      * Only the reachable-without-a-live-payment-gateway-call surface is
-     * covered here. StripeSubscriptionService::cancel() and
-     * PaddleSubscriptionService::cancel() both always construct a real SDK
-     * client, so a genuine cancellation success path can't be exercised
-     * without a real network call.
+     * covered here. StripeSubscriptionService::cancel() always constructs a
+     * real SDK client, so a genuine cancellation success path can't be
+     * exercised without a real network call.
      */
     public function testDestroy()
     {
@@ -674,7 +513,7 @@ class SubscriptionsControllerTest extends TestCase
      */
     public function testSubscriptionErrorMessagesAreTranslated()
     {
-        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable', 'paddle_disabled'];
+        $keys = ['cancel_unavailable', 'already_subscribed', 'not_found', 'checkout_id_required', 'checkout_not_confirmable'];
 
         foreach (['en', 'zh-TW', 'zh-CN'] as $locale) {
             app()->setLocale($locale);
@@ -740,18 +579,20 @@ class SubscriptionsControllerTest extends TestCase
             'next_date'      => now()->addDays(7),
         ]);
 
-        // 走到預設金流（phpunit 釘成 paddle）的結帳建立，不會被 already_subscribed 擋下
+        $this->fakeCreemCheckout();
+
+        // 走到結帳建立，不會被 already_subscribed 擋下
         $this->json('POST', route('api.v1.subscriptions.store'), [
-            'planId'  => $this->basicPlan->id,
-            'priceId' => $this->basicMonthlyPrice->id,
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'creem',
         ])->assertStatus(200);
     }
 
     /**
      * 系統贈送的試用訂閱沒經過金流商，取消只在本地記錄。
      *
-     * 修正前它會掉進 destroy() 的 match default 走 Paddle 分支，拋出
-     * "Attempt to read property paddle_id on null"。
+     * 不能被當成金流型訂閱去找金流商的對應列（找不到就回 422）。
      */
     public function testDestroyCancelsAGiftedTrialLocally()
     {
@@ -783,7 +624,6 @@ class SubscriptionsControllerTest extends TestCase
         $user = $this->fakeLogin();
 
         foreach ([
-            Subscription::PAYMENT_METHOD_PADDLE,
             Subscription::PAYMENT_METHOD_STRIPE,
             Subscription::PAYMENT_METHOD_CREEM,
         ] as $method) {
@@ -807,6 +647,141 @@ class SubscriptionsControllerTest extends TestCase
 
             $this->assertNull($subscription->fresh()->cancellation_date, "{$method} 不該被記成已取消");
         }
+    }
+
+    /**
+     * Paddle 下線後仍留在資料庫裡的 Paddle 訂閱：方案照常讀得到，不會因為
+     * 金流商已經不在而退回免費方案或 500。
+     */
+    public function testLegacyPaddleSubscriberStillSeesTheirPlan(): void
+    {
+        $user = $this->fakeLogin();
+        $subscription = $this->createLegacyPaddleSubscription($user);
+
+        $this->json('GET', route('api.v1.subscriptions.index'))
+            ->assertStatus(200)
+            ->assertJsonPath('status', Subscription::STATUS_ACTIVE)
+            ->assertJsonPath('subscription_id', $subscription->id)
+            ->assertJsonPath('id', $this->basicPlan->id);
+    }
+
+    /**
+     * 我們已經沒有辦法替 Paddle 訂閱停止扣款，所以 app 內取消要回 422 請他聯絡
+     * 客服，不能打 Paddle API，也不能記成已取消（Paddle 那邊仍在扣款）。
+     */
+    public function testLegacyPaddleSubscriberCannotCancelInApp(): void
+    {
+        $user = $this->fakeLogin();
+        $subscription = $this->createLegacyPaddleSubscription($user);
+
+        $this->json('DELETE', route('api.v1.subscriptions.destroy', ['subscriptionId' => $subscription->id]))
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.cancel_unavailable'));
+
+        $this->assertNull($subscription->fresh()->cancellation_date);
+        $this->assertSame(Subscription::STATUS_ACTIVE, $subscription->fresh()->status);
+    }
+
+    /**
+     * Paddle 訂閱還在期內時不能再開一筆結帳，否則 Paddle 與新金流會各扣一次。
+     */
+    public function testLegacyPaddleSubscriberCannotStartASecondCheckout(): void
+    {
+        $user = $this->fakeLogin();
+        $this->createLegacyPaddleSubscription($user);
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'stripe',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.subscription.0', __('validators.controllers.subscription.already_subscribed'));
+    }
+
+    public function testStoreRejectsPaddleAsPaymentMethod(): void
+    {
+        $user = $this->fakeLogin();
+
+        $this->json('POST', route('api.v1.subscriptions.store'), [
+            'planId'        => $this->basicPlan->id,
+            'priceId'       => $this->basicMonthlyPrice->id,
+            'paymentMethod' => 'paddle',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('messages.paymentMethod.0', __('validators.subscription.paymentMethod.in'));
+
+        $this->assertDatabaseMissing('subscriptions', ['user_id' => $user->id]);
+    }
+
+    /**
+     * 正式環境的 PAYMENT_DEFAULT_PROVIDER 若還寫著 paddle，新結帳要落到現行金流
+     * Clink，不能讓整站結不了帳。
+     */
+    public function testDefaultPaymentMethodFallsBackToClinkWhenSetToPaddle(): void
+    {
+        $previous = getenv('PAYMENT_DEFAULT_PROVIDER');
+        putenv('PAYMENT_DEFAULT_PROVIDER=paddle');
+        $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = 'paddle';
+
+        try {
+            $this->assertSame(Subscription::PAYMENT_METHOD_CLINK, Subscription::defaultPaymentMethod());
+        } finally {
+            putenv($previous === false ? 'PAYMENT_DEFAULT_PROVIDER' : 'PAYMENT_DEFAULT_PROVIDER=' . $previous);
+            $_ENV['PAYMENT_DEFAULT_PROVIDER'] = $_SERVER['PAYMENT_DEFAULT_PROVIDER'] = $previous === false ? null : $previous;
+        }
+    }
+
+    /**
+     * 讓預設金流（Creem）的結帳走得完：basicMonthlyPrice 要有 Creem product
+     * 對應，`POST /checkouts` 由 Http::fake 攔下。
+     */
+    private function fakeCreemCheckout(): void
+    {
+        foreach ([Creem::VARIANT_STANDARD, Creem::VARIANT_TRIAL] as $variant) {
+            Creem::create([
+                'foreign_type' => Price::class,
+                'foreign_id'   => $this->basicMonthlyPrice->id,
+                'creem_id'     => "prod_basic_monthly_{$variant}",
+                'creem_detail' => [],
+                'variant'      => $variant,
+            ]);
+        }
+
+        Http::fake([
+            '*/checkouts' => Http::response([
+                'id'           => 'ch_test',
+                'checkout_url' => 'https://tests.invalid/creem/ch_test',
+            ]),
+        ]);
+    }
+
+    /**
+     * 照正式資料的形狀建一筆 Paddle 時期的訂閱：`payment_method = paddle`，
+     * 並在 `paddles` 表留下對應列。直接寫表，因為程式裡已經沒有 Paddle model。
+     */
+    private function createLegacyPaddleSubscription(User $user): Subscription
+    {
+        $subscription = Subscription::factory()->create([
+            'user_id'        => $user->id,
+            'plan_id'        => $this->basicPlan->id,
+            'price_id'       => $this->basicMonthlyPrice->id,
+            'payment_method' => 'paddle',
+            'status'         => Subscription::STATUS_ACTIVE,
+            'start_date'     => now()->subMonth(),
+            'next_date'      => now()->addWeeks(2),
+        ]);
+
+        DB::table('paddles')->insert([
+            'foreign_type'  => Subscription::class,
+            'foreign_id'    => $subscription->id,
+            'paddle_id'     => 'sub_legacy_paddle',
+            'paddle_detail' => '{}',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        return $subscription;
     }
 
     /**

@@ -16,10 +16,10 @@ class UserResource extends JsonResource
     public function toArray(): array
     {
         return [
-            'id'      => strval($this->resource->id),
-            'name'    => strval($this->resource->name),
-            'email'   => strval($this->resource->email),
-            'avatar'  => $this->resource->avatar
+            'id'     => strval($this->resource->id),
+            'name'   => strval($this->resource->name),
+            'email'  => strval($this->resource->email),
+            'avatar' => $this->resource->avatar
                 ? rtrim(config('app.cdn_url'), '/') . '/' . $this->resource->avatar
                 : null,
             'setting' => new SettingResource($this->whenLoaded('setting')),

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\Feature;
 use Hypervel\Http\Resources\Json\JsonResource;
 
 class PlanResource extends JsonResource
@@ -12,6 +13,9 @@ class PlanResource extends JsonResource
 
     /**
      * Transform the resource into an array.
+     *
+     * skill_enabled 是「實際給不給」：全站關掉頻道 Skill 時那些端點是 404，
+     * 不能讓定價頁把它列成權益（config/features.php）。
      */
     public function toArray(): array
     {
@@ -27,6 +31,7 @@ class PlanResource extends JsonResource
             'agent_enabled'          => boolval($this->resource->agent_enabled),
             'thinking_enabled'       => boolval($this->resource->thinking_enabled),
             'mcp_enabled'            => boolval($this->resource->mcp_enabled),
+            'skill_enabled'          => Feature::ChannelSkill->enabled() && boolval($this->resource->skill_enabled),
             'advanced_model_enabled' => boolval($this->resource->advanced_model_enabled),
             'custom_summary_enabled' => boolval($this->resource->custom_summary_enabled),
             'screenshot_enabled'     => boolval($this->resource->screenshot_enabled),

@@ -30,6 +30,7 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'agent_enabled', type: 'boolean', example: false),
         new OAT\Property(property: 'thinking_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'mcp_enabled', type: 'boolean', example: true),
+        new OAT\Property(property: 'skill_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'advanced_model_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'custom_summary_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'screenshot_enabled', type: 'boolean', example: true),
@@ -39,7 +40,6 @@ use OpenApi\Attributes as OAT;
             type: 'array',
             items: new OAT\Items(ref: PriceResource::class)
         ),
-        new OAT\Property(property: 'paddle', ref: PaddleResource::class),
     ],
     type: 'object'
 )]

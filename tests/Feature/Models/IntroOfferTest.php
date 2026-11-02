@@ -69,9 +69,9 @@ class IntroOfferTest extends TestCase
     /**
      * 試用長度是 14 天。
      *
-     * 這條看起來像在測一個常數，但它守的是「14」這個數字本身：三家金流與三語系
+     * 這條看起來像在測一個常數，但它守的是「14」這個數字本身：兩家金流與三語系
      * 文案全部從這裡推導（Creem 的 `trial_period_days`、Stripe 的 `trial_end`、
-     * Paddle 的 `trial_period`、以及 API 吐給前端的 `prices[].trial_days`），
+     * 以及 API 吐給前端的 `prices[].trial_days`），
      * 所以改掉它會讓這條紅，提醒去看對外文案與金流目錄要不要跟著動。
      */
     public function testTheTrialIsFourteenDays(): void

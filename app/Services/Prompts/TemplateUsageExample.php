@@ -118,11 +118,12 @@ class TemplateUsageExample
     public static function example4(): void
     {
         // 註冊自訂模板
-        TemplateFactory::register('custom', CustomTemplate::class);
+        TemplateFactory::register('custom', CustomPromptTemplate::class);
 
         // 使用自訂模板
         $template = TemplateFactory::create('custom', [
-            'param1' => 'value1',
+            'system_prompt' => 'Summarize like a product manager.',
+            'language'      => 'English',
         ]);
     }
 

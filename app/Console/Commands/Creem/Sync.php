@@ -15,7 +15,7 @@ use Hypervel\Console\Command;
 /**
  * 依 `plans` / `prices` 在 Creem 建立對應的 product。
  *
- * **與 `paddle:sync` 的兩個結構差異：**
+ * **兩個結構上要注意的地方：**
  *
  * 1. Creem 沒有 product → 多 price 的階層，價格直接綁在 product 上。所以這裡是
  *    **一個 price 對一個 product**，`plans` 只拿來組名稱，不會在 Creem 建東西。
@@ -36,11 +36,11 @@ use Hypervel\Console\Command;
  *
  * 這個指令是**只新增不修改**的。Creem 的 product 一旦有人用它訂閱過就不該再改價，
  * 所以已存在的 price 會直接跳過；要改價請在 Creem 建新 product，再把 `creems`
- * 的對應列指過去（與 Paddle 那邊「price 不可變」的處理原則一致）。
+ * 的對應列指過去。
  */
 class Sync extends Command
 {
-    /** 稅外加，與 Paddle 時期的 tax_mode=external 一致。理由見 syncVariant()。 */
+    /** 稅外加。理由見 syncVariant()。 */
     public const string TAX_MODE = 'exclusive';
 
     /** 我們賣的是 SaaS 訂閱。Creem 接受 saas / digital-goods-service / ebooks。 */
@@ -120,10 +120,11 @@ class Sync extends Command
         int $amount,
         string $label
     ): void {
+        /** @var null|Creem $existing */
         $existing = $price->creem()->where('variant', $variant)->first();
 
         if ($existing && $this->option('recreate')) {
-            // Creem 沒有 update product 的 API（與 Paddle 的 price 一樣，建了就定了），
+            // Creem 沒有 update product 的 API（建了就定了），
             // 所以屬性要改只能建新的再把對應指過去。舊 product 留在 Creem 帳號裡不動
             // ——已經用它訂閱的人要繼續照原本的條件收費，刪掉會弄壞既有訂閱。
             $this->line("    · 捨棄舊對應 [{$label}/{$variant}]：{$existing->creem_id}");
@@ -144,12 +145,11 @@ class Sync extends Command
             'currency'       => 'USD',
             'billing_type'   => 'recurring',
             'billing_period' => $this->billingPeriodFor($price),
-            // **一定要明示，不能吃預設值。** Creem 的預設是 `inclusive`（稅內含），
-            // 與 Paddle 的 `tax_mode=external` 相反：同樣標價 $12.99，inclusive 會把
-            // 法國客人的 20% VAT 從我們的收入裡扣掉（實收約 $10.82），exclusive 才是
-            // 外加（客人付 $15.59、我們實收 $12.99）。
+            // **一定要明示，不能吃預設值。** Creem 的預設是 `inclusive`（稅內含）：
+            // 同樣標價 $12.99，inclusive 會把法國客人的 20% VAT 從我們的收入裡扣掉
+            // （實收約 $10.82），exclusive 才是外加（客人付 $15.59、我們實收 $12.99）。
             //
-            // 選 exclusive 是為了與 Paddle 時期一致——定價頁寫的 US$12.99 與
+            // 選 exclusive 是因為定價頁寫的 US$12.99 與
             // docs/pricing-cost-model 的毛利試算都是以「稅外加」為前提算的，改成內含
             // 等於歐盟客戶的單位營收少一截，而且不會有任何地方報錯。
             'tax_mode' => self::TAX_MODE,
@@ -159,7 +159,7 @@ class Sync extends Command
 
         if ($variant === Creem::VARIANT_TRIAL) {
             // 試用長度的單一事實來源是 Subscription::TRIAL_DAYS，單位本來就是天，
-            // 所以這裡不需要任何換算（舊版是 FREE_MONTHS * 30，與 Paddle 的
+            // 所以這裡不需要任何換算（舊版是 FREE_MONTHS * 30，與日曆上的
             // 「1 個月」會差 0–1 天）。
             //
             // 不傳 trial_price：API 規定它必須 ≥100 且小於 price，傳 0 是不合法的，

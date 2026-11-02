@@ -17,7 +17,9 @@ The rule, the reasoning, and edge cases.
 
 ## 免費月給在第一次結帳，不是註冊——而且終生只給一次
 
-`code:` `app/Services/SubscriptionService.php` → `isEligibleForFreeMonth()`、`app/Services/PaddleSubscriptionService.php` → `applyFreeMonth()` · `updated:` `2026-09-21` · `status:` `active`
+`code:` `app/Services/SubscriptionService.php` → `isEligibleForIntroOffer()` · `updated:` `2026-10-31` · `status:` `obsolete`
+
+> 已被取代：優惠在 2026-10 改成 14 天試用（`Subscription::TRIAL_DAYS`），Paddle 也已移除。「終生一次、用『成立過』判斷、三個排除項」這套資格閘門仍然有效，現行說明在 `isEligibleForIntroOffer()` 的 docblock；Paddle 留下的訂閱怎麼處理見〈Paddle 已移除〉。
 
 2026-09 之前是「註冊就送一個月 Pro 試用」（`UserObserver::created()` 直接建一筆
 `status = trial` 的訂閱）。現在改成 **買什麼方案就送該方案一個月，時機在第一次訂閱**：
@@ -195,7 +197,7 @@ $0.50、稅外加），每個價位能負擔的 AI 成本預算是 $12.99 → $3
 
 ## 從 Paddle 換到 Stripe，稅務與爭議款的責任轉移到自己身上
 
-`code:` `app/Services/StripeSubscriptionService.php`、`app/Services/StripeClient.php` · `updated:` `2026-08-25` · `status:` `active`
+`code:` `app/Services/StripeSubscriptionService.php`、`app/Services/StripeClient.php` · `updated:` `2026-10-31` · `status:` `active`
 
 兩者的差別不只是費率高低，而是 **Paddle 是 Merchant of Record（MoR）、Stripe 不是**。程式碼看到的只有「換了一個 SDK」，但實際換掉的是三件事：
 
@@ -207,4 +209,74 @@ $0.50、稅外加），每個價位能負擔的 AI 成本預算是 $12.99 → $3
 
 **3. 金流成本要疊著算，不是單一費率。** Stripe 的 2.9% + $0.30 只是基本卡片費，實務上還要加 Stripe Billing 0.5%、Stripe Tax 0.5%、國際卡 1.5%（按客戶組成加權）。以一半國際客戶估，綜合約 **4.7% + $0.30**。拿 2.9% 去算毛利會高估。
 
-`Price` 與 `Plan` 上 Paddle 與 Stripe 的關聯是並存的（`paddle()` / `stripe()` 兩個 polymorphic relation 都還在），所以 schema 看不出目前主用哪一家——以 Stripe 為準。
+2026-10-31 起預設金流是 **Clink**（`PAYMENT_DEFAULT_PROVIDER=clink`），在那之前是 Creem。兩者都和 Paddle 一樣是 MoR，所以上面三件事只在結帳走 `paymentMethod=stripe` 時成立。Paddle 已移除，`Price` / `Plan` 上剩 `stripe()`、`creem()`、`clink()` 三種對應。
+
+## Paddle 已移除，舊 Paddle 訂閱只剩資料，客服要手動收尾
+
+`code:` `app/Http/Controllers/API/V1/SubscriptionsController.php` → `assertHasProviderLink()`、`app/Models/Subscription.php` → `defaultPaymentMethod()` · `updated:` `2026-10-31` · `status:` `active`
+
+2026-10 為了 Creem 送審，把 Paddle 整合整個拿掉：SDK、`POST /v1/webhook/paddle`、
+`PUT /v1/subscriptions/{id}`（只為 Paddle 結帳確認存在）、`paddle:sync`、Paddle model 與
+各處的 `paddle()` 關聯都不在了。**資料沒動**：`subscriptions.payment_method = 'paddle'`
+的列、`paddles` 表（含 `foreign_type` 指向 Subscription / Transaction / User / Plan /
+Price 的對應列）都還在，`subscriptions.payment_method` 欄位預設值也仍是 `'paddle'`
+（舊 migration 寫的，程式每次建立都會明給值，所以不影響行為）。刪表或改預設值要另開
+migration，由人決定。
+
+一個目前訂閱是 Paddle 的使用者，移除之後看到的是：
+
+| 情境 | 結果 | 原因 |
+|---|---|---|
+| `GET /v1/subscriptions`、額度、方案權益 | 照舊是付費方案 | 方案只看 `plan_id`，不經金流商 |
+| `status = active` | **權限不會自己結束** | `scopeActive()` 對 `active` 不看 `next_date`，而能把它改成 `canceled` 的 Paddle webhook 已經收不到 |
+| `status = trial` | 到 `next_date` 自然落回免費方案 | `scopeActive()` 對 `trial` 會比對 `next_date` |
+| app 內按取消 | 422 `cancel_unavailable`（請聯絡客服），不記取消日 | 我們已經無法替他在 Paddle 停止扣款，假裝取消成功就是之後才爆的客訴 |
+| 再開一筆 Creem / Stripe 結帳 | 422 `already_subscribed` | 否則 Paddle 與新金流會各扣一次 |
+| 之後的新客優惠 | 不再給 | 資格閘門是「成立過任何付費訂閱」，不分金流 |
+
+**Paddle 那邊不會因為我們移除程式而停止扣款**，所以每一筆仍在期內的 Paddle 訂閱都要
+有人到 Paddle 後台處理（取消，或協助改訂 Creem），再手動把我們這筆的 `status` /
+`cancellation_date` 改掉。盤點用：
+
+```sql
+SELECT id, user_id, status, next_date, cancellation_date
+FROM subscriptions
+WHERE payment_method = 'paddle' AND deleted_at IS NULL
+  AND status IN ('active', 'trial');
+```
+
+`PAYMENT_DEFAULT_PROVIDER` 若還寫著 `paddle`（或沒設、打錯），新結帳一律走 Clink
+（2026-10-31 之前是 Creem），`creem:verify` / `clink:verify` 也照實際生效的值回報；
+`paymentMethod=paddle` 的結帳請求回 422。
+
+做對了的樣子：上面那支 SQL 回 0 列之後，`paddles` 表與 `payment_method = 'paddle'`
+就只剩歷史意義，可以考慮 drop。
+
+## 預設金流換成 Clink，既有 Creem 訂閱留在 Creem
+
+`code:` `app/Models/Subscription.php` → `defaultPaymentMethod()`、`app/Http/Controllers/API/V1/SubscriptionsController.php` → `destroy()` · `updated:` `2026-10-31` · `status:` `active`
+
+2026-10-31 使用者定案：新結帳改走 Clink（Merchant of Record），**既有 Creem 訂閱不搬移**。
+跟 Paddle 那次不同，Creem 的程式路徑全部保留：
+
+- 續約與狀態變化仍由 `POST /v1/webhook/creem` 寫回；`CREEM_*` 變數在正式環境要繼續設著，
+  拿掉就是 Creem 訂閱者的取消與續約全部對不上。
+- app 內取消依訂閱的 `payment_method` 分流，Creem 訂閱回 Creem 取消，不碰 Clink。
+- `paymentMethod=creem` 仍是合法的結帳參數，只是不再是預設。
+
+`PAYMENT_DEFAULT_PROVIDER` 的預設值與「認不得時退回的值」都是 `clink`。切到 Clink 之前，
+對外文案（定價頁、條款、退款政策、隱私政策的處理者）要把 Creem 換成 Clink，並依 Clink
+條款 §4 寫明 Clink 是轉售者（reseller）。
+
+## Clink 結帳不做首期折價，設了就讓結帳失敗
+
+`code:` `app/Services/ClinkSubscriptionService.php` → `createCheckout()` · `updated:` `2026-10-31` · `status:` `active`
+
+Creem 那條路有「年繳首期折價」（`prices.first_period_price` + 單次折扣碼），目前沒有任何
+price 設這個欄位。Clink 版本沒有實作（Clink 做得到：coupon `durationType: once` 加隱藏預套的
+`promotionCode`），所以有資格的人結帳一個設了 `first_period_price` 的 price 時**直接拋例外**：
+寧可結帳失敗，也不要定價頁寫著首期折價、結帳卻照原價收。要啟用首期折價就要先把這條路補上。
+
+同理，`subscription.updated.plan_changed` 只同步狀態、不改 `plan_id` / `price_id`（記
+warning）。我們的 app 沒有換方案流程，Clink Customer Portal 的升級與降級要在 dashboard 關掉，
+否則客人自己換了方案，我們這邊的方案權益不會跟著變。

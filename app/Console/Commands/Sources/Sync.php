@@ -129,13 +129,14 @@ class Sync extends Command
      *
      * @return null|array<int, array{
      *   id: string,
-     *   yt:videoId: string,
-     *   yt:channelId: string,
+     *   'yt:videoId': string,
+     *   'yt:channelId': string,
      *   title: string,
      *   description: string,
      *   thumbnail: string,
      *   published: string,
-     *   video_detail: array<string, mixed>
+     *   link: string,
+     *   author: array{name: string, uri: string}
      * }>
      */
     private function fetchRssEntries(string $url): ?array

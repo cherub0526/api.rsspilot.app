@@ -38,9 +38,9 @@ class InvalidRequestException extends Exception
         ?string $errorCode = null,
         array $meta = []
     ) {
-        $this->messages  = $messages;
+        $this->messages = $messages;
         $this->errorCode = $errorCode;
-        $this->meta      = $meta;
+        $this->meta = $meta;
 
         parent::__construct(self::$statusMessage, $code);
     }

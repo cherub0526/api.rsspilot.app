@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Feature;
 use Hypervel\Support\Facades\Route;
 use App\Http\Controllers\API\V1\AuthController;
 use App\Http\Controllers\API\V1\MediaController;
@@ -24,25 +25,27 @@ use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
 use App\Http\Controllers\API\V1\SubscriptionsController;
 use App\Http\Controllers\API\V1\Users\ApiKeysController;
+use App\Http\Controllers\API\V1\Webhook\ClinkController;
 use App\Http\Controllers\API\V1\Webhook\CreemController;
 use App\Http\Controllers\API\V1\Media\CaptionsController;
 use App\Http\Controllers\API\V1\Oauth\CallbackController;
 use App\Http\Controllers\API\V1\Oauth\RedirectController;
-use App\Http\Controllers\API\V1\Webhook\PaddleController;
 use App\Http\Controllers\API\V1\Webhook\StripeController;
 use App\Http\Controllers\API\V1\Media\SummariesController;
 use App\Http\Controllers\API\V1\Media\ThumbnailsController;
 use App\Http\Controllers\API\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
+use App\Http\Controllers\API\V1\Subscriptions\ClinkConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
-use App\Http\Controllers\API\V1\Webhook\YoutubeMp3DownloaderController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
+use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\StreamController as ChatStreamController;
 use App\Http\Controllers\API\V1\Media\Chat\SessionsController as ChatSessionsController;
 use App\Http\Controllers\API\V1\Media\Chat\FollowUpsController as ChatFollowUpsController;
 use App\Http\Controllers\API\V1\Subscriptions\UsageController as SubscriptionUsageController;
+use App\Http\Controllers\API\V1\Sources\Skill\DownloadController as SourceSkillDownloadController;
 
 Route::group('/feedbacks', function () {
     Route::post('/', [
@@ -250,6 +253,20 @@ Route::group('/sources', function () {
             'middleware' => ['auth'],
         ]);
     }, ['as' => 'medias']);
+    Route::group('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}/skill', function () {
+        Route::get('/', [
+            'as'         => 'show',
+            'uses'       => SourceSkillController::class . '@show',
+            'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:60,1'],
+        ]);
+        Route::group('/download', function () {
+            Route::get('/', [
+                'as'         => 'index',
+                'uses'       => SourceSkillDownloadController::class . '@index',
+                'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:30,1'],
+            ]);
+        }, ['as' => 'download']);
+    }, ['as' => 'skill']);
 }, ['as' => 'sources']);
 
 Route::group('/media', function () {
@@ -341,7 +358,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'download',
                 'uses'       => CaptionsController::class . '@download',
-                'middleware' => ['auth'],
+                'middleware' => ['auth', 'feature:' . Feature::TranscriptDownload->value],
             ]
         );
         Route::get(
@@ -452,6 +469,12 @@ Route::group('/subscriptions', function () {
         'middleware' => ['auth'],
     ]);
 
+    Route::post('/clink/confirm', [
+        'as'         => 'clink.confirm.store',
+        'uses'       => ClinkConfirmController::class . '@store',
+        'middleware' => ['auth'],
+    ]);
+
     Route::get('/usage', [
         'as'         => 'usage.index',
         'uses'       => SubscriptionUsageController::class . '@index',
@@ -482,14 +505,6 @@ Route::group('/plans', function () {
 
 Route::group('/webhook', function () {
     Route::post(
-        '/paddle',
-        [
-            'as'   => 'paddle.store',
-            'uses' => PaddleController::class . '@store',
-        ]
-    );
-
-    Route::post(
         '/stripe',
         [
             'as'   => 'stripe.store',
@@ -506,10 +521,10 @@ Route::group('/webhook', function () {
     );
 
     Route::post(
-        '/youtube-mp3-downloader/{mediaId}',
+        '/clink',
         [
-            'as'   => 'youtube-mp3-downloader.store',
-            'uses' => YoutubeMp3DownloaderController::class . '@store',
+            'as'   => 'clink.store',
+            'uses' => ClinkController::class . '@store',
         ]
     );
 

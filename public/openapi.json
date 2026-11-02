@@ -906,6 +906,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [
@@ -921,6 +924,7 @@
                     "Media"
                 ],
                 "summary": "Download a caption as a subtitle file",
+                "description": "Responds 404 while transcript downloads are turned off on this server.",
                 "operationId": "api.v1.media.captions.download",
                 "parameters": [
                     {
@@ -960,6 +964,9 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
                     }
                 },
                 "security": [
@@ -1173,7 +1180,7 @@
                     "Media"
                 ],
                 "summary": "SSE long connection to receive AI reply tokens",
-                "description": "GET /v1/media/{mediaId}/chat/stream.\n\n建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。\n\n流程：\n 1. 開啟長連線，送出 connected 事件\n 2. 為此連線建立專屬 Swoole Channel\n 3. 動態監聽 ChatTokenEvent / ChatDoneEvent / ChatErrorEvent\n    （依 userId + mediaId 過濾，只接收屬於自己的事件）\n 4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈",
+                "description": "GET /v1/media/{mediaId}/chat/stream.\n\n建立 SSE 長連線，即時接收此使用者在此媒體上的 AI 回覆 token。\n\n流程：\n 1. 開啟長連線，送出 connected 事件\n 2. 為此連線建立專屬 Swoole Channel\n 3. 動態監聽 ChatTokenEvent / ChatReasoningEvent / ChatToolCallEvent /\n    ChatToolResultEvent / ChatDoneEvent / ChatErrorEvent\n    （依 userId + mediaId 過濾，只接收屬於自己的事件）\n 4. 30 秒 timeout 發 heartbeat，前端斷線則退出迴圈",
                 "operationId": "api.v1.media.chat.stream.show",
                 "parameters": [
                     {
@@ -1187,7 +1194,7 @@
                             "text/event-stream": {
                                 "schema": {
                                     "type": "string",
-                                    "example": "data: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
+                                    "example": "data: {\"type\":\"reasoning\",\"token\":\"Let me\"}\n\ndata: {\"type\":\"token\",\"token\":\"Hello\"}\n\ndata: {\"type\":\"done\"}\n\n"
                                 }
                             }
                         }
@@ -1207,7 +1214,7 @@
                     "Media"
                 ],
                 "summary": "Send message and broadcast AI tokens via SSE",
-                "description": "POST /v1/media/{mediaId}/chat.\n\n接收使用者訊息，向 OpenRouter 發送串流請求。\n每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線。\n回傳時機：完整回應產生後（或發生錯誤時）。",
+                "description": "POST /v1/media/{mediaId}/chat.\n\n接收使用者訊息，向 OpenRouter 發送串流請求。\n每個 token 透過 ChatTokenEvent 廣播給對應的 SSE 長連線；會思考的模型在回答\n之前先送出的推理內容走 ChatReasoningEvent，兩者在前端是不同的片段。\n\n思考與上網查資料都是**方案權益**（`plans.thinking_enabled` /\n`plans.agent_enabled`），沒開通的人不會被擋下請求——它們是能力不是閘門，\n他照常對話，只是看不到思考過程、模型也查不到摘要以外的東西。無從判斷權益\n（沒有方案）時一律關掉，與其他付費功能的預設一致。\n回傳時機：完整回應產生後（或發生錯誤時）。",
                 "operationId": "api.v1.media.chat.store",
                 "parameters": [
                     {
@@ -1891,6 +1898,11 @@
                                         "expires_in": {
                                             "type": "integer",
                                             "example": 3600
+                                        },
+                                        "created": {
+                                            "description": "True when this exchange created the account instead of signing in an existing one. The same endpoint serves both, so only the server can tell them apart; the web client needs it to count sign-ups.",
+                                            "type": "boolean",
+                                            "example": true
                                         }
                                     },
                                     "type": "object"
@@ -2188,6 +2200,180 @@
                     },
                     "404": {
                         "$ref": "#/components/responses/404"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/sources/{sourceId}/skill/download": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Download the channel skill",
+                "description": "Download the channel skill in the user AI language. Every successful download is recorded. Playlists are 404, and so is every request while channel skills are turned off on this server.",
+                "operationId": "api.v1.sources.skill.download.index",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    },
+                    {
+                        "name": "format",
+                        "in": "query",
+                        "description": "`zip` (default) returns `<name>.zip`; `files` returns both files as JSON for the desktop install",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "zip",
+                            "enum": [
+                                "zip",
+                                "files"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`application/zip` for `format=zip`; JSON for `format=files`",
+                        "content": {
+                            "application/zip": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "name": {
+                                            "type": "string",
+                                            "example": "rsspilot-example-channel-abc123"
+                                        },
+                                        "files": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "path": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "SKILL.md",
+                                                            "references/videos.md"
+                                                        ]
+                                                    },
+                                                    "content": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/422"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/sources/{sourceId}/skill": {
+            "get": {
+                "tags": [
+                    "Sources"
+                ],
+                "summary": "Get the channel skill",
+                "description": "Status and content of the channel skill in the user AI language. May queue a generation as a side effect (at most 10 per user per UTC day). Playlists are 404, and so is every request while channel skills are turned off on this server.",
+                "operationId": "api.v1.sources.skill.show",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/sourceId"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Skill status; `reason` is only set when `status` is `not_generated`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "ready",
+                                                "generating",
+                                                "failed",
+                                                "insufficient",
+                                                "not_generated"
+                                            ]
+                                        },
+                                        "reason": {
+                                            "type": "string",
+                                            "enum": [
+                                                "upgrade_required",
+                                                "subscribe_required",
+                                                "daily_limit"
+                                            ],
+                                            "nullable": true
+                                        },
+                                        "locked": {
+                                            "type": "boolean"
+                                        },
+                                        "language": {
+                                            "description": "Language of the returned skill",
+                                            "type": "string",
+                                            "example": "zh-TW"
+                                        },
+                                        "min_videos": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "summarized_count": {
+                                            "type": "integer",
+                                            "example": 12
+                                        },
+                                        "skill": {
+                                            "oneOf": [
+                                                {
+                                                    "$ref": "#/components/schemas/SourceSkillResource"
+                                                }
+                                            ],
+                                            "nullable": true
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/429"
                     }
                 },
                 "security": [
@@ -2555,6 +2741,128 @@
                 ]
             }
         },
+        "/v1/subscriptions/clink/confirm": {
+            "post": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Activate a Clink subscription right after the customer returns from checkout",
+                "operationId": "api.v1.subscriptions.clink.confirm.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "session_id"
+                                ],
+                                "properties": {
+                                    "session_id": {
+                                        "description": "The sessionId Clink appends to the success URL",
+                                        "type": "string",
+                                        "example": "sess_8Kq2LmN4pR7sT1vW"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Subscription activated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "subscription_id": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "trial"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "description": "Session not found, not completed, or not yours"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/subscriptions/creem/confirm": {
+            "post": {
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Activate a Creem subscription right after the customer returns from checkout",
+                "operationId": "api.v1.subscriptions.creem.confirm.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "checkout_id"
+                                ],
+                                "properties": {
+                                    "checkout_id": {
+                                        "description": "The checkout_id Creem appends to success_url",
+                                        "type": "string",
+                                        "example": "ch_4l0N34kxo16AhRKUHFUuXr"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Subscription activated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "subscription_id": {
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "example": "trial"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "422": {
+                        "description": "Checkout not found, not completed, or not yours"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/subscriptions/usage": {
             "get": {
                 "tags": [
@@ -2644,10 +2952,35 @@
                                                     "nullable": true
                                                 },
                                                 "trial_ends_at": {
-                                                    "description": "Present only when status=trial",
+                                                    "description": "First billing date; present only when status=trial",
                                                     "type": "string",
                                                     "format": "date-time",
                                                     "example": "2026-06-14T00:00:00+00:00",
+                                                    "nullable": true
+                                                },
+                                                "intro_eligible": {
+                                                    "description": "true = this account has not used its one-off new-customer offer yet. The offer is a free trial of prices[].trial_days, on both monthly and annual. A price that sets prices[].first_period_price trades that trial for a discounted first period instead. One lifetime gate for both, so a customer cannot collect each separately.",
+                                                    "type": "boolean",
+                                                    "example": true
+                                                },
+                                                "subscription_id": {
+                                                    "description": "Subscription ULID; null on the free plan",
+                                                    "type": "string",
+                                                    "example": "01JCXYZ123456789ABCDEFGHIJ",
+                                                    "nullable": true
+                                                },
+                                                "next_date": {
+                                                    "description": "Next renewal date, or the end of paid access once canceled",
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": "2026-10-14T00:00:00+00:00",
+                                                    "nullable": true
+                                                },
+                                                "cancellation_date": {
+                                                    "description": "Set once the subscription is canceled; access runs until next_date",
+                                                    "type": "string",
+                                                    "format": "date-time",
+                                                    "example": null,
                                                     "nullable": true
                                                 }
                                             },
@@ -2698,13 +3031,14 @@
                                         "example": "01JCXYZ123456789ABCDEFGHIJ"
                                     },
                                     "paymentMethod": {
-                                        "description": "Payment gateway (stripe or paddle, defaults to paddle)",
+                                        "description": "Payment gateway. Defaults to PAYMENT_DEFAULT_PROVIDER.",
                                         "type": "string",
                                         "enum": [
                                             "stripe",
-                                            "paddle"
+                                            "creem",
+                                            "clink"
                                         ],
-                                        "example": "paddle"
+                                        "example": "clink"
                                     }
                                 },
                                 "type": "object"
@@ -2714,11 +3048,57 @@
                 },
                 "responses": {
                     "200": {
-                        "description": "Checkout initialization payload",
+                        "description": "Checkout initialization payload. Exactly one provider key is present, matching the payment method used.",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
+                                        "clink": {
+                                            "properties": {
+                                                "checkout_url": {
+                                                    "description": "Hosted checkout page to redirect the customer to",
+                                                    "type": "string",
+                                                    "example": "https://uat-checkout.clinkbill.com/pay/sess_8Kq2LmN4pR7sT1vW"
+                                                },
+                                                "session_id": {
+                                                    "type": "string",
+                                                    "example": "sess_8Kq2LmN4pR7sT1vW"
+                                                },
+                                                "test_mode": {
+                                                    "description": "true when the Clink sandbox is in use",
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "creem": {
+                                            "properties": {
+                                                "checkout_url": {
+                                                    "type": "string",
+                                                    "example": "https://checkout.creem.io/ch_4l0N34kxo16AhRKUHFUuXr"
+                                                },
+                                                "checkout_id": {
+                                                    "type": "string",
+                                                    "example": "ch_4l0N34kxo16AhRKUHFUuXr"
+                                                },
+                                                "test_mode": {
+                                                    "type": "boolean",
+                                                    "example": false
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "customData": {
+                                            "description": "Present for clink and creem",
+                                            "properties": {
+                                                "subscriptionId": {
+                                                    "type": "string",
+                                                    "example": "01JCXYZ123456789ABCDEFGHIJ"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
                                         "stripe": {
                                             "properties": {
                                                 "publishable_key": {
@@ -2754,54 +3134,6 @@
             }
         },
         "/v1/subscriptions/{subscriptionId}": {
-            "put": {
-                "tags": [
-                    "Subscriptions"
-                ],
-                "summary": "Confirm subscription after successful Paddle payment",
-                "operationId": "api.v1.subscriptions.update",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/subscriptionId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "transaction_id"
-                                ],
-                                "properties": {
-                                    "transaction_id": {
-                                        "description": "Paddle transaction ID",
-                                        "type": "string",
-                                        "example": "txn_01abc..."
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/401"
-                    }
-                },
-                "security": [
-                    {
-                        "bearerAuth": []
-                    }
-                ]
-            },
             "delete": {
                 "tags": [
                     "Subscriptions"
@@ -2823,6 +3155,164 @@
                     },
                     "404": {
                         "description": "Subscription not found"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/users/api-keys": {
+            "get": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "List the authenticated user's API keys",
+                "operationId": "api.v1.users.api-keys.index",
+                "responses": {
+                    "200": {
+                        "description": "Keys, newest first. The token itself is never returned.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "integer",
+                                                        "example": 3
+                                                    },
+                                                    "name": {
+                                                        "type": "string",
+                                                        "example": "Claude Desktop"
+                                                    },
+                                                    "last_used_at": {
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "nullable": true
+                                                    },
+                                                    "created_at": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            },
+            "post": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Create an API key",
+                "description": "產生一把新的 key。\n\n**明文只在這個回應裡出現一次**，之後資料庫裡只剩 sha256。使用者沒存到就\n只能刪掉重產——這是 personal access token 的標準作法，也是它值得信任的\n原因：連我們自己都讀不回來。",
+                "operationId": "api.v1.users.api-keys.store",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": [
+                                    "name"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string",
+                                        "maxLength": 60,
+                                        "example": "Claude Desktop"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The plaintext token, returned only once",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "id": {
+                                            "type": "integer",
+                                            "example": 3
+                                        },
+                                        "name": {
+                                            "type": "string",
+                                            "example": "Claude Desktop"
+                                        },
+                                        "token": {
+                                            "type": "string",
+                                            "example": "rsp_3|abc123..."
+                                        },
+                                        "created_at": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/v1/users/api-keys/{id}": {
+            "delete": {
+                "tags": [
+                    "Users"
+                ],
+                "summary": "Revoke an API key",
+                "description": "刪除一把 key，當場失效。\n\n只刪得掉自己的：查詢一律先綁 `$request->user()->tokens()`，不是先找 token\n再比對持有者——後者只要少寫一個判斷就變成任何人都刪得掉任何一把。",
+                "operationId": "api.v1.users.api-keys.destroy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/401"
+                    },
+                    "404": {
+                        "description": "Key not found"
                     }
                 },
                 "security": [
@@ -3074,6 +3564,40 @@
                 ]
             }
         },
+        "/v1/webhook/clink": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Clink webhook events",
+                "operationId": "api.v1.webhook.clink.store",
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "422": {
+                        "description": "Invalid signature, malformed payload, or unknown subscription"
+                    }
+                }
+            }
+        },
+        "/v1/webhook/creem": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Receive Creem webhook events",
+                "operationId": "api.v1.webhook.creem.store",
+                "responses": {
+                    "200": {
+                        "$ref": "#/components/responses/200"
+                    },
+                    "400": {
+                        "$ref": "#/components/responses/400"
+                    }
+                }
+            }
+        },
         "/v1/webhook/groq/{mediaId}": {
             "post": {
                 "tags": [
@@ -3154,74 +3678,6 @@
                     },
                     "404": {
                         "$ref": "#/components/responses/404"
-                    }
-                }
-            }
-        },
-        "/v1/webhook/paddle": {
-            "post": {
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "Receive Paddle transaction webhook callback",
-                "operationId": "api.v1.webhook.paddle.store",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "event_id",
-                                    "event_type",
-                                    "occurred_at",
-                                    "notification_id",
-                                    "data"
-                                ],
-                                "properties": {
-                                    "event_id": {
-                                        "type": "string",
-                                        "example": "evt_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                    },
-                                    "event_type": {
-                                        "type": "string",
-                                        "enum": [
-                                            "transaction.completed"
-                                        ],
-                                        "example": "transaction.completed"
-                                    },
-                                    "occurred_at": {
-                                        "type": "string",
-                                        "format": "date-time",
-                                        "example": "2024-01-01T00:00:00Z"
-                                    },
-                                    "notification_id": {
-                                        "type": "string",
-                                        "example": "ntf_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                    },
-                                    "data": {
-                                        "required": [
-                                            "id"
-                                        ],
-                                        "properties": {
-                                            "id": {
-                                                "type": "string",
-                                                "example": "txn_01h8bzakzx3nhsf0rr6jh6vj6g"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/200"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
                     }
                 }
             }
@@ -3312,127 +3768,6 @@
                                                     }
                                                 },
                                                 "type": "object"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "$ref": "#/components/responses/200"
-                    },
-                    "400": {
-                        "$ref": "#/components/responses/400"
-                    },
-                    "404": {
-                        "$ref": "#/components/responses/404"
-                    }
-                }
-            }
-        },
-        "/v1/webhook/youtube": {
-            "post": {
-                "tags": [
-                    "Webhooks"
-                ],
-                "summary": "Receive YouTube video and audio detail webhook payload",
-                "operationId": "api.v1.webhook.youtube.store",
-                "requestBody": {
-                    "required": false,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "properties": {
-                                    "video_detail": {
-                                        "type": "object",
-                                        "example": null
-                                    },
-                                    "audio_detail": {
-                                        "type": "object",
-                                        "example": null
-                                    }
-                                },
-                                "type": "object"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Payload echoed back",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "video_detail": {
-                                            "type": "object"
-                                        },
-                                        "audio_detail": {
-                                            "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/webhook/youtube-mp3-downloader/{mediaId}": {
-            "post": {
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "Receive YouTube MP3 downloader webhook callback",
-                "operationId": "api.v1.webhook.youtube-mp3-downloader.store",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/mediaId"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "required": [
-                                    "status",
-                                    "data"
-                                ],
-                                "properties": {
-                                    "status": {
-                                        "type": "string",
-                                        "enum": [
-                                            "success",
-                                            "error"
-                                        ],
-                                        "example": "success"
-                                    },
-                                    "data": {
-                                        "required": [
-                                            "status",
-                                            "link"
-                                        ],
-                                        "properties": {
-                                            "status": {
-                                                "type": "string",
-                                                "enum": [
-                                                    "ok",
-                                                    "processing",
-                                                    "fail"
-                                                ],
-                                                "example": "ok"
-                                            },
-                                            "link": {
-                                                "type": "string",
-                                                "format": "uri",
-                                                "example": "https://example.com/audio.mp3"
                                             }
                                         },
                                         "type": "object"
@@ -3791,15 +4126,6 @@
                 },
                 "type": "object"
             },
-            "PaddleResource": {
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "example": "pro_01abc123"
-                    }
-                },
-                "type": "object"
-            },
             "PaginatorLinks": {
                 "properties": {
                     "first": {
@@ -3880,6 +4206,18 @@
                         "type": "boolean",
                         "example": false
                     },
+                    "thinking_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "mcp_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "skill_enabled": {
+                        "type": "boolean",
+                        "example": true
+                    },
                     "advanced_model_enabled": {
                         "type": "boolean",
                         "example": true
@@ -3906,9 +4244,6 @@
                         "items": {
                             "$ref": "#/components/schemas/PriceResource"
                         }
-                    },
-                    "paddle": {
-                        "$ref": "#/components/schemas/PaddleResource"
                     }
                 },
                 "type": "object"
@@ -3928,8 +4263,12 @@
                         "format": "float",
                         "example": 9.99
                     },
-                    "paddle": {
-                        "$ref": "#/components/schemas/PaddleResource"
+                    "first_period_price": {
+                        "description": "Discounted first-period price (annual only); null when there is no intro offer. Renewals always charge `price`.",
+                        "type": "number",
+                        "format": "float",
+                        "example": 99,
+                        "nullable": true
                     }
                 },
                 "type": "object"
@@ -3963,6 +4302,44 @@
                     "thumbnail": {
                         "type": "string",
                         "example": "https://yt3.googleusercontent.com/ytc/example",
+                        "nullable": true
+                    }
+                },
+                "type": "object"
+            },
+            "SourceSkillResource": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "rsspilot-example-channel-abcdef"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Methods and checklists distilled by RSSPilot …"
+                    },
+                    "outline": {
+                        "description": "Plain-text `##` headings of the skill, at most 15 items of 80 characters each.",
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "Core principles",
+                            "Checklist"
+                        ]
+                    },
+                    "content": {
+                        "description": "Full SKILL.md, starting with `---` frontmatter. Always null when the user's plan does not include skills.",
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "video_count": {
+                        "type": "integer",
+                        "example": 30
+                    },
+                    "generated_at": {
+                        "type": "string",
+                        "format": "date-time",
                         "nullable": true
                     }
                 },
@@ -4410,10 +4787,6 @@
         {
             "name": "Webhook",
             "description": "Webhook"
-        },
-        {
-            "name": "Webhooks",
-            "description": "Webhooks"
         }
     ]
 }

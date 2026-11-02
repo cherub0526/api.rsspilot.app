@@ -18,7 +18,7 @@ When a controller action returns a `*Resource` object (e.g. `CaptionResource`, `
 - File: `app/OpenApi/Schemas/CaptionResource.php`, class: `CaptionResource`, schema name: `'CaptionResource'`
 - Do **not** put `#[OAT\Schema]` on the `app/Http/Resources/*Resource.php` class itself
 - In controllers, import the schema class with an alias to avoid conflict with the HTTP Resource: `use App\OpenApi\Schemas\CaptionResource as CaptionSchema;` then use `ref: CaptionSchema::class`
-- Schema classes in the same `App\OpenApi\Schemas\` namespace can reference each other by short name (e.g. `ref: PaddleResource::class`) without an explicit `use` statement
+- Schema classes in the same `App\OpenApi\Schemas\` namespace can reference each other by short name (e.g. `ref: PriceResource::class`) without an explicit `use` statement
 
 ## Single responsibility
 

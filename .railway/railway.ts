@@ -100,17 +100,8 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  *     指向收件人自己的電腦，靜靜破圖。
  * 兩者都是「設定沒設」而不是程式壞掉，所以不會出現在任何測試裡。
  *
- * 三個 PADDLE_* 是同樣的情況：Paddle 只留給既有訂閱、沒有人在動它，所以它們
- * 一直不在這份清單裡，plan 每次都提議把四個 service 上的那三個變數刪掉。真的
- * apply 下去，既有 Paddle 訂閱的 webhook 會因為少了 PADDLE_WEBHOOK_SECRET_KEY
- * 而驗簽失敗——「不再擴充」不等於「可以刪掉設定」。
- *
- * `PADDLE_WEBHOOK_IP_ALLOWLIST` 與 `PADDLE_WEBHOOK_TRUSTED_PROXY` 是 2026-09-22
- * 切 live 時補的，同樣直接開在面板上，所以也要登記進來才不會被 plan 刪掉。它們
- * **必須成對存在**：這個服務跑在 Railway 的反向代理後面，`remote_addr` 看到的是
- * 代理而不是 Paddle，只留下 IP_ALLOWLIST 會把每一則 webhook 都擋掉，症狀是「付款
- * 成功但訂閱沒生效」。兩個都被刪掉則是靜靜地退回「不檢查來源 IP」，見
- * `PaddleController::assertAllowedIp()`。
+ * PADDLE_* 七個在 2026-10 移除 Paddle 整合時一起拿掉，程式已經不讀它們。下一次
+ * plan 會提議把四個 service 上的它們刪掉，那是預期中的變更。
  *
  * `DB_QUEUE_RETRY_AFTER` 同樣是後來補的（2026-09-18）。它決定佇列多久之後判定
  * 「這個 job 沒人在跑」並重新發給別人，必須大於所有 worker 的 `--timeout`
@@ -133,8 +124,7 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * `CREEM_*` 四個與 `PAYMENT_DEFAULT_PROVIDER` 是接上 Creem 時直接開在面板上的
  * （2026-09-25 補），plan 提議把四個 service 上的它們全部刪掉，共 20 個破壞性
  * 變更。`PAYMENT_DEFAULT_PROVIDER` 被刪的話 `Subscription::defaultPaymentMethod()`
- * 會安靜地退回預設值（Paddle 開著時是 Paddle，`PADDLE_ENABLED=false` 時是
- * Creem），新結帳可能改走別家金流而不是報錯。補進清單前已比對過 staging 四個
+ * 會安靜地退回預設值（2026-10 起是 Clink）；設成 stripe 的環境就會改走 Clink 而不是報錯。補進清單前已比對過 staging 四個
  * service 的值完全相同（比 sha256），worker 與 scheduler 改成參照 api 不會變動
  * 任何實際設定。
  *
@@ -142,8 +132,12 @@ const REGION = "asia-southeast1-eqsg3a"; // Southeast Asia (Singapore)
  * AWS_* 已經參照 Railway Bucket，拿去打 SES 只會認證失敗。在面板上設值前就先
  * 登記進來，否則 plan 會把剛設好的它們刪掉，MAIL_MAILER=ses 的信全部寄不出去。
  *
- * `PADDLE_ENABLED` 是暫時關閉 Paddle 時補的（2026-09-30）。沒設或被刪掉等於
- * false——要重新開放 Paddle 結帳時才需要在面板上設成 true。
+ * `CLINK_*` 五個是接上 Clink 時補的（2026-10-31），在面板上設值前就先登記，
+ * 否則 plan 會把剛設好的它們刪掉，Clink 結帳與 webhook 全部失效。
+ *
+ * `FEATURE_TRANSCRIPT`、`FEATURE_CHANNEL_SKILL` 與 `SKILL_DAILY_GLOBAL_LIMIT` 是加上
+ * 功能開關與頻道 Skill 時補的（2026-10-31）。沒設等於關閉／不限，所以先登記、
+ * 要開的時候在面板上設 true 再讓 plan 套用，否則 plan 會把它刪掉，開關靜靜關回去。
  *
  * `MEDIA_REQUIRE_PUBLIC_CAPTIONS` 是公開字幕閘門（2026-10-02）。沒設等於 false（閘門關閉）。
  * 要開啟時先在面板上設 true，再讓 plan 套用——沒登記的話 plan 會把它刪掉，閘門靜靜失效。
@@ -154,22 +148,22 @@ const ENV_KEYS = [
     "AWS_ACCESS_KEY_ID", "AWS_BUCKET", "AWS_DEFAULT_REGION", "AWS_ENDPOINT",
     "AWS_SECRET_ACCESS_KEY", "AWS_USE_PATH_STYLE_ENDPOINT",
     "BROADCAST_CONNECTION", "CACHE_DRIVER", "CLIENT_URL",
+    "CLINK_API_KEY", "CLINK_CANCEL_URL", "CLINK_SUCCESS_URL", "CLINK_TEST_MODE", "CLINK_WEBHOOK_SECRET",
     "CREEM_API_KEY", "CREEM_SUCCESS_URL", "CREEM_TEST_MODE", "CREEM_WEBHOOK_SECRET",
     "DB_CONNECTION", "DB_DATABASE", "DB_HOST", "DB_PASSWORD", "DB_PORT",
-    "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+    "DB_QUEUE_RETRY_AFTER", "DB_USERNAME", "FEATURE_CHANNEL_SKILL", "FEATURE_TRANSCRIPT",
+    "GITHUB_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
     "GROQ_API_KEY", "JWT_SECRET", "JWT_TTL",
     "LOG_CHANNEL", "LOG_CHANNELS", "LOG_LEVEL", "LOG_STDERR_FORMATTER",
     "MAIL_FROM_ADDRESS", "MAIL_FROM_NAME", "MAIL_HOST", "MAIL_MAILER",
     "MAIL_PASSWORD", "MAIL_PORT", "MAIL_USERNAME", "MEDIA_REQUIRE_PUBLIC_CAPTIONS",
     "OPENROUTER_API_KEY",
-    "PADDLE_API_KEY", "PADDLE_CLIENT_TOKEN", "PADDLE_ENABLED", "PADDLE_SANDBOX",
-    "PADDLE_WEBHOOK_IP_ALLOWLIST", "PADDLE_WEBHOOK_SECRET_KEY",
-    "PADDLE_WEBHOOK_TRUSTED_PROXY", "PAYMENT_DEFAULT_PROVIDER",
+    "PAYMENT_DEFAULT_PROVIDER",
     "QUEUE_CONNECTION", "RAPID_API_KEY",
     "REDIS_AUTH", "REDIS_DB", "REDIS_HOST", "REDIS_PORT",
     "SERVER_WORKERS_NUMBER", "SES_KEY", "SES_REGION", "SES_SECRET",
     "SESSION_DOMAIN", "SESSION_DRIVER", "SESSION_ENCRYPT", "SESSION_LIFETIME",
-    "SESSION_PATH", "STRIPE_API_KEY", "STRIPE_PUBLISHABLE_KEY",
+    "SESSION_PATH", "SKILL_DAILY_GLOBAL_LIMIT", "STRIPE_API_KEY", "STRIPE_PUBLISHABLE_KEY",
     "STRIPE_RETURN_URL", "STRIPE_WEBHOOK_SECRET", "VIDEOTRANSCRIBER_EMAIL",
     "VIDEOTRANSCRIBER_PASSWORD", "VIDEOTRANSCRIBER_SECRET_KEY",
     "YOUTUBE_API_KEY",
@@ -365,6 +359,9 @@ export default defineRailway((ctx) => {
     //
     // media.custom-summary（使用者自訂 AI 摘要）也是一趟 LLM 推論，長度跟
     // smart-summary 同級，放 fast 那組會被 120 秒截斷。
+    //
+    // sources.skill（頻道 Skill）一次送約 30 支長摘要、等一整份 SKILL.md 回來，
+    // job 內 HTTP 逾時 240 秒，只能放這組。
     const workerSlow = service("worker-slow", {
         source,
         env: mirrorOf(api),
@@ -372,7 +369,7 @@ export default defineRailway((ctx) => {
         deploy: {
             startCommand:
                 `${ARTISAN} queue:work database ` +
-                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary' ` +
+                `--queue='videotranscriber.smart-summary,videotranscriber.archive,media.custom-summary,sources.skill' ` +
                 `--timeout=300 ${WORKER_FLAGS}`,
             region: REGION,
             restartPolicyType: "ALWAYS",

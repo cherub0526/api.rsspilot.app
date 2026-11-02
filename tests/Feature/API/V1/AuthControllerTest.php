@@ -7,8 +7,8 @@ namespace Tests\Feature\API\V1;
 use Tests\TestCase;
 use App\Models\User;
 use App\Mail\VerifyEmailMail;
-use Hypervel\Support\Facades\Mail;
 use App\Validators\AuthValidator;
+use Hypervel\Support\Facades\Mail;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**

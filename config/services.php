@@ -27,13 +27,6 @@ return [
         'region' => env('SES_REGION', 'us-east-1'),
     ],
 
-    // Paddle 暫時關閉（2026-09-30）：關閉時不開放新的 Paddle 結帳與確認、不再把
-    // 使用者資料同步到 Paddle、paddle:sync 不執行。webhook 與取消訂閱不受影響——
-    // 既有的 Paddle 訂閱仍要能續訂、取消。
-    'paddle' => [
-        'enabled' => (bool) env('PADDLE_ENABLED', false),
-    ],
-
     'resend' => [
         'key' => env('RESEND_KEY'),
     ],
@@ -62,10 +55,6 @@ return [
         'client_id'     => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect'      => env('GOOGLE_REDIRECT_URI', ''),
-    ],
-
-    'rapidapi' => [
-        'key' => env('RAPID_API_KEY'),
     ],
 
     'youtube' => [

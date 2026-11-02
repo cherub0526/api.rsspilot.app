@@ -20,9 +20,9 @@ use Hypervel\Database\Eloquent\Concerns\HasUlids;
  * @property string $code
  * @property string $token
  * @property int $attempts
- * @property \Carbon\Carbon $expires_at
- * @property null|\Carbon\Carbon $consumed_at
- * @property \Carbon\Carbon $created_at
+ * @property Carbon $expires_at
+ * @property null|Carbon $consumed_at
+ * @property Carbon $created_at
  * @property User $user
  */
 class EmailVerificationCode extends Model

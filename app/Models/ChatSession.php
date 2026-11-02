@@ -38,6 +38,9 @@ class ChatSession extends Model
 
     public function messages(): HasMany
     {
-        return $this->hasMany(ChatMessage::class, 'session_id', 'id')->orderBy('created_at');
+        $relation = $this->hasMany(ChatMessage::class, 'session_id', 'id');
+        $relation->getQuery()->orderBy('created_at');
+
+        return $relation;
     }
 }
