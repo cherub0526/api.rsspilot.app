@@ -60,14 +60,14 @@ The rule, the reasoning, and edge cases.
 
 ## 方案的三種額度用的是三種不同週期
 
-`code:` `app/Services/ChatQuotaService.php`、`app/Services/SubscriptionService.php`、`app/Http/Controllers/API/V1/SourcesController.php` · `updated:` `2026-08-14` · `status:` `active`
+`code:` `app/Services/ChatQuotaService.php`、`app/Services/SubscriptionService.php`、`app/Services/SourceSubscriptionService.php` · `updated:` `2026-11-02` · `status:` `active`
 
 `plans` 上三個 limit 欄位長得很像，週期卻各自不同，看欄位名推不出來：
 
 | 欄位 | 週期 | 執行位置 |
 |---|---|---|
-| `channel_limit` | 總量（帳號生命週期內的訂閱來源數） | `SourcesController::store` |
-| `video_limit` | 滾動 30 天 | `SubscriptionService::syncSourceMediaToUserables` |
+| `channel_limit` | 總量（帳號生命週期內的訂閱來源數） | `SourceSubscriptionService::subscribe` |
+| `video_limit` | 滾動 30 天 | `SubscriptionService::remainingVideoQuota`、`MediaController::assertVideoQuota` |
 | `chat_limit` | **自然日**（每日重置） | `ChatQuotaService` |
 
 三者共通的是 **`0` 代表不限制**，不是「一次都不能用」。新增額度欄位時要沿用這個約定，否則同一張表上會出現兩種相反的失效方向。
