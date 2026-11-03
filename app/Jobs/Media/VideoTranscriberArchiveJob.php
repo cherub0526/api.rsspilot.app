@@ -12,6 +12,7 @@ use Hypervel\Support\Facades\Http;
 use Hypervel\Support\Facades\Storage;
 use Hypervel\Queue\Contracts\ShouldQueue;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
+use App\Services\VideoTranscriber\OpenApiTranscriptionProvider;
 
 /**
  * Pull the transcript and subtitle files videotranscriber.ai produced for a
@@ -126,6 +127,12 @@ class VideoTranscriberArchiveJob implements ShouldQueue, ShouldBeUnique
      */
     public function handle(): void
     {
+        // 官方 OpenAPI 的 transcribe.json 已含全部 segments；它的 srt／vtt 是 1 小時就過期的
+        // 簽名網址，沒有東西要另外存（S14）。
+        if (($this->media->videoTranscription?->start_transcription['provider'] ?? null) === OpenApiTranscriptionProvider::NAME) {
+            return;
+        }
+
         $payload = $this->readPayload();
 
         if ($payload === null) {

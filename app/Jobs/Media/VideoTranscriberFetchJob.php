@@ -17,9 +17,12 @@ use App\Models\VideoTranscription;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Support\Facades\Storage;
 use Hypervel\Queue\Contracts\ShouldQueue;
+use App\Services\VideoTranscriber\Outcome;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
+use App\Services\VideoTranscriber\PollResult;
 use App\Exceptions\VideoTranscriberAuthException;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
+use App\Services\VideoTranscriber\OpenApiTranscriptionProvider;
 
 class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
 {
@@ -111,6 +114,12 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
+        // 依送出時記下的 provider 走完，不看目前設定（Q1）；沒有 provider 的舊資料是 legacy
+        if (($startTranscription['provider'] ?? null) === OpenApiTranscriptionProvider::NAME) {
+            $this->fetchOpenApi(app(OpenApiTranscriptionProvider::class), $youtube, (string) $audioId);
+            return;
+        }
+
         try {
             $transcription = $client->getTranscription($audioId);
         } catch (VideoTranscriberAuthException) {
@@ -150,8 +159,81 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        $locale = $this->resolveLocale($youtube, $data, $text);
+        $spoken = $this->detectSpokenLanguage($data['versions']['original']['subtitle_url'] ?? null);
 
+        $this->saveCaption($this->resolveLocale($youtube, $spoken, $text), $text, $segments);
+    }
+
+    /**
+     * 官方 OpenAPI。寫入的 captions／media 形狀與 legacy 相同（S04）；錯誤對應見
+     * acceptance.feature 的 S07–S11。
+     */
+    private function fetchOpenApi(OpenApiTranscriptionProvider $provider, YoutubeService $youtube, string $taskId): void
+    {
+        if ($problem = $provider->configProblem()) {
+            Log::error('videotranscriber openapi is not configured; nothing was sent.', [
+                'media_id' => $this->media->id,
+                'provider' => OpenApiTranscriptionProvider::NAME,
+                'reason'   => $problem,
+            ]);
+            $this->releaseForAuthRetry();
+            return;
+        }
+
+        $result = $provider->poll($taskId);
+
+        if ($result->archive !== null) {
+            $this->archiveTranscription($result->archive);
+        }
+
+        if ($result->alert) {
+            Log::error('videotranscriber openapi could not return the transcript.', [
+                'media_id' => $this->media->id,
+                'provider' => OpenApiTranscriptionProvider::NAME,
+                'attempts' => $this->attempts(),
+                ...($result->failure['error'] ?? []),
+            ]);
+        }
+
+        match ($result->outcome) {
+            Outcome::Ok => $this->saveOpenApiCaption($youtube, $result),
+            Outcome::Pending, Outcome::Busy => $this->releaseUntilLimit(),
+            Outcome::Unauthorized => $this->releaseForAuthRetry(),
+            Outcome::Failed       => $this->failOpenApi($result),
+        };
+    }
+
+    private function saveOpenApiCaption(YoutubeService $youtube, PollResult $result): void
+    {
+        $text = implode(' ', array_column($result->segments, 'text'));
+
+        $this->saveCaption($this->resolveLocale($youtube, $result->language, $text), $text, $result->segments, $result->duration);
+    }
+
+    private function failOpenApi(PollResult $result): void
+    {
+        $this->saveTranscription(['provider' => OpenApiTranscriptionProvider::NAME, ...($result->failure ?? [])]);
+        $this->markTranscribeFailed();
+    }
+
+    /** 還沒好或對方忙碌：60 秒後再查，用完次數就標失敗。 */
+    private function releaseUntilLimit(): void
+    {
+        if ($this->attempts() >= self::MAX_ATTEMPTS) {
+            $this->markTranscribeFailed();
+            return;
+        }
+
+        $this->release(self::RETRY_DELAY_SECONDS);
+    }
+
+    /**
+     * 兩個 provider 共用的寫入：captions 一筆主要字幕、media 改成 transcribed，再交給 ArchiveJob。
+     *
+     * @param array<int, array<string, mixed>> $segments
+     */
+    private function saveCaption(string $locale, string $text, array $segments, ?int $duration = null): void
+    {
         Caption::updateOrCreate(
             [
                 'media_id' => $this->media->id,
@@ -170,6 +252,7 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
         $this->media->fill([
             'status'   => Media::STATUS_TRANSCRIBED,
             'language' => $locale,
+            ...($duration !== null ? ['duration' => $duration] : []),
         ])->save();
 
         // Handed to its own job rather than done here: that is six more CDN
@@ -307,11 +390,10 @@ class VideoTranscriberFetchJob implements ShouldQueue, ShouldBeUnique
      * spoken language wins on *which* language, the declared code wins on
      * region and script.
      *
-     * @param array<string, mixed> $data
+     * @param string $spoken 轉錄服務偵測到的語言（已 normalize），或 ''
      */
-    private function resolveLocale(YoutubeService $youtube, array $data, string $text): string
+    private function resolveLocale(YoutubeService $youtube, string $spoken, string $text): string
     {
-        $spoken = $this->detectSpokenLanguage($data['versions']['original']['subtitle_url'] ?? null);
         $declared = $this->declaredAudioLanguage($youtube);
 
         $locale = $this->reconcile($spoken, $declared);

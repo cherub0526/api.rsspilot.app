@@ -6,17 +6,24 @@ namespace App\Jobs\Media;
 
 use Exception;
 use App\Models\Media;
+use Hypervel\Support\Str;
 use Hypervel\Queue\Queueable;
+use Hypervel\Support\Facades\Log;
 use App\Models\VideoTranscription;
 use App\Services\PublicCaptionGate;
 use Hypervel\Queue\Contracts\ShouldQueue;
+use App\Services\VideoTranscriber\Outcome;
 use Hypervel\Queue\Contracts\ShouldBeUnique;
 use App\Exceptions\VideoTranscriberAuthException;
 use App\Services\VideoTranscriber\VideoTranscriberClient;
+use App\Services\VideoTranscriber\OpenApiTranscriptionProvider;
 
 class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 {
     use Queueable;
+
+    /** start_transcription 裡保存 Idempotency-Key 的欄位；`videotranscriber:start --id=` 會清掉它。 */
+    public const string IDEMPOTENCY_KEY = 'idempotency_key';
 
     /**
      * How long to wait before retrying once the shared videotranscriber.ai
@@ -59,14 +66,24 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
     public int $uniqueFor = 3600;
 
+    /**
+     * 人工指定（`videotranscriber:start --id`）：不看有沒有人收錄。只有那個指令會傳 true，
+     * 沒有 HTTP 入口（SR-1）。
+     *
+     * 刻意不用建構子提升：提升的屬性沒有自己的預設值，部署前已排隊的 job 還原後這裡會是
+     * 未初始化，一讀就拋 Error。宣告在這裡，舊 payload 還原後是 false。
+     */
+    public bool $manual = false;
+
     protected Media $media;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Media $media)
+    public function __construct(Media $media, bool $manual = false)
     {
         $this->media = $media;
+        $this->manual = $manual;
 
         $this->queue = 'videotranscriber.start';
     }
@@ -99,6 +116,14 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
     {
         $captionGate ??= app(PublicCaptionGate::class);
 
+        // 排在所有外部呼叫之前，每次 release 重試也會再查一次：派工後影片可能
+        // 被移出影片庫、收錄者刪了帳號，或來源改回不免費。維持 created、正常
+        // 結束，之後有人收錄時下一輪排程會再派（S03、SR-2、SR-4）
+        if (!$this->manual && !$this->media->isEligibleForTranscription()) {
+            Log::info('Skipped transcription: nobody collects this media.', ['media_id' => $this->media->id]);
+            return;
+        }
+
         // 公開字幕閘門排在名額閘門之前：滿載時這支 job 會被 release 很多次，
         // 檢查結果記在 video_detail 裡，重試時就不會每次都再花 50 單位配額。
         if ($captionGate->enabled() && !$this->passesCaptionGate($captionGate)) {
@@ -115,6 +140,21 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
         $videoId = $this->media->video_detail['yt:videoId'];
         $url = sprintf('https://www.youtube.com/watch?v=%s', $videoId);
+
+        // 送出時才讀設定，並把 provider 記在 start_transcription，FetchJob 依記錄走完
+        $provider = OpenApiTranscriptionProvider::configured();
+
+        if ($provider === OpenApiTranscriptionProvider::NAME) {
+            $this->startOpenApi(app(OpenApiTranscriptionProvider::class), $url);
+            return;
+        }
+
+        if (!OpenApiTranscriptionProvider::isKnown($provider)) {
+            // 指令已經擋下不認得的值；這裡防的是排進佇列之後才改壞設定
+            Log::error('Unknown videotranscriber provider; nothing was sent.', ['media_id' => $this->media->id]);
+            $this->releaseForAuthRetry();
+            return;
+        }
 
         try {
             $urlInfo = $client->getUrlInfo($url);
@@ -149,12 +189,12 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
             $this->releaseForAuthRetry();
             return;
         } catch (Exception $e) {
-            $this->saveTranscription(['start_transcription' => ['error' => $e->getMessage()]]);
+            $this->saveTranscription(['start_transcription' => ['provider' => OpenApiTranscriptionProvider::LEGACY, 'error' => $e->getMessage()]]);
             $this->markTranscribeFailed();
             return;
         }
 
-        $this->saveTranscription(['start_transcription' => $startTranscription]);
+        $this->saveTranscription(['start_transcription' => ['provider' => OpenApiTranscriptionProvider::LEGACY] + $startTranscription]);
 
         $code = $startTranscription['code'] ?? null;
 
@@ -171,6 +211,74 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
         }
 
         $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save();
+    }
+
+    /**
+     * 經官方 OpenAPI 送出。錯誤對應見 acceptance.feature 的 S08–S11。
+     *
+     * Idempotency-Key 在送出前就寫進 start_transcription：連線中斷時任務可能已經建立，
+     * 下一次送出（release 重試或排程重派）沿用同一個 key，對方會回同一個任務而不是再扣
+     * 一次額度（S24）。拿到任務 id 之後，或 `videotranscriber:start --id=` 手動重送時才換新。
+     */
+    private function startOpenApi(OpenApiTranscriptionProvider $provider, string $url): void
+    {
+        if ($problem = $provider->configProblem()) {
+            // 不記設定值本身（SR-1.3、SR-3.1）
+            Log::error('videotranscriber openapi is not configured; nothing was sent.', [
+                'media_id' => $this->media->id,
+                'provider' => OpenApiTranscriptionProvider::NAME,
+                'reason'   => $problem,
+            ]);
+            $this->releaseForAuthRetry();
+            return;
+        }
+
+        $submission = [
+            'provider'            => OpenApiTranscriptionProvider::NAME,
+            self::IDEMPOTENCY_KEY => $this->idempotencyKey(),
+        ];
+        $this->saveTranscription(['start_transcription' => $submission]);
+
+        $result = $provider->start($url, $submission[self::IDEMPOTENCY_KEY]);
+
+        $this->saveTranscription(['start_transcription' => $submission + $result->record]);
+
+        if ($result->alert) {
+            Log::error('videotranscriber openapi rejected the submission.', [
+                'media_id' => $this->media->id,
+                'provider' => OpenApiTranscriptionProvider::NAME,
+                'attempts' => $this->attempts(),
+                ...($result->record['error'] ?? []),
+            ]);
+        }
+
+        match ($result->outcome) {
+            Outcome::Ok => $this->media->fill(['status' => Media::STATUS_TRANSCRIBING])->save(),
+            Outcome::Busy, Outcome::Pending => $this->release(self::BUSY_RETRY_DELAY_SECONDS),
+            Outcome::Unauthorized => $this->releaseForAuthRetry(),
+            Outcome::Failed       => $this->markTranscribeFailed(),
+        };
+    }
+
+    /**
+     * 上一次送出還沒拿到任務 id 時沿用它的 key，否則產生新的。key 只含 media id 與亂數，
+     * 不含任何機密（SR-1.1）。
+     */
+    private function idempotencyKey(): string
+    {
+        $previous = VideoTranscription::query()->where('media_id', $this->media->id)->first()?->getAttribute('start_transcription');
+        $previous = is_array($previous) ? $previous : [];
+        $key = $previous[self::IDEMPOTENCY_KEY] ?? null;
+
+        if (($previous['provider'] ?? null) === OpenApiTranscriptionProvider::NAME
+            && is_string($key)
+            && preg_match('/^[\x21-\x7E]{1,128}$/', $key) === 1
+            && empty($previous['data']['audio_id'])
+        ) {
+            return $key;
+        }
+
+        return sprintf('rsspilot-media-%s-%s', $this->media->id, strtolower((string) Str::ulid()));
     }
 
     /**

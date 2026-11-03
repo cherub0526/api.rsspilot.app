@@ -6,6 +6,7 @@ namespace Tests\Unit\Jobs\Media;
 
 use Mockery;
 use Tests\TestCase;
+use App\Models\User;
 use App\Models\Media;
 use Hypervel\Queue\Jobs\FakeJob;
 use App\Models\VideoTranscription;
@@ -23,9 +24,10 @@ class VideoTranscriberStartJobTest extends TestCase
 {
     use RefreshDatabase;
 
+    /** 有人收錄的影片：沒人收錄的不會送出（transcribe-owned-only）。 */
     private function createMedia(): Media
     {
-        return Media::factory()->create([
+        return Media::factory()->hasAttached(User::factory(), [], 'users')->create([
             'status'       => Media::STATUS_CREATED,
             'video_detail' => ['yt:videoId' => 'abc123'],
         ]);
@@ -504,7 +506,7 @@ class VideoTranscriberStartJobTest extends TestCase
     public function testDoesNotRecheckMediaAlreadyKnownToHaveCaptions(): void
     {
         $this->fakeSuccessfulStart();
-        $media = Media::factory()->create([
+        $media = Media::factory()->hasAttached(User::factory(), [], 'users')->create([
             'status'       => Media::STATUS_CREATED,
             'video_detail' => ['yt:videoId' => 'abc123', 'public_captions' => true],
         ]);

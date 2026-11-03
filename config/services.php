@@ -65,6 +65,13 @@ return [
     ],
 
     'videotranscriber' => [
+        // 轉錄走哪一組 API：legacy（內部 API）或 openapi（官方 API）。StartJob 送出時才讀，
+        // 並記在 start_transcription.provider；FetchJob 依記錄的值取回，不看這裡。
+        'provider' => env('VIDEOTRANSCRIBER_PROVIDER', 'legacy'),
+        'api_key'  => env('VIDEOTRANSCRIBER_API_KEY', ''),
+        // 只接受 https://videotranscriber.ai，其他值視為設定錯誤，不送出（含 key 的）請求
+        'openapi_url' => env('VIDEOTRANSCRIBER_OPENAPI_URL', 'https://videotranscriber.ai/openapi/v1'),
+
         'secret_key' => env('VIDEOTRANSCRIBER_SECRET_KEY'),
         'email'      => env('VIDEOTRANSCRIBER_EMAIL'),
         'password'   => env('VIDEOTRANSCRIBER_PASSWORD'),

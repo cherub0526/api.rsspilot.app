@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Console\Commands\VideoTranscriber;
 
 use Tests\TestCase;
+use App\Models\User;
 use App\Models\Media;
 use Hypervel\Support\Facades\Http;
 use Hypervel\Support\Facades\Queue;
@@ -55,7 +56,7 @@ class StartTest extends TestCase
             'videotranscriber.ai/api/v1/auth/email/login*' => Http::response(['code' => 100001, 'message' => 'invalid'], 200),
         ]);
 
-        Media::factory()->create(['status' => Media::STATUS_CREATED]);
+        Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $exitCode = $this->artisan('videotranscriber:start')->run();
 
@@ -81,7 +82,7 @@ class StartTest extends TestCase
             ], 200),
         ]);
 
-        Media::factory()->create(['status' => Media::STATUS_CREATED]);
+        Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $this->assertSame(0, $this->artisan('videotranscriber:start')->run());
 
@@ -94,8 +95,8 @@ class StartTest extends TestCase
 
         $this->fakeAuthenticated();
 
-        $created1 = Media::factory()->create(['status' => Media::STATUS_CREATED]);
-        $created2 = Media::factory()->create(['status' => Media::STATUS_CREATED]);
+        $created1 = Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
+        $created2 = Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
         $notCreated = Media::factory()->create(['status' => Media::STATUS_TRANSCRIBING]);
 
         $this->artisan('videotranscriber:start')->run();
@@ -112,8 +113,8 @@ class StartTest extends TestCase
 
         $this->fakeAuthenticated();
 
-        $target = Media::factory()->create(['status' => Media::STATUS_CREATED]);
-        Media::factory()->create(['status' => Media::STATUS_CREATED]);
+        $target = Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
+        Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $this->artisan('videotranscriber:start', ['--id' => $target->id])->run();
 
@@ -155,7 +156,7 @@ class StartTest extends TestCase
         $this->fakeAuthenticated();
 
         Media::factory()->count(5)->create(['status' => Media::STATUS_TRANSCRIBING]);
-        Media::factory()->count(3)->create(['status' => Media::STATUS_CREATED]);
+        Media::factory()->count(3)->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $this->artisan('videotranscriber:start')->run();
 
@@ -169,7 +170,7 @@ class StartTest extends TestCase
         $this->fakeAuthenticated();
 
         Media::factory()->count(3)->create(['status' => Media::STATUS_TRANSCRIBING]);
-        Media::factory()->count(4)->create(['status' => Media::STATUS_CREATED]);
+        Media::factory()->count(4)->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $this->artisan('videotranscriber:start')->run();
 
@@ -184,7 +185,7 @@ class StartTest extends TestCase
         $this->fakeAuthenticated();
 
         Media::factory()->count(5)->create(['status' => Media::STATUS_TRANSCRIBING]);
-        $target = Media::factory()->create(['status' => Media::STATUS_CREATED]);
+        $target = Media::factory()->hasAttached(User::factory(), [], 'users')->create(['status' => Media::STATUS_CREATED]);
 
         $this->artisan('videotranscriber:start', ['--id' => $target->id])->run();
 
