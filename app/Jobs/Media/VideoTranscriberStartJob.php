@@ -66,14 +66,24 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
 
     public int $uniqueFor = 3600;
 
+    /**
+     * 人工指定（`videotranscriber:start --id`）：不看有沒有人收錄。只有那個指令會傳 true，
+     * 沒有 HTTP 入口（SR-1）。
+     *
+     * 刻意不用建構子提升：提升的屬性沒有自己的預設值，部署前已排隊的 job 還原後這裡會是
+     * 未初始化，一讀就拋 Error。宣告在這裡，舊 payload 還原後是 false。
+     */
+    public bool $manual = false;
+
     protected Media $media;
 
     /**
      * Create a new job instance.
      */
-    public function __construct(Media $media)
+    public function __construct(Media $media, bool $manual = false)
     {
         $this->media = $media;
+        $this->manual = $manual;
 
         $this->queue = 'videotranscriber.start';
     }
@@ -105,6 +115,14 @@ class VideoTranscriberStartJob implements ShouldQueue, ShouldBeUnique
     public function handle(VideoTranscriberClient $client, ?PublicCaptionGate $captionGate = null): void
     {
         $captionGate ??= app(PublicCaptionGate::class);
+
+        // 排在所有外部呼叫之前，每次 release 重試也會再查一次：派工後影片可能
+        // 被移出影片庫、收錄者刪了帳號，或來源改回不免費。維持 created、正常
+        // 結束，之後有人收錄時下一輪排程會再派（S03、SR-2、SR-4）
+        if (!$this->manual && !$this->media->isEligibleForTranscription()) {
+            Log::info('Skipped transcription: nobody collects this media.', ['media_id' => $this->media->id]);
+            return;
+        }
 
         // 公開字幕閘門排在名額閘門之前：滿載時這支 job 會被 release 很多次，
         // 檢查結果記在 video_detail 裡，重試時就不會每次都再花 50 單位配額。

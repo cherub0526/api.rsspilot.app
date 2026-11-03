@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Carbon\Carbon;
 use App\Utils\Const\ISO6391;
+use Hyperf\Database\Model\Builder;
 use Hyperf\Database\Model\SoftDeletes;
 use Hyperf\Database\Model\Relations\HasOne;
 use Hyperf\Database\Model\Relations\HasMany;
@@ -32,6 +33,7 @@ use Hypervel\Database\Eloquent\Factories\HasFactory;
  * @property null|Carbon $updated_at
  * @property null|Carbon $deleted_at
  * @property-read null|Source $source
+ * @method static \Hypervel\Database\Eloquent\Builder<static> eligibleForTranscription()
  */
 class Media extends Model
 {
@@ -227,5 +229,28 @@ class Media extends Model
     public function scopeCountsTowardQuota($query)
     {
         return $query->where('media.status', '!=', self::STATUS_NO_CAPTIONS);
+    }
+
+    /**
+     * 只轉錄有人收錄、或來自免費來源的影片：沒人要的影片不花轉錄額度與 YouTube 配額。
+     * 已刪除的帳號與來源不算（兩者都有 SoftDeletes）。
+     *
+     * OR 一定要包成一組，否則會把呼叫端的 status 條件吃掉（SR-5）。
+     * 條件必須與 isEligibleForTranscription() 一致（SR-6.2）。
+     */
+    public function scopeEligibleForTranscription(Builder $query): Builder
+    {
+        return $query->where(fn ($q) => $q->whereHas('users')
+            ->orWhereHas('source', fn ($source) => $source->where('free', true)));
+    }
+
+    /**
+     * 同 scopeEligibleForTranscription()，但針對這一筆即時查 DB。
+     * 不讀已載入的 users／source：job 序列化帶著的是派工當時的快照（SR-2.1、SR-6.1）。
+     */
+    public function isEligibleForTranscription(): bool
+    {
+        return $this->users()->exists()
+            || $this->source()->where('free', true)->exists();
     }
 }

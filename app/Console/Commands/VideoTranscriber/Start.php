@@ -47,16 +47,15 @@ class Start extends Command
             return 1;
         }
 
-        $query = Media::query();
-
         // Naming a media is an explicit manual override, so it is dispatched
         // regardless of status — that is the only way to retry a media that
         // already left `created`, e.g. one stuck on `transcribe_failed`.
         if ($id = $this->option('id')) {
-            $query->where('id', $id);
+            $query = Media::query()->where('id', $id);
             $this->forgetIdempotencyKey((string) $id);
         } else {
-            $query->where('status', Media::STATUS_CREATED);
+            // 只派有人收錄或來自免費來源的影片；沒人要的維持 created，等有人收錄再派
+            $query = Media::eligibleForTranscription()->where('status', Media::STATUS_CREATED);
         }
 
         $force = (bool) $this->option('force');
@@ -77,14 +76,17 @@ class Start extends Command
         $dispatched = 0;
         $skipped = 0;
 
-        $query->chunkById(100, function ($medias) use ($force, $slots, &$dispatched, &$skipped) {
+        $manual = (bool) $id;
+
+        $query->chunkById(100, function ($medias) use ($force, $slots, $manual, &$dispatched, &$skipped) {
             foreach ($medias as $media) {
                 if ($dispatched >= $slots) {
                     ++$skipped;
                     continue;
                 }
 
-                $job = new VideoTranscriberStartJob($media);
+                // --id 是人工指定，job 執行時也不看收錄（S04）
+                $job = new VideoTranscriberStartJob($media, $manual);
 
                 if ($force) {
                     $this->releaseUniqueLock($job);

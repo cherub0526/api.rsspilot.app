@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Concerns;
 
 use Mockery;
+use App\Models\User;
 use App\Models\Media;
 use Hypervel\Support\Str;
 use App\Services\YoutubeService;
@@ -184,14 +185,24 @@ trait FakesVideoTranscriberOpenApi
         return ['id' => $id, 'start' => $start, 'end' => $end, 'text' => $text, 'speaker' => 'SPEAKER_00'];
     }
 
-    /** 已通過公開字幕檢查、等待送出的影片（feature 背景）。 */
-    protected function createdMedia(string $videoId = self::VIDEO_ID, int $duration = 0): Media
+    /**
+     * 已通過公開字幕檢查、等待送出的影片（feature 背景）。
+     *
+     * 預設有一位使用者收錄：transcribe-owned-only 之後，沒人收錄的影片不會送出。
+     */
+    protected function createdMedia(string $videoId = self::VIDEO_ID, int $duration = 0, bool $owned = true): Media
     {
-        return Media::factory()->create([
+        $media = Media::factory()->create([
             'status'       => Media::STATUS_CREATED,
             'duration'     => $duration,
             'video_detail' => ['yt:videoId' => $videoId, 'public_captions' => true],
         ]);
+
+        if ($owned) {
+            $media->users()->attach(User::factory()->create()->id);
+        }
+
+        return $media;
     }
 
     /** 已由某個 provider 送出、等待取回的影片；provider 為 null 代表沒有這個 key 的舊資料。 */
