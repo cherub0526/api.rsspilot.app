@@ -113,6 +113,29 @@ OpenRouter 模型產的是翻譯），而且改標之後同一支 media 可能�
   重試不了。key 若綁在 `video_transcriptions.id` 這種每筆 media 固定的值上，就會掉進這個坑。
 - 遇到 `insufficient_quota`、`idempotency_conflict` 一律標失敗，**不可**自動換 key 重送。
 
+## 只轉錄有人收錄或來自免費來源的影片，`--id` 例外
+
+`code:` `app/Models/Media.php` → `scopeEligibleForTranscription()`、`isEligibleForTranscription()` · `code:` `app/Jobs/Media/VideoTranscriberStartJob.php` → `handle()` · `code:` `app/Console/Commands/VideoTranscriber/Start.php` · `updated:` `2026-11-03` · `status:` `active`
+
+訂閱與同步會把 RSS 裡所有影片建成 `created`，但使用者只收錄其中一部分（訂閱時沒勾的、同步時額度
+已滿被跳過的都不在 `userables`）。轉錄額度與 YouTube 字幕檢查的配額只花在有人要的影片上
+（使用者 2026-11-03 決定）：
+
+- **條件**：至少一位使用者收錄（`userables`），**或**來源 `free = true`。免費來源是例外，因為
+  `sources:sync` 會同步沒人訂閱的免費來源，那些影片對所有人開放，卻不在任何人的影片庫。
+- **已刪除的不算**：只被已刪除帳號收錄的影片、已刪除的免費來源，都算不符合（`User`、`Source`
+  都有 SoftDeletes，走關聯查詢會自動排除）。不要改成直接查 `userables` 表，否則會繞過這一點。
+- **兩道檢查**：排程只撈符合的 `created`；StartJob 執行時在任何外部呼叫之前再即時查一次，因為
+  派工後影片可能被移出影片庫、收錄者刪帳號，或來源改回不免費。不符合時維持 `created`、正常
+  結束，之後有人收錄，下一輪排程會自然撈到。不新增狀態。
+- **`--id` 例外**：手動指定的 job 帶 `manual = true`，不看收錄。
+- **`--id` 在佇列裡已有一般 job 時要加 `--force`**：StartJob 是 `ShouldBeUnique`，以 media id 為鎖。
+  排程派出的一般 job 還在佇列（例如名額滿被 release）時，`--id` 派的 job 會被唯一鎖靜默丟掉，
+  而那支一般 job 執行時會因為沒人收錄而跳過，手動指定就白做了。見〈ShouldBeUnique 的殘留鎖會讓
+  dispatch 靜默消失〉（`pitfalls.md`）。
+- **`transcribing` 之後不中斷**：已送出的影片照常取回，Fetch 與摘要不看收錄。
+- 頻道 Skill 的材料因此只來自有人收錄、已有摘要的影片（使用者決定）。
+
 ## 新增 queue 一定要同步開 worker，兩邊都要
 
 `code:` `.railway/railway.ts` · `code:` `supervisor/` · `updated:` `2026-09-13` · `status:` `active`
