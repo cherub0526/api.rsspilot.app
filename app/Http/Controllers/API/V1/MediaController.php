@@ -6,6 +6,7 @@ namespace App\Http\Controllers\API\V1;
 
 use Throwable;
 use Carbon\Carbon;
+use App\Utils\Like;
 use App\Models\User;
 use App\Models\Media;
 use Hypervel\Http\Request;
@@ -101,10 +102,14 @@ class MediaController extends AbstractController
                 }
             })
             ->when($params['keyword'] ?? false, function ($query) use ($params) {
-                $query->where('media.title', 'like', '%' . $params['keyword'] . '%')
-                    ->orWhereHas('source', function ($q) use ($params) {
-                        $q->where('title', 'like', '%' . $params['keyword'] . '%');
-                    });
+                $keyword = (string) $params['keyword'];
+
+                // OR 一定要包成一組：沒包的話會變成「(影片庫 AND type AND 標題) OR 來源標題」，
+                // 搜來源標題就會撈到別人影片庫的影片，type 篩選也失效（security-hotfix-1 H2）
+                $query->where(fn ($group) => Like::contains($group, 'media.title', $keyword)
+                    ->orWhereHas('source', function ($source) use ($keyword): void {
+                        Like::contains($source, 'sources.title', $keyword);
+                    }));
             })
             ->orderByDesc('media.published_at')
             ->paginate($params['limit'] ?? 12);

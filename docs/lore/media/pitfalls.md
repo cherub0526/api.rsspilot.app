@@ -51,7 +51,7 @@ What breaks, why, and what to do instead.
 
 ## 取「可用的摘要」不能只看 created_at，要 filter status = completed
 
-`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `chat()`、`app/Http/Controllers/API/V1/Media/Chat/FollowUpsController.php` → `show()` · `updated:` `2026-08-19` · `status:` `active`
+`code:` `app/Http/Controllers/API/V1/Media/ChatController.php` → `chat()`、`app/Http/Controllers/API/V1/Media/Chat/FollowUpsController.php` → `show()` · `updated:` `2026-11-04` · `status:` `active`
 
 要拿摘要當 AI 素材時，正確寫法是：
 
@@ -66,7 +66,7 @@ $media->summaries()
 
 `Media::summary()` 這個 relation 本身就是 `hasOne(...)->orderBy('created_at', 'desc')`，天生踩在這個陷阱上，只適合拿去顯示、不適合當 AI 素材。
 
-**寫入端的對應義務（曾經漏過）：** 任何寫摘要的路徑都必須把 status 一起寫成 `completed`，否則那份摘要對讀取端等於不存在。`POST /v1/webhook/summaries/{mediaId}`（`Webhook\SummariesController::store()`）原本只寫 `text`、只把 media 改成 `summarized`，摘要本身永遠停在 `created`——因為線上摘要都走 job，這個洞一直沒被踩到。已於 2026-08-19 補上。新增第三條寫入路徑時記得同樣處理。
+**寫入端的對應義務（曾經漏過）：** 任何寫摘要的路徑都必須把 status 一起寫成 `completed`，否則那份摘要對讀取端等於不存在。以前有一條外部回寫摘要的 webhook 只寫 `text`、只把 media 改成 `summarized`，摘要本身永遠停在 `created`；那條 webhook 後來因為沒有驗證、任何人都能改寫共用摘要，在 security-hotfix-1（2026-11-04）整條刪除。現在寫摘要的只剩 job，新增寫入路徑時記得同樣處理。
 
 ## `rss` 表已停用，別跟「YouTube RSS feed」搞混
 
@@ -140,3 +140,21 @@ sources : id, type, external_id, title, url, thumbnail, description,
 `media.duration` 預設是 0（片長還沒抓到），此時 `isWithinDuration()` 直接放行——否則剛加入的影片完全不能截圖。於是只比對片長的話，`second = 1234567` 會成功寫進 S3 並回 201，但 GET 的路由 pattern 是 `{second:[0-9]{1,6}}`，七位數永遠匹配不到，那個物件從此取不回來。
 
 `MAX_SECOND = 999999` 與那條 pattern 是**同一條界線**，改一個要改另一個。這是補測試邊界時才發現的，不是設計時想到的。
+
+## 搜尋的 OR 條件要包成一組，LIKE 要跳脫並明確寫 ESCAPE
+
+`code:` `app/Utils/Like.php` → `contains()` · `code:` `app/Http/Controllers/API/V1/MediaController.php` → `index()` · `code:` `app/Services/McpService.php` → `searchVideos()` · `updated:` `2026-11-04` · `status:` `active`
+
+`GET /v1/media?keyword=` 曾經把「標題或來源標題」直接接在 `$user->media()` 後面：
+
+- `where(標題)->orWhereHas(來源)` 沒有包成一組，SQL 變成「(使用者的影片庫 AND type AND 標題) **OR** 來源標題」。
+  只要搜得到某個來源的標題，就會撈出**別人影片庫**裡的影片（標題、描述、摘要片段），type 篩選也一起失效。
+- keyword 原樣拼進 `like`，搜 `%` 等於比對全部。兩者合起來就是 security-hotfix-1 的 H2（2026-11-04 修正）。
+
+規則：
+
+- 在有範圍的查詢（`$user->media()`、`where('type', …)`）上加 OR，一律用 `where(fn ($q) => …->or…)` 包起來。
+- 「欄位包含關鍵字」一律呼叫 `App\Utils\Like::contains()`，不要自己拼 `like`。
+- 它**明確寫 `escape '\'`**：正式環境的 Postgres 預設就用 `\` 跳脫，但測試跑的 SQLite 沒有預設跳脫字元。
+  沒寫的話，測試裡 `\%` 會被當成「反斜線加任意字串」，搜 `%` 剛好 0 筆而假綠，搜 `100%` 則一筆都找不到。
+- 範圍外但相關：Postgres 的 LIKE 分大小寫、SQLite 對 ASCII 不分，所以測試看不出大小寫差異（另開需求處理）。

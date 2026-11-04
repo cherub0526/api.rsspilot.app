@@ -71,3 +71,22 @@ middleware），憑證外流的曝險窗口仍然是一個 TTL，而硬加 14 �
 接受這件事的前提是 TTL 夠短。要真的能撤銷，得開 `blacklist_enabled`（需要可用的
 cache storage），並注意 `blacklist_grace_period=0` 會讓「換發當下正在飛的並行請求」
 拿著剛被加進黑名單的舊 token 撞牆。
+
+## Google 登入只走 OAuth callback，不可新增相信客戶端身分的登入端點
+
+`code:` `app/Services/SocialAccountService.php` → `resolveUser()` · `code:` `routes/v1.php`（`oauth` 群組） · `updated:` `2026-11-04` · `status:` `active`
+
+Google 登入唯一的入口是 `POST /v1/oauth/{provider}/callback`：後端拿 authorization code 跟 Google 換身分，`provider_id` 與 email 都是 Google 驗證過的值，
+`SocialAccountService` 同時把憑證寫進 `oauths`。
+
+以前另有一條舊端點，直接收客戶端送來的 `provider_id`、email、name 就登入或建帳號，從來不跟 Google 確認（security-hotfix-1 的 C1，2026-11-04 刪除）：
+
+- 知道某人的 Google `sub` 就能登入他的帳號。
+- 可以用別人的 email 預先建帳號、埋進自己的 `provider_id`，等本人經 OAuth 登入、以 email 合併後，攻擊者仍能登入。
+
+規則：
+
+- 任何「用社群身分登入」都必須經過 provider 的伺服器端驗證（OAuth code 交換或驗簽的 ID token），不可以只相信 request body。
+- 前端自 2026-08-30（`bfdc6ab`）起就只走 OAuth；舊端點留著沒人用，就成了攻擊面。不用的登入路徑要刪，不要留著「以防萬一」。
+- 判斷帳號是否經過舊端點：只有 OAuth callback 會寫 `oauths`，所以 google 帳號沒有 google 的 `oauths` 資料列，就代表沒走過 callback。
+  但 2026-08-30 前正常註冊、之後沒再登入的使用者也長這樣，清查時要按 `created_at` 分開看。撤銷用 `security:revoke-social-access`（預設 dry-run）。

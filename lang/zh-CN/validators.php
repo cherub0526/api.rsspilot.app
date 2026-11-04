@@ -249,33 +249,6 @@ return [
         ],
     ],
 
-    'groq' => [
-        'status' => [
-            'required' => '状态字段为必填。',
-        ],
-        'data' => [
-            'required' => '数据字段为必填。',
-            'language' => [
-                'required' => '语言字段为必填。',
-            ],
-            'duration' => [
-                'required' => '时长字段为必填。',
-            ],
-            'text' => [
-                'required' => '文本字段为必填。',
-            ],
-            'words' => [
-                'required' => '单词字段为必填。',
-            ],
-            'segments' => [
-                'required' => '片段字段为必填。',
-            ],
-            'error' => [
-                'required' => '错误信息为必填。',
-            ],
-        ],
-    ],
-
     'settings' => [
         'locale' => [
             'required' => '请选择界面语系。',
@@ -290,36 +263,6 @@ return [
         ],
     ],
 
-    'summary' => [
-        'locale' => [
-            'required' => 'locale 字段为必填项。',
-            'string'   => 'locale 必须是字符串。',
-        ],
-        'text' => [
-            'required'      => 'text 字段为必填项。',
-            'array'         => 'text 必须是数组。',
-            'short_summary' => [
-                'required' => 'text.short_summary 字段为必填项。',
-                'string'   => 'text.short_summary 必须是字符串。',
-            ],
-            'long_summary' => [
-                'required' => 'text.long_summary 字段为必填项。',
-                'array'    => 'text.long_summary 必须是数组。',
-                'content'  => [
-                    'required' => 'text.long_summary.content 字段为必填项。',
-                    'string'   => 'text.long_summary.content 必须是字符串。',
-                ],
-                'key_points' => [
-                    'required' => 'text.long_summary.key_points 字段为必填项。',
-                    'array'    => 'text.long_summary.key_points 必须是数组。',
-                ],
-                'keywords' => [
-                    'required' => 'text.long_summary.keywords 字段为必填项。',
-                    'array'    => 'text.long_summary.keywords 必须是数组。',
-                ],
-            ],
-        ],
-    ],
     'thumbnail' => [
         'file' => [
             'required'  => '请提供截图文件。',

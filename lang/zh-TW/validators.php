@@ -249,33 +249,6 @@ return [
         ],
     ],
 
-    'groq' => [
-        'status' => [
-            'required' => '狀態欄位為必填。',
-        ],
-        'data' => [
-            'required' => '資料欄位為必填。',
-            'language' => [
-                'required' => '語言欄位為必填。',
-            ],
-            'duration' => [
-                'required' => '時長欄位為必填。',
-            ],
-            'text' => [
-                'required' => '文本欄位為必填。',
-            ],
-            'words' => [
-                'required' => '字詞欄位為必填。',
-            ],
-            'segments' => [
-                'required' => '片段欄位為必填。',
-            ],
-            'error' => [
-                'required' => '錯誤訊息為必填。',
-            ],
-        ],
-    ],
-
     'settings' => [
         'locale' => [
             'required' => '請選擇介面語系。',
@@ -290,36 +263,6 @@ return [
         ],
     ],
 
-    'summary' => [
-        'locale' => [
-            'required' => 'locale 欄位為必填項。',
-            'string'   => 'locale 必須是字串。',
-        ],
-        'text' => [
-            'required'      => 'text 欄位為必填項。',
-            'array'         => 'text 必須是陣列。',
-            'short_summary' => [
-                'required' => 'text.short_summary 欄位為必填項。',
-                'string'   => 'text.short_summary 必須是字串。',
-            ],
-            'long_summary' => [
-                'required' => 'text.long_summary 欄位為必填項。',
-                'array'    => 'text.long_summary 必須是陣列。',
-                'content'  => [
-                    'required' => 'text.long_summary.content 欄位為必填項。',
-                    'string'   => 'text.long_summary.content 必須是字串。',
-                ],
-                'key_points' => [
-                    'required' => 'text.long_summary.key_points 欄位為必填項。',
-                    'array'    => 'text.long_summary.key_points 必須是陣列。',
-                ],
-                'keywords' => [
-                    'required' => 'text.long_summary.keywords 欄位為必填項。',
-                    'array'    => 'text.long_summary.keywords 必須是陣列。',
-                ],
-            ],
-        ],
-    ],
     'thumbnail' => [
         'file' => [
             'required'  => '請提供截圖檔案。',

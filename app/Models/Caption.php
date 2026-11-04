@@ -94,9 +94,9 @@ class Caption extends Model
      * ```
      *
      * `text` 欄位是把所有 segment 用空白接成的一整條字串，時間資訊只留在
-     * `segments`（三個寫入端 GroqController、YoutubeCaptionJob、
-     * VideoTranscriberFetchJob 都保證有 start / end / text，其餘欄位各家不同，
-     * 這裡只讀共通的三個）。要讓 AI 有辦法引用時間點就得走這裡而不是 `text`。
+     * `segments`（寫入端 YoutubeCaptionJob、VideoTranscriberFetchJob 都保證有
+     * start / end / text，其餘欄位各家不同，這裡只讀共通的三個）。要讓 AI 有辦法
+     * 引用時間點就得走這裡而不是 `text`。
      *
      * 為什麼要合併成塊：單一 segment 只有 1~4 秒，逐段一行會讓同一份逐字稿膨脹
      * 到近三倍長度（實測 19,731 字 → 55,361 字），成本直接反映在每次摘要上。

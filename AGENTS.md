@@ -157,8 +157,10 @@ Hypervel is Laravel-compatible but uses Swoole coroutines for high concurrency. 
 
 - AI transcription goes to **videotranscriber.ai**; `VideoTranscriberStartJob`
   submits and `VideoTranscriberFetchJob` collects the result
-- **Groq is receive-only**: `POST /v1/webhook/groq/{mediaId}` accepts a callback,
-  but nothing in `app/` calls Groq or reads `GROQ_API_KEY`
+- **Nothing uses Groq.** Its unauthenticated caption webhook, and the summaries
+  webhook next to it, were removed in security-hotfix-1: anyone could overwrite
+  the shared captions and summaries of any media. `GROQ_API_KEY` is still listed
+  in `.env.example` and Railway but nothing reads it
 - `YoutubeCaptionJob` and `YoutubeDataCaptionJob` still exist but have
   **no dispatch site** — they are referenced only from comments
 - The old YouTube→mp3 pipeline (RapidAPI downloader, `InfoJob`, `CaptionJob`,
@@ -198,7 +200,10 @@ __('mails.reset_password.subject')
 
 - JWT-based with `auth('jwt')` guard
 - Token TTL: configurable via `config('jwt.ttl')` in minutes
-- Social OAuth via Hypervel Socialite (Facebook, Google)
+- Social OAuth via Hypervel Socialite (Facebook, Google). Google sign-in goes
+  **only** through `POST /v1/oauth/{provider}/callback`; never add an endpoint that
+  logs a user in from an identity the client sends (one existed and was removed in
+  security-hotfix-1) — see `docs/lore/auth/business-rules.md`
 - Middleware: `'middleware' => ['auth']` on protected routes — 一律宣告在 routes 檔，
   不在 Controller 內設定；路由命名與 Controller 對應規則見 `.claude/rules/routes.md`
 

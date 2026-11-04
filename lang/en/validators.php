@@ -249,33 +249,6 @@ return [
         ],
     ],
 
-    'groq' => [
-        'status' => [
-            'required' => 'The status field is required.',
-        ],
-        'data' => [
-            'required' => 'The data field is required.',
-            'language' => [
-                'required' => 'The language field is required.',
-            ],
-            'duration' => [
-                'required' => 'The duration field is required.',
-            ],
-            'text' => [
-                'required' => 'The text field is required.',
-            ],
-            'words' => [
-                'required' => 'The words field is required.',
-            ],
-            'segments' => [
-                'required' => 'The segments field is required.',
-            ],
-            'error' => [
-                'required' => 'The error message is required.',
-            ],
-        ],
-    ],
-
     'settings' => [
         'locale' => [
             'required' => 'The locale field is required.',
@@ -290,36 +263,6 @@ return [
         ],
     ],
 
-    'summary' => [
-        'locale' => [
-            'required' => 'The locale field is required.',
-            'string'   => 'The locale must be a string.',
-        ],
-        'text' => [
-            'required'      => 'The text field is required.',
-            'array'         => 'The text must be an array.',
-            'short_summary' => [
-                'required' => 'The text.short_summary field is required.',
-                'string'   => 'The text.short_summary must be a string.',
-            ],
-            'long_summary' => [
-                'required' => 'The text.long_summary field is required.',
-                'array'    => 'The text.long_summary must be an array.',
-                'content'  => [
-                    'required' => 'The text.long_summary.content field is required.',
-                    'string'   => 'The text.long_summary.content must be a string.',
-                ],
-                'key_points' => [
-                    'required' => 'The text.long_summary.key_points field is required.',
-                    'array'    => 'The text.long_summary.key_points must be an array.',
-                ],
-                'keywords' => [
-                    'required' => 'The text.long_summary.keywords field is required.',
-                    'array'    => 'The text.long_summary.keywords must be an array.',
-                ],
-            ],
-        ],
-    ],
     'thumbnail' => [
         'file' => [
             'required'  => 'The screenshot file is required.',

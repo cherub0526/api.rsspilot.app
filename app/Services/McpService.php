@@ -7,6 +7,7 @@ namespace App\Services;
 use Throwable;
 use Carbon\Carbon;
 use JsonException;
+use App\Utils\Like;
 use App\Models\User;
 use App\Models\Media;
 use InvalidArgumentException;
@@ -229,12 +230,9 @@ class McpService
             return ['videos' => []];
         }
 
-        // like 的萬用字元要逃逸，否則使用者搜 "100%" 會變成比對任意字串。
-        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $keyword);
-
-        $media = $user->media()->getQuery()
+        // like 的萬用字元要跳脫，否則使用者搜 "100%" 會變成比對任意字串。
+        $media = Like::contains($user->media()->getQuery(), 'media.title', $keyword)
             ->with('source')
-            ->where('media.title', 'like', "%{$escaped}%")
             ->orderByDesc('media.published_at')
             ->limit($this->limit($arguments))
             ->get();
