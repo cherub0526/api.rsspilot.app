@@ -15,8 +15,7 @@ class SocialAccountService
      * 用 provider 回傳的身分換出本地 User，並保存這次拿到的憑證。
      *
      * 資料刻意落在兩個地方，各自有不同的用途：
-     *   - `users.social_type` + `users.provider_id`：登入身分的來源。POST /v1/auth/google
-     *     查的也是這兩欄，兩支端點因此會收斂到同一個帳號，不會各自長出一份使用者。
+     *   - `users.social_type` + `users.provider_id`：登入身分的來源，用來找回同一個帳號。
      *   - `oauths`：provider 的 access token / refresh token。日後要代表使用者呼叫
      *     Google API 時只有這裡有料，登入本身用不到。
      *
@@ -81,8 +80,7 @@ class SocialAccountService
             }
         }
 
-        // 密碼欄位不可為 null，但社群帳號永遠不會走密碼登入；沿用 GoogleController
-        // 既有做法以 provider_id 雜湊填充，讓兩支端點建出來的使用者形狀一致。
+        // 密碼欄位不可為 null，但社群帳號永遠不會走密碼登入，所以用 provider_id 的雜湊填充。
         return User::create([
             'account'     => $providerId,
             'password'    => bcrypt($providerId),

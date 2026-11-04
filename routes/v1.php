@@ -14,12 +14,10 @@ use App\Http\Controllers\API\V1\SettingsController;
 use App\Http\Controllers\API\V1\FeedbacksController;
 use App\Http\Controllers\API\V1\Media\ChatController;
 use App\Http\Controllers\API\V1\PopulariesController;
-use App\Http\Controllers\API\V1\Auth\GoogleController;
 use App\Http\Controllers\API\V1\Auth\LogoutController;
 use App\Http\Controllers\API\V1\Auth\VerifyController;
 use App\Http\Controllers\API\V1\Auth\RefreshController;
 use App\Http\Controllers\API\V1\Users\AvatarController;
-use App\Http\Controllers\API\V1\Webhook\GroqController;
 use App\Http\Controllers\API\V1\Auth\RegisterController;
 use App\Http\Controllers\API\V1\CustomPromptsController;
 use App\Http\Controllers\API\V1\Media\MindmapController;
@@ -63,11 +61,6 @@ Route::group('/auth', function () {
             'uses' => ForgotPasswordController::class . '@store',
         ]
     );
-
-    Route::post('/google', [
-        'as'   => 'google.store',
-        'uses' => GoogleController::class . '@store',
-    ]);
 
     Route::put(
         'forgot-password',
@@ -531,22 +524,6 @@ Route::group('/webhook', function () {
         [
             'as'   => 'clink.store',
             'uses' => ClinkController::class . '@store',
-        ]
-    );
-
-    Route::post(
-        '/summaries/{mediaId}',
-        [
-            'as'   => 'summaries.store',
-            'uses' => App\Http\Controllers\API\V1\Webhook\SummariesController::class . '@store',
-        ]
-    );
-
-    Route::post(
-        '/groq/{mediaId}',
-        [
-            'as'   => 'groq.store',
-            'uses' => GroqController::class . '@store',
         ]
     );
 }, ['as' => 'webhook']);
