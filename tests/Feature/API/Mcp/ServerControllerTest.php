@@ -481,6 +481,27 @@ class ServerControllerTest extends TestCase
         $this->assertSame('關於快取的影片', $videos[0]['title']);
     }
 
+    /**
+     * security-hotfix-1 qa 邊界（對應 S09）：MCP 搜尋和 GET /v1/media 共用同一段跳脫，
+     * % 只當一般字元。測試跑 SQLite，沒寫 ESCAPE 的話 \% 不會生效。
+     */
+    public function testSearchTreatsAPercentSignLiterally(): void
+    {
+        $this->createPlan();
+        $user = User::factory()->create();
+        $this->videoFor($user, '100% Rust');
+        $this->videoFor($user, '1000 Rust');
+
+        $response = $this->rpc($user, 'tools/call', [
+            'name'      => 'search_videos',
+            'arguments' => ['query' => '100%'],
+        ])->assertStatus(200);
+
+        $videos = json_decode($response->json('result.content.0.text'), true)['videos'];
+
+        $this->assertSame(['100% Rust'], array_column($videos, 'title'));
+    }
+
     /** 不認得的方法回 JSON-RPC 的 -32601，HTTP 是 404（規格要求）。 */
     public function testUnknownMethodReturnsMethodNotFound(): void
     {
