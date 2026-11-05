@@ -67,12 +67,18 @@ class HiddenPlanTest extends TestCase
         return $this->json('GET', route('api.v1.plans.hidden.show', ['code' => $code]));
     }
 
-    /** 單筆 resource 依 resources.md 不包 data；plan 的範例有包。兩種都接受，內容才是重點。 */
+    /**
+     * 單筆 resource 依 resources.md **不包 data**（plan r7 定案，hidden-plan-link T04 qa r3 High-1）。
+     * 只接受這一種：前端照這個格式解析，兩種都接受的話，格式一變就會在整合時才發現。
+     */
     private function payload(TestResponse $response): array
     {
         $json = $response->json();
+        $this->assertIsArray($json);
+        $this->assertArrayNotHasKey('data', $json, 'the plan is returned unwrapped, not under data');
+        $this->assertArrayHasKey('id', $json);
 
-        return isset($json['data']) && is_array($json['data']) && !array_is_list($json['data']) ? $json['data'] : $json;
+        return $json;
     }
 
     /** 比對用：去掉每次都會變的 header（Date、限流剩餘次數）。 */
