@@ -68,11 +68,18 @@ class SubscriptionService
     {
         $plan = $subscription?->plan()->first();
 
-        // 如果沒有找訂閱的方案，預設就是免費的月訂閱方案
+        // 沒有訂閱時退回免費的月訂閱方案。只取公開且 active 的，並固定排序
+        // （hidden-plan-link SR-5）：0 元的隱藏方案或已關閉的舊免費方案
+        // 不能變成所有沒訂閱的人的預設權益。
         if (!$plan) {
-            $plan = Plan::query()->whereHas('prices', function ($builder) {
-                $builder->where('unit', Price::UNIT_MONTHLY)->where('price', 0);
-            })->first();
+            // @phpstan-ignore method.notFound
+            $plan = Plan::query()->active()->public()
+                ->whereHas('prices', function ($builder) {
+                    $builder->where('unit', Price::UNIT_MONTHLY)->where('price', 0);
+                })
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->first();
         }
 
         return $plan;

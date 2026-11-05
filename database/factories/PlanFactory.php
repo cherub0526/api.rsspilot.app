@@ -30,7 +30,9 @@ class PlanFactory extends Factory
             'chat_limit'    => 0,
             'mindmap_limit' => 0,
             'sort'          => fake()->numberBetween(0, 5),
-            'status'        => fake()->randomElement(array_keys(Plan::$statusMaps)),
+            // 固定 active：inactive 的方案不能結帳、也不會是免費方案的預設（hidden-plan-link），
+            // 隨機給 inactive 會讓無關的測試時好時壞。要測 inactive 時自行覆寫。
+            'status' => Plan::STATUS_ACTIVE,
         ];
     }
 }

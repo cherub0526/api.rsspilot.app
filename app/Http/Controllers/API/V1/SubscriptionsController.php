@@ -178,6 +178,16 @@ class SubscriptionsController extends AbstractController
                         enum: ['stripe', 'creem', 'clink'],
                         example: 'clink'
                     ),
+                    new OAT\Property(
+                        property: 'accessCode',
+                        description: 'Private link code of a hidden plan (from /pricing?plan=). '
+                            . 'Required for hidden plans, ignored for public ones. '
+                            . 'A wrong code is reported as planId plan_not_found.',
+                        type: 'string',
+                        maxLength: 64,
+                        nullable: true,
+                        example: 'K7fQ2mZ9xR4tW8yB1nC5vD3hJ6kL0pS2'
+                    ),
                 ]
             )
         ),
@@ -247,7 +257,7 @@ class SubscriptionsController extends AbstractController
     )]
     public function store(Request $request): ResponseInterface
     {
-        $params = $request->only(['planId', 'priceId', 'paymentMethod']);
+        $params = $request->only(['planId', 'priceId', 'paymentMethod', 'accessCode']);
 
         $v = new SubscriptionValidator($params);
         $v->setStoreRules();
@@ -256,7 +266,13 @@ class SubscriptionsController extends AbstractController
             throw new InvalidRequestException($v->errors()->toArray());
         }
 
-        if (!$plan = Plan::query()->find($params['planId'])) {
+        // 方案層的檢查排在 price 與 already_subscribed 之前（hidden-plan-link SR-2）：
+        // 不存在、inactive、隱藏方案的碼不對，回的都是同一個 plan_not_found，
+        // 不讓人從回應差異推測隱藏方案的存在，也不讓 priceId 的錯誤先洩漏方案資訊。
+        // 連結碼不寫進 log（SR-4）。
+        $plan = Plan::query()->find($params['planId']);
+
+        if (!$plan instanceof Plan || !$plan->acceptsCheckout($params['accessCode'] ?? null)) {
             throw new InvalidRequestException(['planId' => [__('validators.controllers.subscription.plan_not_found')]]);
         }
 

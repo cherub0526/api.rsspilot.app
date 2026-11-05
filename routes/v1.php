@@ -450,9 +450,12 @@ Route::group('/subscriptions', function () {
         ]
     );
     Route::post('/', [
-        'as'         => 'store',
-        'uses'       => SubscriptionsController::class . '@store',
-        'middleware' => ['auth'],
+        'as'   => 'store',
+        'uses' => SubscriptionsController::class . '@store',
+        // 擋猜隱藏方案的連結碼（hidden-plan-link S20）。排在 auth 之後才會用 user 計數；
+        // 自己的 prefix 不能拿掉：沒有 prefix 會和其他 throttle 路由共用同一個計數，
+        // 正常結帳會被別的功能的用量擋成 429（SubscriptionsThrottlePrefixTest）。
+        'middleware' => ['auth', 'throttle:10,1,subscriptions-store:'],
     ]);
     // 靜態段排在同層動態段之前。`{subscriptionId}` 沒有格式約束，目前只掛
     // PUT/DELETE 所以還撞不到這兩條 GET——但只要哪天補上 GET /{subscriptionId}，

@@ -237,6 +237,10 @@ return [
         'paymentMethod' => [
             'in' => '不支持此付款方式。',
         ],
+        'accessCode' => [
+            'string' => '专属链接码必须是字符串。',
+            'max'    => '专属链接码不能超过 64 个字符。',
+        ],
     ],
     'user' => [
         'name' => [

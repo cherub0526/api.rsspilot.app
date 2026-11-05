@@ -138,6 +138,33 @@ class Plan extends Model
         return $query->where('visibility', self::VISIBILITY_PUBLIC);
     }
 
+    /**
+     * 這個方案現在能不能開新的結帳（hidden-plan-link SR-2 的前兩步）。
+     *
+     * 1. 一定先看 status：`plans:status` 關閉方案時不清連結碼，inactive 的隱藏方案
+     *    就算碼正確也不能結帳。
+     * 2. 公開方案不看碼；隱藏方案要 32 字元的碼，用 hash_equals 比對。
+     *    沒有碼的隱藏方案（access_code 為 null）誰都訂不到。
+     *
+     * 其他 visibility 值一律不開放。只讀 $accessCode，不拿 request 的輸入寫回方案。
+     */
+    public function acceptsCheckout(?string $accessCode): bool
+    {
+        if ($this->status !== self::STATUS_ACTIVE) {
+            return false;
+        }
+
+        if ($this->visibility === self::VISIBILITY_PUBLIC) {
+            return true;
+        }
+
+        return $this->visibility === self::VISIBILITY_HIDDEN
+            && is_string($this->access_code)
+            && strlen($this->access_code) === 32
+            && is_string($accessCode)
+            && hash_equals($this->access_code, $accessCode);
+    }
+
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class, 'plan_id', 'id');
