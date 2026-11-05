@@ -24,6 +24,8 @@ use Hypervel\Database\Eloquent\Factories\HasFactory;
  * @property int $mindmap_limit
  * @property int $sort
  * @property string $status
+ * @property string $visibility
+ * @property null|string $access_code
  * @property bool $download_enabled
  * @property bool $agent_enabled
  * @property bool $advanced_model_enabled
@@ -52,6 +54,12 @@ class Plan extends Model
     public const STATUS_ACTIVE = 'active';
 
     public const STATUS_INACTIVE = 'inactive';
+
+    /** 出現在定價頁與 `GET /v1/plans`。 */
+    public const string VISIBILITY_PUBLIC = 'public';
+
+    /** 不公開，只能透過 `plans:link` 產生的專屬連結訂閱。 */
+    public const string VISIBILITY_HIDDEN = 'hidden';
 
     public const string AI_QUALITY_PRO = 'pro';
     public const string AI_QUALITY_ADVANCED = 'advanced';
@@ -92,6 +100,15 @@ class Plan extends Model
         'ai_routing',
         'sort',
         'status',
+        'visibility',
+        'access_code',
+    ];
+
+    /**
+     * 連結碼等同於訂閱隱藏方案的通行證，任何序列化都不能帶出去（security SR-1）。
+     */
+    protected array $hidden = [
+        'access_code',
     ];
 
     /**
