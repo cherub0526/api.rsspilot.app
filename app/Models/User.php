@@ -26,6 +26,7 @@ use Hypervel\Foundation\Auth\User as Authenticatable;
  * @property null|string $social_type
  * @property null|string $provider_id
  * @property null|string $avatar
+ * @property null|Carbon $tokens_invalid_before
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property-read null|Stripe $stripe
@@ -78,6 +79,10 @@ class User extends Authenticatable
         'social_type',
         'provider_id',
         'avatar',
+    ];
+
+    protected array $casts = [
+        'tokens_invalid_before' => 'datetime',
     ];
 
     public function oauths(): HasMany
@@ -224,5 +229,41 @@ class User extends Authenticatable
     public function avatars(): HasMany
     {
         return $this->hasMany(UserAvatar::class, 'user_id', 'id');
+    }
+
+    /**
+     * 簽發時間（JWT 的 iat）早於 `tokens_invalid_before` 的登入憑證一律不收（token-invalidation）。
+     *
+     * 照秒比：iat 只到秒，欄位存進資料庫也只到秒。同一秒簽發的放行，重設密碼回應裡那張新 token
+     * 才不會被自己擋掉；同一秒內、在重設之前簽發的舊 token 也會被放行，security 接受這個代價。
+     */
+    public function acceptsTokenIssuedAt(int $issuedAt): bool
+    {
+        return $this->tokens_invalid_before === null || $issuedAt >= $this->tokens_invalid_before->getTimestamp();
+    }
+
+    /**
+     * 作廢這個使用者目前所有的登入憑證：重設密碼、刪除帳號時呼叫。
+     *
+     * - JWT：寫入 `tokens_invalid_before`，之前簽發的由 jwt guard 拒絕，換發也就跟著斷掉。
+     * - API key（sanctum）：不會過期，比 JWT 更長效，直接刪掉，使用者要重新產生。
+     *
+     * 用 query 寫入、不走 save()：刪除帳號時是在 deleted 事件裡呼叫，save() 會再觸發一輪 observer
+     * （包括同步到 Stripe 的那一個）。不套 soft delete 的 scope，已刪除的列也寫得到。
+     */
+    public function invalidateTokens(): void
+    {
+        $now = now()->startOfSecond();
+
+        $this->newQueryWithoutScopes()->whereKey($this->getKey())->update(['tokens_invalid_before' => $now]);
+        $this->tokens_invalid_before = $now;
+        $this->syncOriginalAttribute('tokens_invalid_before');
+
+        // 逐筆刪，不用 tokens()->delete()：sanctum 只在 deleting 事件裡清 token 快取，批次刪除不會觸發，
+        // 打開 SANCTUM_CACHE_ENABLED 時被刪的 key 會繼續有效到快取過期（security r1 Low-1）。
+        // 一個使用者的 key 很少，多幾次查詢可以忽略。
+        foreach ($this->tokens()->get() as $token) {
+            $token->delete();
+        }
     }
 }

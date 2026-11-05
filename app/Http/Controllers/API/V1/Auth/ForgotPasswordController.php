@@ -131,6 +131,10 @@ class ForgotPasswordController extends AbstractController
 
         $user->fill(['password' => Hash::make(trim($params['password']))])->save();
 
+        // 重設之前發出的 JWT 與 API key 一律作廢：密碼可能就是因為外洩才重設的（token-invalidation S01、S02）。
+        // 下面回應裡的新 token 和失效時間同一秒簽發，會被放行（S03）。
+        $user->invalidateTokens();
+
         return $this->responseAccessToken($this->guard()->login($user));
     }
 

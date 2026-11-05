@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Console\Commands\Security;
 
+use Carbon\Carbon;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\Oauth;
+use Hyperf\Context\Context;
+use Hypervel\Sanctum\PersonalAccessToken;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 
 /**
@@ -142,5 +145,78 @@ class RevokeSocialAccessTest extends TestCase
             ->doesntExpectOutputToContain(self::ATTACKER_SUB)
             ->doesntExpectOutputToContain(self::REAL_SUB)
             ->assertExitCode(0);
+    }
+
+    /**
+     * 打開 sanctum 的 token 快取時，撤銷的 key 也要立刻失效：批次 delete 不會觸發 deleting 事件，
+     * 快取不會被清（token-invalidation T01 r2，與 security r1 Low-1 同一個問題）。
+     */
+    public function testRevokedKeysAreNotServedFromTheSanctumCache(): void
+    {
+        config(['sanctum.cache.enabled' => true, 'sanctum.cache.ttl' => 3600]);
+
+        $user = User::factory()->create();
+        $first = $user->createToken('planted key')->plainTextToken;
+        $second = $user->createToken('another key')->plainTextToken;
+        $this->assertNotNull(PersonalAccessToken::findToken($first));
+        $this->assertNotNull(PersonalAccessToken::findToken($second));
+
+        $this->assertSame(0, $this->revoke([$user->id], apply: true));
+
+        $this->assertNull(PersonalAccessToken::findToken($first));
+        $this->assertNull(PersonalAccessToken::findToken($second));
+    }
+
+    /** 撤銷也要作廢 JWT：被冒用的帳號，攻擊者手上可能還有登入憑證（token-invalidation T01 r2）。 */
+    public function testApplyAlsoInvalidatesTheListedUsersJwts(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-05 10:00:00'));
+        $user = $this->hijackedUser();
+        $other = User::factory()->create();
+        $jwt = auth('jwt')->login($user);
+        $otherJwt = auth('jwt')->login($other);
+        $this->getUsersWith($jwt)->assertStatus(200);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-05 10:30:00'));
+        $this->assertSame(0, $this->revoke([$user->id], apply: true));
+
+        $this->getUsersWith($jwt)->assertStatus(401);
+        $this->getUsersWith($otherJwt)->assertStatus(200);
+
+        Carbon::setTestNow();
+    }
+
+    public function testADryRunLeavesJwtsAlone(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-05 10:00:00'));
+        $user = $this->hijackedUser();
+        $jwt = auth('jwt')->login($user);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-05 10:30:00'));
+        $this->assertSame(0, $this->revoke([$user->id]));
+
+        $this->getUsersWith($jwt)->assertStatus(200);
+        $this->assertNull($user->fresh()->tokens_invalid_before);
+
+        Carbon::setTestNow();
+    }
+
+    public function testTheDryRunSaysEveryDeviceWillBeSignedOut(): void
+    {
+        $user = $this->hijackedUser();
+
+        $this->artisan('security:revoke-social-access', ['userIds' => [$user->id]])
+            ->expectsOutputToContain('會登出這個帳號的所有裝置')
+            ->assertExitCode(0);
+    }
+
+    /** 每次都當成新的請求：清掉 jwt guard 快取在 Context 的使用者（同 TokenInvalidationTest）。 */
+    private function getUsersWith(string $jwt)
+    {
+        Context::destroy('auth.guards.jwt.result.default');
+        Context::destroy('auth.guards.jwt.claims');
+        Context::destroy('auth.guards.jwt.result:' . md5($jwt));
+
+        return $this->withToken($jwt)->json('GET', route('api.v1.users.index'));
     }
 }

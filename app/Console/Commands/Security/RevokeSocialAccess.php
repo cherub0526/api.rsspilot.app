@@ -17,9 +17,10 @@ use Hypervel\Support\Facades\DB;
  *
  * - 只處理明確列出的 user id；名單來自使用者看過清查 SQL 的結果，這支指令不自己找人。
  * - 預設 dry-run，加 `--apply` 才寫入。
- * - 刪掉這些帳號的 sanctum token；有 google oauths 而 provider_id 不一致的，改回 oauths 的值
+ * - 作廢這些帳號所有的登入憑證（`User::invalidateTokens()`）：之前簽發的 JWT 一律 401、換發不了，
+ *   sanctum API key 也刪掉。等於登出這個帳號的所有裝置，使用者要重新登入。
+ * - 有 google oauths 而 provider_id 不一致的，改回 oauths 的值
  *   （那是 Google 在 OAuth callback 驗證過的身分）。沒有 google oauths 的帳號沒有可信的值，provider_id 不動。
- * - JWT 沒有黑名單，要撤銷只能輪換 JWT_SECRET，不在這支指令的範圍。
  * - 輸出不含 email、provider_id 與 token。
  */
 class RevokeSocialAccess extends Command
@@ -28,7 +29,7 @@ class RevokeSocialAccess extends Command
         {userIds* : 要撤銷的 user id（來自清查結果）}
         {--apply : 實際寫入；沒有這個選項時只列出會做什麼}';
 
-    protected string $description = '撤銷指定帳號的 API key，並把被竄改的 Google provider_id 改回 OAuth 驗證過的值';
+    protected string $description = '作廢指定帳號所有的登入憑證（JWT 與 API key），並把被竄改的 Google provider_id 改回 OAuth 驗證過的值';
 
     public function handle(): int
     {
@@ -45,7 +46,7 @@ class RevokeSocialAccess extends Command
 
         foreach ($plans as $id => $plan) {
             $this->line(sprintf(
-                '%s：%s%d 個 API key；provider_id %s',
+                '%s：%s會登出這個帳號的所有裝置，刪除 %d 個 API key；provider_id %s',
                 $id,
                 $users[$id]->trashed() ? '（已刪除）' : '',
                 $plan['tokens'],
@@ -66,7 +67,7 @@ class RevokeSocialAccess extends Command
         DB::transaction(function () use ($users, $plans): void {
             foreach ($plans as $id => $plan) {
                 $user = $users[$id];
-                $user->tokens()->delete();
+                $user->invalidateTokens();
 
                 if ($plan['provider_id'] !== null) {
                     $user->forceFill(['provider_id' => $plan['provider_id']])->save();

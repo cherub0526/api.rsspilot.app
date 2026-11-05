@@ -42,6 +42,9 @@ class UserObserver
      */
     public function deleted(User $user): void
     {
+        // soft delete 之後 guard 本來就找不到這個使用者；這裡讓帳號被還原時，舊的 JWT 與 API key
+        // 也不會跟著復活（token-invalidation S04）。
+        $user->invalidateTokens();
     }
 
     /**

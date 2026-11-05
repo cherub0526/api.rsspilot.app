@@ -174,11 +174,14 @@ class ApiKeysController
     )]
     public function destroy(Request $request, string $id): ResponseInterface
     {
-        $deleted = $request->user()->tokens()->whereKey((int) $id)->delete();
+        // 取出再刪，不用批次 delete：sanctum 只在 deleting 事件裡清 token 快取（見 User::invalidateTokens()）
+        $token = $request->user()->tokens()->whereKey((int) $id)->first();
 
-        if (!$deleted) {
+        if ($token === null) {
             throw new NotFoundHttpException();
         }
+
+        $token->delete();
 
         return response()->json(['status' => 'ok']);
     }
