@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\Price;
 use Hypervel\Support\Facades\Event;
 use Hypervel\Log\Events\MessageLogged;
+use Tests\Concerns\MatchesContractFixture;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Hypervel\Foundation\Testing\RefreshDatabase;
 use Hypervel\Foundation\Testing\Http\TestResponse;
@@ -26,6 +27,7 @@ use Hypervel\Foundation\Testing\Http\TestResponse;
  */
 class HiddenPlanTest extends TestCase
 {
+    use MatchesContractFixture;
     use RefreshDatabase;
 
     private const PARTNER_CODE = 'K7fQ2mZp9xLr4TbW8nVc3HsY6dJa1GeU';
@@ -98,6 +100,8 @@ class HiddenPlanTest extends TestCase
         $response = $this->hidden(self::PARTNER_CODE)->assertStatus(200);
 
         $plan = $this->payload($response);
+        // 前端的 mock 對照同一份 fixture（rsspilot.app test-utils/contracts，T05）
+        $this->assertMatchesContract('plans-hidden-show', $plan);
         $this->assertSame($this->partner->id, $plan['id']);
         $this->assertSame('Partner', $plan['title']);
         $this->assertTrue($plan['hidden']);
