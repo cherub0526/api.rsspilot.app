@@ -237,6 +237,10 @@ return [
         'paymentMethod' => [
             'in' => 'This payment method is not available.',
         ],
+        'accessCode' => [
+            'string' => 'Access code must be a string.',
+            'max'    => 'Access code may not be longer than 64 characters.',
+        ],
     ],
     'user' => [
         'name' => [

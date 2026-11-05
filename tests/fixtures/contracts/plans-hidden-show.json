@@ -1,0 +1,31 @@
+{
+  "$comment": "GET /v1/plans/hidden/{code} 的 200 回應契約（hidden-plan-link T05）。值是型別：string、number、boolean、null，可以用 | 組合；陣列寫一個元素，代表每個元素的形狀。api 的 HiddenPlanTest 和 rsspilot.app 的 hiddenPlan.contract.spec 都對照 response。兩個 repo 各有一份，內容必須相同：改一邊就要改另一邊。",
+  "response": {
+    "id": "string",
+    "title": "string",
+    "description": "string",
+    "channel_limit": "number",
+    "video_limit": "number",
+    "chat_limit": "number",
+    "mindmap_limit": "number",
+    "download_enabled": "boolean",
+    "agent_enabled": "boolean",
+    "thinking_enabled": "boolean",
+    "mcp_enabled": "boolean",
+    "skill_enabled": "boolean",
+    "advanced_model_enabled": "boolean",
+    "custom_summary_enabled": "boolean",
+    "screenshot_enabled": "boolean",
+    "ai_quality": "string",
+    "hidden": "boolean",
+    "prices": [
+      {
+        "id": "string",
+        "unit": "string",
+        "price": "number",
+        "first_period_price": "number|null",
+        "trial_days": "number|null"
+      }
+    ]
+  }
+}

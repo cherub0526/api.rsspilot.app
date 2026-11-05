@@ -36,6 +36,7 @@ use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Subscriptions\ClinkConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
+use App\Http\Controllers\API\V1\Plans\HiddenController as HiddenPlansController;
 use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
@@ -449,9 +450,12 @@ Route::group('/subscriptions', function () {
         ]
     );
     Route::post('/', [
-        'as'         => 'store',
-        'uses'       => SubscriptionsController::class . '@store',
-        'middleware' => ['auth'],
+        'as'   => 'store',
+        'uses' => SubscriptionsController::class . '@store',
+        // 擋猜隱藏方案的連結碼（hidden-plan-link S20）。排在 auth 之後才會用 user 計數；
+        // 自己的 prefix 不能拿掉：沒有 prefix 會和其他 throttle 路由共用同一個計數，
+        // 正常結帳會被別的功能的用量擋成 429（SubscriptionsThrottlePrefixTest）。
+        'middleware' => ['auth', 'throttle:10,1,subscriptions-store:'],
     ]);
     // 靜態段排在同層動態段之前。`{subscriptionId}` 沒有格式約束，目前只掛
     // PUT/DELETE 所以還撞不到這兩條 GET——但只要哪天補上 GET /{subscriptionId}，
@@ -500,6 +504,15 @@ Route::group('/plans', function () {
             'uses' => PlansController::class . '@index',
         ]
     );
+
+    // 隱藏方案的專屬連結（hidden-plan-link）。碼的格式不對時路由就不會命中（404），
+    // 不會進到查詢。限流用自己的 prefix：throttle 的 key 預設只有 IP（或 user id），
+    // 不加 prefix 會和其他也掛 throttle 的路由共用同一個計數。
+    Route::get('/hidden/{code:[A-Za-z0-9]{32}}', [
+        'as'         => 'hidden.show',
+        'uses'       => HiddenPlansController::class . '@show',
+        'middleware' => ['throttle:20,1,plans-hidden:'],
+    ]);
 }, ['as' => 'plans']);
 
 Route::group('/webhook', function () {
