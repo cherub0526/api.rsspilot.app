@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Models\Plan;
 use App\Enums\Feature;
 use Hypervel\Http\Resources\Json\JsonResource;
 
@@ -36,7 +37,9 @@ class PlanResource extends JsonResource
             'custom_summary_enabled' => boolval($this->resource->custom_summary_enabled),
             'screenshot_enabled'     => boolval($this->resource->screenshot_enabled),
             'ai_quality'             => strval($this->resource->ai_quality),
-            'prices'                 => PriceResource::collection($this->whenLoaded('prices')),
+            // 隱藏方案的連結碼（access_code）永遠不輸出，只告訴前端「這是專屬方案」
+            'hidden' => $this->resource->visibility === Plan::VISIBILITY_HIDDEN,
+            'prices' => PriceResource::collection($this->whenLoaded('prices')),
         ];
     }
 }

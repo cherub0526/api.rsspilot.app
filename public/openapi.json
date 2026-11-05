@@ -1907,6 +1907,43 @@
                 }
             }
         },
+        "/v1/plans/hidden/{code}": {
+            "get": {
+                "tags": [
+                    "Plans"
+                ],
+                "summary": "Get the exclusive plan behind a private link code",
+                "description": "拿到連結的人才看得到的方案（hidden-plan-link）。\n\n四種查不到的情況（碼不存在、方案不是 hidden、方案 inactive、沒有 price）在**同一個查詢**裡\n判斷，回應完全相同，不讓人從回應差異推測某組碼或某個方案是否存在（security SR-3）。\ninactive 一定要擋：`plans:status` 關閉方案時不會清掉連結碼，靠這裡讓連結失效。\n\n連結碼不寫進 log（SR-4）；成功與失敗都 `no-store`，碼不留在任何快取裡。",
+                "operationId": "api.v1.plans.hidden.show",
+                "parameters": [
+                    {
+                        "name": "code",
+                        "in": "path",
+                        "description": "The 32-character link code from plans:link",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9]{32}$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The hidden plan, same shape as an item of /v1/plans with hidden = true",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PlanResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/404"
+                    }
+                }
+            }
+        },
         "/v1/plans": {
             "get": {
                 "tags": [
@@ -4123,6 +4160,11 @@
                             "deep"
                         ],
                         "example": "advanced"
+                    },
+                    "hidden": {
+                        "description": "Exclusive plan reachable only through a private link",
+                        "type": "boolean",
+                        "example": false
                     },
                     "prices": {
                         "type": "array",

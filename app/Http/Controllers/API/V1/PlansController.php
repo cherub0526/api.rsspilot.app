@@ -35,7 +35,7 @@ class PlansController extends AbstractController
     {
         // 本地 scope 經 __call 解析，沒有 Larastan 的 PHPStan 看不到 scopeActive()。
         // @phpstan-ignore method.notFound
-        $plans = Plan::query()->active()
+        $plans = Plan::query()->active()->public()
             ->with(['prices'])
             ->orderBy('sort', 'asc')
             ->get();

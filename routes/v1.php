@@ -36,6 +36,7 @@ use App\Http\Controllers\API\V1\CustomPrompts\PreviewController;
 use App\Http\Controllers\API\V1\Subscriptions\ClinkConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CreemConfirmController;
 use App\Http\Controllers\API\V1\Subscriptions\CheckoutSessionController;
+use App\Http\Controllers\API\V1\Plans\HiddenController as HiddenPlansController;
 use App\Http\Controllers\API\V1\Sources\SkillController as SourceSkillController;
 use App\Http\Controllers\API\V1\Sources\MediasController as SourceMediasController;
 use App\Http\Controllers\API\V1\Users\SessionsController as UserSessionsController;
@@ -500,6 +501,15 @@ Route::group('/plans', function () {
             'uses' => PlansController::class . '@index',
         ]
     );
+
+    // 隱藏方案的專屬連結（hidden-plan-link）。碼的格式不對時路由就不會命中（404），
+    // 不會進到查詢。限流用自己的 prefix：throttle 的 key 預設只有 IP（或 user id），
+    // 不加 prefix 會和其他也掛 throttle 的路由共用同一個計數。
+    Route::get('/hidden/{code:[A-Za-z0-9]{32}}', [
+        'as'         => 'hidden.show',
+        'uses'       => HiddenPlansController::class . '@show',
+        'middleware' => ['throttle:20,1,plans-hidden:'],
+    ]);
 }, ['as' => 'plans']);
 
 Route::group('/webhook', function () {

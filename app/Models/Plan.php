@@ -132,6 +132,12 @@ class Plan extends Model
         return $query->where('status', self::STATUS_ACTIVE);
     }
 
+    /** 出現在定價頁的方案。隱藏方案只能用專屬連結的碼查（Plans\HiddenController）。 */
+    public function scopePublic($query)
+    {
+        return $query->where('visibility', self::VISIBILITY_PUBLIC);
+    }
+
     public function prices(): HasMany
     {
         return $this->hasMany(Price::class, 'plan_id', 'id');

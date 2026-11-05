@@ -35,6 +35,7 @@ use OpenApi\Attributes as OAT;
         new OAT\Property(property: 'custom_summary_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'screenshot_enabled', type: 'boolean', example: true),
         new OAT\Property(property: 'ai_quality', type: 'string', enum: ['pro', 'advanced', 'deep'], example: 'advanced'),
+        new OAT\Property(property: 'hidden', description: 'Exclusive plan reachable only through a private link', type: 'boolean', example: false),
         new OAT\Property(
             property: 'prices',
             type: 'array',
