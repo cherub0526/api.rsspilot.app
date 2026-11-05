@@ -227,7 +227,7 @@ Route::group('/sources', function () {
     Route::get('/preview', [
         'as'         => 'preview.index',
         'uses'       => SourcePreviewController::class . '@index',
-        'middleware' => ['auth', 'throttle:30,1'],
+        'middleware' => ['auth', 'throttle:30,1,sources-preview:'],
     ]);
     Route::get('/{sourceId:[0-7][0-9a-hjkmnp-tv-z]{25}}', [
         'as'         => 'show',
@@ -256,13 +256,13 @@ Route::group('/sources', function () {
         Route::get('/', [
             'as'         => 'show',
             'uses'       => SourceSkillController::class . '@show',
-            'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:60,1'],
+            'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:60,1,sources-skill:'],
         ]);
         Route::group('/download', function () {
             Route::get('/', [
                 'as'         => 'index',
                 'uses'       => SourceSkillDownloadController::class . '@index',
-                'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:30,1'],
+                'middleware' => ['auth', 'feature:' . Feature::ChannelSkill->value, 'throttle:30,1,sources-skill-download:'],
             ]);
         }, ['as' => 'download']);
     }, ['as' => 'skill']);
@@ -380,7 +380,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'store',
                 'uses'       => ThumbnailsController::class . '@store',
-                'middleware' => ['auth', 'throttle:30,1'],
+                'middleware' => ['auth', 'throttle:30,1,media-thumbnails:'],
             ]
         );
         // second 的 6 位上限與 ThumbnailService::MAX_SECOND 是同一條界線，要一起改。
@@ -433,7 +433,7 @@ Route::group('/media', function () {
             [
                 'as'         => 'sessions.follow-ups.show',
                 'uses'       => ChatFollowUpsController::class . '@show',
-                'middleware' => ['auth', 'throttle:10,1'],
+                'middleware' => ['auth', 'throttle:10,1,media-chat-follow-ups:'],
             ]
         );
     }, ['as' => 'chat']);
